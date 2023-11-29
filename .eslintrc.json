@@ -1,0 +1,87 @@
+{
+  "extends": [
+    // By extending from a plugin config, we can get recommended rules without having to add them manually.
+    "eslint:recommended",
+    "plugin:react/recommended",
+    "plugin:import/recommended",
+    "plugin:react/jsx-runtime",
+    "plugin:jsx-a11y/recommended",
+    "plugin:@typescript-eslint/recommended",
+    "mdcs",
+    // This disables the formatting rules in ESLint that Prettier is going to be responsible for handling.
+    // Make sure it's always the last config, so it gets the chance to override other configs.
+    "eslint-config-prettier"
+  ],
+  "settings": {
+    "react": {
+      // Tells eslint-plugin-react to automatically detect the version of React to use.
+      "version": "detect"
+    },
+    "import/parsers": {
+      "@typescript-eslint/parser": [".ts", ".tsx"]
+    },
+    // Tells eslint how to resolve imports
+    "import/resolver": {
+      "typescript": {
+        "paths": "./tsconfig.json",
+        "alwaysTryTypes": true
+      },
+      "node": {
+        "paths": ["src"],
+        "extensions": [".js", ".jsx", ".ts", ".tsx"]
+      }
+    }
+  },
+  "rules": {
+    "no-unused-vars": "off",
+    "@typescript-eslint/no-unused-vars": ["error"],
+    "import/no-unresolved": "error",
+    "react/no-unknown-property": [
+      "error",
+      {
+        "ignore": [
+          "args",
+          "alphaMap",
+          "castShadow",
+          "dispose",
+          "geometry",
+          "map",
+          "material",
+          "position",
+          "receiveShadow",
+          "rotation",
+          "intensity",
+          "transparent",
+          "visible",
+          "shadow-mapSize-width",
+          "shadow-mapSize-height",
+          "uFrameDepth",
+          "uFrameMask",
+          "uFrameOverlay",
+          "uFrameSelected",
+          "uFrameTotal",
+          "uInversion",
+          "uInvert",
+          "uMaskIntensity",
+          "uOpacity",
+          "uPointerPos",
+          "uPointerRelative",
+          "uTexture",
+          "uTime",
+          "uAvatar",
+          "uFrameSketch",
+          "uIdle",
+          "object",
+          "shadow-bias",
+          "hover",
+          "decay"
+        ]
+      }
+    ]
+  },
+  "env": {
+    "browser": true,
+    "amd": true,
+    "node": true
+  }
+}
