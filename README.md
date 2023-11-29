@@ -10,8 +10,8 @@ Client for the Lysterfield Lake project.
 
 <a href="https://medium.com/@superhighfives/lysterfield-lake-71345aa8c016">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/superhighfives/lysterfield-lake/assets/449385/5b88718d-d18d-426d-9aea-307b9404de90">
-    <img src="https://github.com/superhighfives/lysterfield-lake/assets/449385/a29f28ee-e5a6-4268-98f0-ab35a1f0448b">
+    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/superhighfives/lysterfield-lake/assets/449385/36e1b0ab-c7f1-4450-992a-681b254ee1ea">
+    <img src="https://github.com/superhighfives/lysterfield-lake/assets/449385/4c14e91a-26bc-4f92-9301-7b0f12dc79de">
   </picture>
 </a>
 
