@@ -53,8 +53,6 @@ function Root() {
     setReady(true)
   }
 
-  const [dpr, setDpr] = useState(1.5)
-
   return (
     <>
       <div className="fixed z-10 top-1 right-1 flex gap-1 font-sans text-sm">
@@ -100,11 +98,7 @@ function Root() {
               </a>
             </div>
             <div className={`${isBuffering ? 'grayscale' : ''} fixed inset-0`}>
-              <Canvas dpr={dpr} shadows>
-                <PerformanceMonitor
-                  onIncline={() => setDpr(2)}
-                  onDecline={() => setDpr(1)}
-                />
+              <Canvas shadows>
                 <Suspense fallback={<Loading />}>
                   <Preload all />
                   <Scene video={video} />
