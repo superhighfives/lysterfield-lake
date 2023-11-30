@@ -229,7 +229,7 @@ function Choose(props: ThreeElements['group']) {
                     />
                   }
                 />
-                <group position={[-1.55, -1.7, 0.1]}>
+                <group position={[-1.55, -1.75, 0.1]}>
                   <Text
                     scale={0.25}
                     font="/fonts/redaction/Redaction_35-Italic.ttf"
@@ -241,17 +241,14 @@ function Choose(props: ThreeElements['group']) {
                     {dream.title}
                   </Text>
                   <Text
-                    scale={0.125}
+                    scale={0.115}
                     position={[0, -0.25, 0]}
                     font="/fonts/space-mono/SpaceMono-Regular.ttf"
-                    color="#777"
+                    color="#bbb"
                     anchorX="left"
                     anchorY="middle"
                   >
-                    {format(
-                      parse(dream.id, 'yyyyMMddHHmmSS', new Date()),
-                      'do MMMM yyyy'
-                    ).toString()}
+                    {dream.prompt}
                   </Text>
                 </group>
               </animated.group>

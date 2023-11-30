@@ -29,6 +29,7 @@ const dreamsOutput = dreams
         id: dream,
         title: 'TBA',
         link: 'https://youtube.com/watch?v=',
+        prompt: '',
       }
     }
   })
