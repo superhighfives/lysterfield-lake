@@ -137,7 +137,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
         >
           <button
             className={`whitespace-nowrap fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-1 rounded-md px-4 py-2 bg-yellow-400 active:bg-black active:text-white flex items-center gap-2 shadow-xl transition-opacity duration-500 ${
-              recalibrateMobile && polaroidVisible > 0.3
+              showPlayhead && recalibrateMobile && polaroidVisible > 0.3
                 ? ''
                 : 'pointer-events-none opacity-0'
             }`}
@@ -149,7 +149,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
         </div>
         <div
           className={`fixed z-10 bottom-10 left-1/2 -translate-x-1/2 bg-white border border-yellow-400 rounded-lg xs:rounded-full shadow-xl transition-opacity ${
-            showPlayhead && polaroidVisible > 0
+            showPlayhead && polaroidVisible > 0.3
               ? ''
               : 'pointer-events-none opacity-0'
           }`}

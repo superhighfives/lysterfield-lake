@@ -138,11 +138,9 @@ function Main(
       )
     }
 
-    if (!dream || resetting) {
-      setPolaroidVisibility(MathUtils.lerp(polaroidVisibility, 2, 0.1))
-    } else {
-      setPolaroidVisibility(MathUtils.lerp(polaroidVisibility, 0, 0.1))
-    }
+    setPolaroidVisibility(
+      MathUtils.lerp(polaroidVisibility, !dream || resetting ? 2 : 0, 0.1)
+    )
 
     setScaleProgress(MathUtils.clamp(time / 8.0, 1.05, 1.125))
 

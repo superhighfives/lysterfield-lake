@@ -54,7 +54,6 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement> }) {
 
     if (videoState < MediaReadyState.HAVE_FUTURE_DATA) {
       setBufferingDelay(bufferingDelay + delta)
-      console.log(bufferingDelay)
 
       if (bufferingDelay >= 8 && !isTooSlow) {
         console.log('Okay, maybe YouTube')

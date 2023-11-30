@@ -1,7 +1,7 @@
 import { useStore } from '../store'
 import { MediaReadyState } from '@react-av/core'
 import { Canvas } from '@react-three/fiber'
-import { Preload } from '@react-three/drei'
+import { PerformanceMonitor, Preload } from '@react-three/drei'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import Loading from '../components/loading'
 import Fallback from '../components/fallback'
@@ -53,6 +53,8 @@ function Root() {
     setReady(true)
   }
 
+  const [dpr, setDpr] = useState(1.5)
+
   return (
     <>
       <div className="fixed z-10 top-1 right-1 flex gap-1 font-sans text-sm">
@@ -76,7 +78,9 @@ function Root() {
           <Viewport>
             <div
               className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 group flex flex-col transition-opacity ${
-                isBuffering && polaroidVisible > 0 ? 'opacity-100' : 'opacity-0'
+                isBuffering && polaroidVisible > 0.3
+                  ? 'opacity-100'
+                  : 'opacity-0'
               }`}
             >
               <div
@@ -91,7 +95,7 @@ function Root() {
                 className={`bg-yellow-400 shadow-xl px-4 py-1 rounded-full flex items-center text-stone-700 gap-2 text-xs hover:bg-black hover:text-white transition-opacity  ${
                   isTooSlow && !seeking ? 'opacity-100' : 'opacity-0'
                 } ${
-                  isBuffering && polaroidVisible > 0
+                  isBuffering && polaroidVisible > 0.3
                     ? ''
                     : 'pointer-events-none'
                 }`}
@@ -100,7 +104,11 @@ function Root() {
               </a>
             </div>
             <div className={`${isBuffering ? 'grayscale' : ''} fixed inset-0`}>
-              <Canvas shadows>
+              <Canvas dpr={dpr} shadows>
+                <PerformanceMonitor
+                  onIncline={() => setDpr(2)}
+                  onDecline={() => setDpr(1)}
+                />
                 <Suspense fallback={<Loading />}>
                   <Preload all />
                   <Scene video={video} />
