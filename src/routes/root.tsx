@@ -57,7 +57,7 @@ function Root() {
     <>
       <div className="fixed z-10 top-1 right-1 flex gap-1 font-sans text-sm">
         <a
-          href="https://github.com/superhighfives/lysterfield-lake"
+          href="https://medium.com/@superhighfives/lysterfield-lake-71345aa8c016"
           className="px-2 py-1 flex gap-2 items-center hover:bg-yellow-400 hover:text-yellow-800 rounded hover:shadow-sm"
         >
           <FileText />
@@ -87,7 +87,7 @@ function Root() {
               </div>
 
               <a
-                href="https://"
+                href={dream?.link}
                 className={`bg-yellow-400 shadow-xl px-4 py-1 rounded-full flex items-center text-stone-700 gap-2 text-xs hover:bg-black hover:text-white transition-opacity  ${
                   isTooSlow && !seeking ? 'opacity-100' : 'opacity-0'
                 } ${
