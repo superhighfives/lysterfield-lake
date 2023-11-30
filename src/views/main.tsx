@@ -38,6 +38,7 @@ function Main(
   const resetting = useStore((state) => state.resetting)
   const isMobile = useStore((state) => state.isMobile)
   const isTouch = useStore((state) => state.isTouch)
+  const videoState = useStore((state) => state.videoState)
   const setGlobalPointer = useStore((state) => state.setGlobalPointer)
 
   useEffect(() => {

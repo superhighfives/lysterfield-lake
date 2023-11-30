@@ -17,6 +17,7 @@ import Main from '../views/main'
 import { useFrame, useThree } from '@react-three/fiber'
 import { getRotation } from '../utils'
 import { useStore } from '../store'
+import { MediaReadyState } from '@react-av/core'
 
 function Scene({ video }: { video: RefObject<HTMLVideoElement> }) {
   const camera = useRef<PerspectiveCameraType>()
@@ -32,6 +33,11 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement> }) {
   const initialRotation = useStore((state) => state.initialRotation)
   const polaroidVisible = useStore((state) => state.polaroidVisible)
   const resetting = useStore((state) => state.resetting)
+  const isTooSlow = useStore((state) => state.isTooSlow)
+  const setIsTooSlow = useStore((state) => state.setIsTooSlow)
+  const videoState = useStore((state) => state.videoState)
+
+  const [bufferingDelay, setBufferingDelay] = useState(0)
   const [dotOpacity, setDotOpacity] = useState(0)
 
   const setInitialRotation = useStore((state) => state.setInitialRotation)
@@ -43,8 +49,18 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement> }) {
     setShowPlayhead(dream !== null && !resetting)
   }, [dream, resetting])
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const cameraRef = camera.current
+
+    if (videoState < MediaReadyState.HAVE_FUTURE_DATA) {
+      setBufferingDelay(bufferingDelay + delta)
+      console.log(bufferingDelay)
+
+      if (bufferingDelay >= 8 && !isTooSlow) {
+        console.log('Okay, maybe YouTube')
+        setIsTooSlow(true)
+      }
+    }
 
     if (isMobile || isTouch) {
       setDotOpacity(polaroidVisible)

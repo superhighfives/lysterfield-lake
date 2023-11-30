@@ -64,6 +64,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     )
     const polaroidVisible = useStore((state) => state.polaroidVisible)
     const setResetting = useStore((state) => state.setResetting)
+    const setSeeking = useStore((state) => state.setSeeking)
 
     function VideoPlayer() {
       const setVideoPlaying = useStore((state) => state.setVideoPlaying)
@@ -72,10 +73,15 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       const mediaReadyState = Media.useMediaReadyState()
       const [mediaPlaying] = Media.useMediaPlaying()
       const mediaEnded = Media.useMediaEnded()
+      const mediaSeeking = Media.useMediaSeeking()
 
       useEffect(() => {
         setVideoState(mediaReadyState)
       }, [mediaReadyState])
+
+      useEffect(() => {
+        setSeeking(mediaSeeking)
+      }, [mediaSeeking])
 
       useEffect(() => {
         if (mediaEnded) {

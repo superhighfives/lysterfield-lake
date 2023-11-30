@@ -24,6 +24,10 @@ function Root() {
   const setReady = useStore((state) => state.setReady)
   const [hasLoaded, setHasLoaded] = useState(false)
   const [isBuffering, setIsBuffering] = useState(false)
+  const isTooSlow = useStore((state) => state.isTooSlow)
+  const seeking = useStore((state) => state.seeking)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const polaroidVisible = useStore((state) => state.polaroidVisible)
 
   useEffect(() => {
     console.log('Loaded!')
@@ -32,11 +36,13 @@ function Root() {
   }, [])
 
   useEffect(() => {
+    console.log(`Video state: ${videoState}`)
     if (dream) {
-      console.log(`Video state: ${videoState}`)
       setIsBuffering(videoState < MediaReadyState.HAVE_FUTURE_DATA)
+    } else {
+      setIsBuffering(false)
     }
-  }, [videoState])
+  }, [videoState, dream])
 
   const handleReady = async () => {
     const isMobile = (await handleDeviceOrientationPermissions()) as boolean
@@ -67,16 +73,33 @@ function Root() {
       </div>
       <Suspense fallback={<Fallback />}>
         {ready ? (
-          <Viewport className={`${isBuffering ? 'grayscale' : ''}`}>
+          <Viewport>
             <div
-              className={`bg-white/80 shadow-xl pl-2 pr-3 py-2 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none flex items-center text-stone-700 gap-2 text-sm transition-opacity ${
-                isBuffering ? 'opacity-100' : 'opacity-0'
+              className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 group flex flex-col transition-opacity ${
+                isBuffering && polaroidVisible > 0 ? 'opacity-100' : 'opacity-0'
               }`}
             >
-              <CircleNotch className="animate-spin" size={20} />
-              Buffering...
+              <div
+                className={`bg-white shadow-xl pl-2 pr-3 py-2 rounded-full pointer-events-none flex items-center text-stone-700 gap-2 text-sm mb-2`}
+              >
+                <CircleNotch className="animate-spin" size={20} />
+                {seeking ? 'Loading video...' : 'Buffering...'}
+              </div>
+
+              <a
+                href="https://"
+                className={`bg-yellow-400 shadow-xl px-4 py-1 rounded-full flex items-center text-stone-700 gap-2 text-xs hover:bg-black hover:text-white transition-opacity  ${
+                  isTooSlow && !seeking ? 'opacity-100' : 'opacity-0'
+                } ${
+                  isBuffering && polaroidVisible > 0
+                    ? ''
+                    : 'pointer-events-none'
+                }`}
+              >
+                Watch on YouTube?
+              </a>
             </div>
-            <div className="fixed inset-0">
+            <div className={`${isBuffering ? 'grayscale' : ''} fixed inset-0`}>
               <Canvas shadows>
                 <Suspense fallback={<Loading />}>
                   <Preload all />

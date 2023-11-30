@@ -6,6 +6,7 @@ import { Vector2 } from 'three'
 export interface AppState {
   dream: Dream | null
   resetting: boolean
+  seeking: boolean
   collection: Dream[]
   videoState: MediaReadyState
   videoPlaying: boolean
@@ -17,8 +18,10 @@ export interface AppState {
   initialRotation: [number, number, number]
   globalPointer: Vector2
   resetInitialRotation: boolean
+  isTooSlow: boolean
   setDream: (dream: Dream | null) => void
   setResetting: (resetting: boolean) => void
+  setSeeking: (seeking: boolean) => void
   setCollection: (collection: Dream[]) => void
   setVideoState: (videoState: MediaReadyState) => void
   setVideoPlaying: (videoPlaying: boolean) => void
@@ -30,11 +33,13 @@ export interface AppState {
   setResetInitialRotation: (resetInitialRotation: boolean) => void
   setGlobalPointer: (globalPointer: Vector2) => void
   setReady: (ready: boolean) => void
+  setIsTooSlow: (ready: boolean) => void
 }
 
 export const useStore = create<AppState>()((set) => ({
   dream: null,
   resetting: false,
+  seeking: false,
   collection: [],
   videoState: MediaReadyState.HAVE_NOTHING,
   videoPlaying: false,
@@ -46,6 +51,7 @@ export const useStore = create<AppState>()((set) => ({
   initialRotation: [0, 0, 0],
   globalPointer: new Vector2(0, 0),
   resetInitialRotation: true,
+  isTooSlow: false,
   setDream: (dream: Dream | null) => set({ dream }),
   setResetting: (resetting: boolean) => {
     set(() => ({ resetting: resetting }))
@@ -73,4 +79,6 @@ export const useStore = create<AppState>()((set) => ({
   setGlobalPointer: (globalPointer: Vector2) =>
     set(() => ({ globalPointer: globalPointer })),
   setReady: (ready: boolean) => set(() => ({ ready: ready })),
+  setIsTooSlow: (isTooSlow: boolean) => set(() => ({ isTooSlow: isTooSlow })),
+  setSeeking: (seeking: boolean) => set(() => ({ seeking: seeking })),
 }))

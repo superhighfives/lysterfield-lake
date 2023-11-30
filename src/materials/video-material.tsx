@@ -150,6 +150,7 @@ export const VideoMaterial = shaderMaterial(
 
         image = mix(image, overlay, mixAmount);
         image = mix(image, overlay, fadeAmount);
+        image = mix(image, white, 1.0 - clamp(uTime - 1.0, 0.0, 1.0));
       }
 
       float opacityOverride = 0.0;
