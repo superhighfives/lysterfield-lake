@@ -1,1 +1,62 @@
-[{"id":"20230808103741","title":"Watercolour","link":"https://youtu.be/W1vrIf1RPak","prompt":"A detailed watercolor painting"},{"id":"20230809134901","title":"Paper Planes","link":"https://youtu.be/5oTEZ2un3FM","prompt":"A pencil illustration of summer"},{"id":"20230810222655","title":"Clouds of Air","link":"https://youtu.be/_7WLh2LIaGU","prompt":"Breathtaking vibrant poster style"},{"id":"20230811110431","title":"Dirty Palette","link":"https://youtu.be/hJa1qSX1k_M","prompt":"A lake at dawn with sunlight through trees"},{"id":"20230812000902","title":"Horizon Storm","link":"https://youtu.be/fyuhgTVDh7s","prompt":"Landscape painting with paint dripping"},{"id":"20230812145711","title":"Lush and Light","link":"https://youtu.be/vfxUbx3jNnw","prompt":"Vibrant detailed landscape"},{"id":"20230816110119","title":"Ghibli's Dream","link":"https://youtu.be/aWsdruAdB-g","prompt":"Ghibli-aesthetic landscape picture"},{"id":"20230817131418","title":"Mood Lighting","link":"https://youtu.be/iE3aVAGvuAw","prompt":"Palette knives and brush strokes"},{"id":"20230818151910","title":"Ink Flight","link":"https://youtu.be/9-mCUqOYZuw","prompt":"Alcohol and tea ink style"},{"id":"20230819073500","title":"Charcoal","link":"https://youtu.be/mVKwFpXatPY","prompt":"Black and white guache"}]
+[
+  {
+    "id": "20230808103741",
+    "title": "Watercolour",
+    "link": "https://youtu.be/W1vrIf1RPak",
+    "prompt": "A watercolor painting"
+  },
+  {
+    "id": "20230809134901",
+    "title": "Paper Planes",
+    "link": "https://youtu.be/5oTEZ2un3FM",
+    "prompt": "A pencil illustration of summer"
+  },
+  {
+    "id": "20230810222655",
+    "title": "Clouds of Air",
+    "link": "https://youtu.be/_7WLh2LIaGU",
+    "prompt": "Breathtaking vibrant poster style"
+  },
+  {
+    "id": "20230811110431",
+    "title": "Dirty Palette",
+    "link": "https://youtu.be/hJa1qSX1k_M",
+    "prompt": "A lake at dawn with sunlight through trees"
+  },
+  {
+    "id": "20230812000902",
+    "title": "Horizon Storm",
+    "link": "https://youtu.be/fyuhgTVDh7s",
+    "prompt": "Landscape painting with paint dripping"
+  },
+  {
+    "id": "20230812145711",
+    "title": "Lush and Light",
+    "link": "https://youtu.be/vfxUbx3jNnw",
+    "prompt": "Vibrant detailed landscape"
+  },
+  {
+    "id": "20230816110119",
+    "title": "Ghibli's Dream",
+    "link": "https://youtu.be/aWsdruAdB-g",
+    "prompt": "Ghibli-aesthetic landscape picture"
+  },
+  {
+    "id": "20230817131418",
+    "title": "Mood Lighting",
+    "link": "https://youtu.be/iE3aVAGvuAw",
+    "prompt": "Palette knives and brush strokes"
+  },
+  {
+    "id": "20230818151910",
+    "title": "Ink Flight",
+    "link": "https://youtu.be/9-mCUqOYZuw",
+    "prompt": "Alcohol and tea ink style"
+  },
+  {
+    "id": "20230819073500",
+    "title": "Charcoal",
+    "link": "https://youtu.be/mVKwFpXatPY",
+    "prompt": "Black and white guache"
+  }
+]

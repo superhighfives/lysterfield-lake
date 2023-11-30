@@ -248,7 +248,7 @@ function Choose(props: ThreeElements['group']) {
                     anchorX="left"
                     anchorY="middle"
                   >
-                    {dream.prompt}
+                    {`"${dream.prompt}"`}
                   </Text>
                 </group>
               </animated.group>
