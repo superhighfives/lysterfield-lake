@@ -27,7 +27,7 @@ function Root() {
   const isTooSlow = useStore((state) => state.isTooSlow)
   const seeking = useStore((state) => state.seeking)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const polaroidVisible = useStore((state) => state.polaroidVisible)
+  const showPlayhead = useStore((state) => state.showPlayhead)
 
   useEffect(() => {
     console.log('Loaded!')
@@ -78,26 +78,22 @@ function Root() {
           <Viewport>
             <div
               className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 group flex flex-col transition-opacity ${
-                isBuffering && polaroidVisible > 0.3
+                isBuffering && showPlayhead
                   ? 'opacity-100'
-                  : 'opacity-0'
+                  : 'pointer-events-none opacity-0'
               }`}
             >
               <div
-                className={`bg-white shadow-xl pl-2 pr-3 py-2 rounded-full pointer-events-none flex items-center text-stone-700 gap-2 text-sm mb-2`}
+                className={`bg-white shadow-xl pl-2 pr-3 py-2 rounded-full  flex items-center text-stone-700 gap-2 text-sm mb-2`}
               >
                 <CircleNotch className="animate-spin" size={20} />
                 {seeking ? 'Loading video...' : 'Buffering...'}
               </div>
 
               <a
-                href={dream?.link}
+                href="https://"
                 className={`bg-yellow-400 shadow-xl px-4 py-1 rounded-full flex items-center text-stone-700 gap-2 text-xs hover:bg-black hover:text-white transition-opacity  ${
                   isTooSlow && !seeking ? 'opacity-100' : 'opacity-0'
-                } ${
-                  isBuffering && polaroidVisible > 0.3
-                    ? ''
-                    : 'pointer-events-none'
                 }`}
               >
                 Watch on YouTube?
