@@ -14,7 +14,7 @@ import {
   SpeakerSimpleNone,
   SpeakerSimpleLow,
   SpeakerSimpleHigh,
-  DeviceMobile,
+  CameraRotate,
 } from '@phosphor-icons/react'
 import Tooltip from '../views/tooltip'
 
@@ -143,7 +143,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
             }`}
             onClick={() => setResetInitialRotation(true)}
           >
-            <DeviceMobile className="inline" />
+            <CameraRotate className="inline" />
             <span className="font-serif text-lg">Reorient mobile</span>
           </button>
         </div>
