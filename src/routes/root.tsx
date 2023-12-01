@@ -89,7 +89,7 @@ function Root() {
               </div>
 
               <a
-                href="https://"
+                href={dream?.link}
                 className={`bg-yellow-400 shadow-xl px-4 py-1 rounded-full flex items-center text-stone-700 gap-2 text-xs hover:bg-black hover:text-white transition-opacity  ${
                   isTooSlow && !seeking
                     ? 'opacity-100'
