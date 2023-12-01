@@ -5,7 +5,6 @@ import { Euler, MathUtils, Mesh, Vector3 } from 'three'
 import type { Dream } from '../utils/types'
 import Polaroid from '../models/polaroid'
 import { PolaroidMaterial } from '../materials/polaroid-material'
-import { format, parse } from 'date-fns'
 import {
   useCursor,
   useIntersect,

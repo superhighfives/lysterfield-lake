@@ -1,7 +1,7 @@
 import { useStore } from '../store'
 import { MediaReadyState } from '@react-av/core'
 import { Canvas } from '@react-three/fiber'
-import { PerformanceMonitor, Preload } from '@react-three/drei'
+import { Preload } from '@react-three/drei'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import Loading from '../components/loading'
 import Fallback from '../components/fallback'
