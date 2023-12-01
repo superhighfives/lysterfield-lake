@@ -82,7 +82,7 @@ function Root() {
               }`}
             >
               <div
-                className={`bg-white shadow-xl pl-2 pr-3 py-2 rounded-full  flex items-center text-stone-700 gap-2 text-sm mb-2`}
+                className={`bg-white shadow-xl pl-2 pr-3 py-2 rounded-full flex items-center self-center text-stone-700 gap-2 text-sm mb-2`}
               >
                 <CircleNotch className="animate-spin" size={20} />
                 {seeking ? 'Loading video...' : 'Buffering...'}
