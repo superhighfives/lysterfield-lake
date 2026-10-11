@@ -43,7 +43,7 @@ export async function runModelText(
   return Array.isArray(output) ? output.join('') : output
 }
 
-/** Every image/video model this pipeline calls returns a single FileOutput. */
+/** An image/video model's file output (a single FileOutput, or the first of a list). */
 type FileOutputLike = { blob: () => Promise<Blob> }
 
 /**
@@ -60,8 +60,11 @@ export async function runModelToFile(
   outputPath: string,
   opts?: { jpegQuality?: number }
 ): Promise<void> {
-  const output = await runModel<FileOutputLike>(identifier, input)
-  await saveFileOutput(output, outputPath, opts)
+  // Most models return one file; some (flux-dev, sdxl...) return a list even for num_outputs 1.
+  const output = await runModel<FileOutputLike | FileOutputLike[]>(identifier, input)
+  const file = Array.isArray(output) ? output[0] : output
+  if (!file) throw new Error(`${identifier} returned no output`)
+  await saveFileOutput(file, outputPath, opts)
 }
 
 async function saveFileOutput(
