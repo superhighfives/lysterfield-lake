@@ -59,18 +59,17 @@ admin page or the CLI.
   one of `proposed` → `samples-approved` → `clip-approved` → `generated`, or
   `rejected`. The existing settings guard (`dream.ts` refuses frames made
   with different prompt/seed/stepFps) still applies.
-- **`dream-directions`**: one Claude API call (`@anthropic-ai/sdk`, model
-  `claude-opus-5-5`, adaptive thinking, server-side refusal fallbacks
-  `fallbacks: "default"`). Input: the user's brief, plus two or three sample
-  source frames as base64 images (downscaled to 1024px). Output via
-  structured outputs (`output_config.format` JSON schema): 3-5 directions,
-  each `{ name, prompt, palette: [hex], rationale }`. The system prompt states
+- **`dream-directions`**: one Claude call **on Replicate**
+  (`anthropic/claude-opus-4.7`, the most capable Opus Replicate hosts), so
+  the pipeline needs no separate Anthropic key (user decision, 2026-10-10).
+  Replicate's Claude takes one image and returns text, so the first three
+  sample frames are stitched into one strip and the reply is asked for as
+  JSON and validated with Zod: 3-5 directions, each
+  `{ name, prompt, palette: [hex], rationale }`. One call, no retries. The system prompt states
   the panel 7 rule (abstract shapes, light and colour, never a person) so the
   directions don't fight `NO_PEOPLE_SUFFIX`, which `dream.ts` still appends
   regardless. Writes `7-dreams/_directions/<timestamp>.json`. Picking one
-  creates `7-dreams/<take>/take.json` with status `proposed`. Needs
-  `ANTHROPIC_API_KEY` in `apps/pipeline/.env` (or an `ant auth login`
-  profile).
+  creates `7-dreams/<take>/take.json` with status `proposed`.
 - **`dream-samples`**: runs the existing dream keyframe call (same model,
   prompt + `NO_PEOPLE_SUFFIX`, the take's seed) on the job's `samples`
   frames only, writing `7-dreams/<take>/samples/NNNN.jpg`. Skip-if-exists,
@@ -117,17 +116,28 @@ hosting it anywhere but local dev, and reviewing panels 1-6.
 
 ## Tasks
 
-- [ ] Pick `full-video`'s sample frames and clip range with the user; add
-      `samples` and `clip` to its `job.json`
-- [ ] `take.json` status, brief, direction, notes; gate `dream` on
+- [x] `full-video`'s sample frames (1, 2025, 2901, 4033, 4501, all on 6fps
+      keyframes) and clip range (3701-4060) in its `job.json`
+- [x] `take.json` status, brief, direction, notes; gate `dream` on
       `clip-approved`
-- [ ] `dream-directions` (Claude API, structured output)
-- [ ] `dream-samples`
-- [ ] Range support in `dream` and `compose`; `dream-clip`
+- [x] `dream-directions` (Claude on Replicate, JSON validated with Zod)
+- [x] `dream-samples` (tested on `test-hazy-summer`; see Findings)
+- [x] Range support in `dream` and `compose`; `dream-clip` (not yet run for real)
 - [ ] Vite dev plugin with the `/__admin` endpoints
 - [ ] `/admin` view: directions, film strip, approvals
 - [ ] `?preview=` mode in the player
 - [ ] Try the whole loop on one new take for `full-video`
+
+## Findings (2026-10-10)
+
+- **A photographic prompt lets the person straight through.** The test take
+  `test-hazy-summer` ("1970s film photograph", hand-written) came back with
+  the subject fully recognisable in all four samples that contain him,
+  despite `NO_PEOPLE_SUFFIX`: flux-kontext treated it as a colour grade.
+  Rejected. The directions prompt now requires a medium that rebuilds the
+  frame (impasto, woodcut, mosaic...) and forbids photo, film or grade
+  looks. An automatic person check on samples would catch this before
+  review (proposed, not built).
 
 ## Open questions
 

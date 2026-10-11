@@ -84,4 +84,11 @@ export const MODELS = {
    */
   outline:
     'superhighfives/lysterfield-outline:0731a7247a52e0578f5b92ea6e6cbf763bcaa411d1927c40d86582514c9d0bb9',
-} as const satisfies Record<string, `${string}/${string}:${string}`>
+  /**
+   * Dream directions brainstorm (`dream-directions`) — Claude via Replicate,
+   * so the pipeline needs no separate Anthropic key. Opus 4.7 is the most
+   * capable Opus Replicate hosts. An official model, so it runs by name
+   * (Replicate keeps it on its latest version) rather than a pinned version.
+   */
+  directions: 'anthropic/claude-opus-4.7',
+} as const satisfies Record<string, `${string}/${string}` | `${string}/${string}:${string}`>

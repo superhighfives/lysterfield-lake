@@ -31,7 +31,19 @@ async function runModel<Output = unknown>(
   return output as Output
 }
 
-/** Every model this pipeline calls returns a single FileOutput. */
+/**
+ * Runs a language model that returns text (Replicate streams it back as an
+ * array of string chunks) and returns the joined text.
+ */
+export async function runModelText(
+  identifier: `${string}/${string}` | `${string}/${string}:${string}`,
+  input: Record<string, unknown>
+): Promise<string> {
+  const output = await runModel<string | string[]>(identifier, input)
+  return Array.isArray(output) ? output.join('') : output
+}
+
+/** Every image/video model this pipeline calls returns a single FileOutput. */
 type FileOutputLike = { blob: () => Promise<Blob> }
 
 /**

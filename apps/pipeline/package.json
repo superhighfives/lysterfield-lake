@@ -8,7 +8,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.133.0",
     "replicate": "^1.4.0",
     "sharp": "^0.35.4",
     "zod": "^4.6.5"
