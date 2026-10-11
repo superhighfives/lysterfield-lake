@@ -1,0 +1,72 @@
+{
+  "watercolour": {
+    "title": "Watercolour",
+    "prompt": "a detailed watercolor painting of a lake at dawn with sunlight through trees, trending on Artstation",
+    "colour": null,
+    "seed": 36429375,
+    "colour_mode": "Video Input"
+  },
+  "paper-planes": {
+    "title": "Paper Planes",
+    "prompt": "a pencil illustration of a lake in summer, light through the trees, the wind blowing, summer chill day, fine detail, 8k, full of color, intricate detail, golden ratio illustration, trending on artstation, on white paper",
+    "colour": "05.png",
+    "seed": 2509243882,
+    "colour_mode": "Specific"
+  },
+  "clouds-of-air": {
+    "title": "Clouds of Air",
+    "prompt": "aesthetic landscape picture, Ghibli, detailed, vibrant colors, HDR, ~*~Enhance~*~, ~*~Ghibli~*~",
+    "colour": "10.png",
+    "seed": 3065535307,
+    "colour_mode": "Specific"
+  },
+  "dirty-palette": {
+    "title": "Dirty Palette",
+    "prompt": "a detailed watercolor painting of a lake at dawn with sunlight through trees, trending on Artstation, fine detail, 8k, on white paper, intricate detail, golden ratio illustration",
+    "colour": "04.png",
+    "seed": 3117484603,
+    "colour_mode": "Random"
+  },
+  "horizon-storm": {
+    "title": "Horizon Storm",
+    "prompt": "Beautiful watercolor landscape painting of a lake at dawn with sunlight through trees. summer chill day, paint dripping by tim okamura, victor nizovtsev, greg rutkowski, noah bradley. trending on artstation, 8k, masterpiece, graffiti paint, fine detail, full of color, intricate detail, golden ratio illustrationa lake at dawn with sunlight through trees. insanely detailed and intricate digital illustration by Yana Toboso, Ismail Inceoglu, Hayao Miyazaki, Gazelli, M. W. Kaluta, and Yoshitaka Amano, a masterpiece, close-up, 8k resolution, trending on artstation, landscape, delicate, watercolor, soft, vibrant, vintage colors, contrasting",
+    "colour": "04.png",
+    "seed": 4096152510,
+    "colour_mode": "Random"
+  },
+  "lush-and-light": {
+    "title": "Lush and Light",
+    "prompt": "aesthetic landscape picture with lake, detailed, vibrant colors, HDR, ~*~Enhance~*~, ~*~Ghibli~*~",
+    "colour": "08.png",
+    "seed": 2379409397,
+    "colour_mode": "Random"
+  },
+  "ghiblis-dream": {
+    "title": "Ghibli's Dream",
+    "prompt": "Breathtaking , Vibrant colors , velvet poster style , a lake at dawn with light streaming through the trees ,gloomy illumination, award-winning , professional , masterpiece , highly detailed , full sharp , UHD , HDR , 8k, <lora:DFunk_SDXL:0. 6>, <lore:sd_xl_offset_example-lora_1. 0:1. 0>",
+    "colour": "02.png",
+    "seed": 998434321,
+    "colour_mode": "Specific"
+  },
+  "mood-lighting": {
+    "title": "Mood Lighting",
+    "prompt": "Breathtaking , Vibrant colors , velvet poster style , a lake at dawn with light streaming through the trees ,gloomy illumination, award-winning , professional , masterpiece , highly detailed , full sharp , UHD , HDR , 8k, acrylic painting, palette knife and brush strokes, <lora:DFunk_SDXL:0. 6>, <lore:sd_xl_offset_example-lora_1. 0:1. 0>",
+    "colour": "11.png",
+    "seed": 1578667705,
+    "colour_mode": "Specific"
+  },
+  "ink-flight": {
+    "title": "Ink Flight",
+    "prompt": "A new style merging Carne Griffiths\u2019 intricate and detailed drawing style, alcohol ink, tea ink and Japanese painting styles could be achieved by combining elements of each. The artwork could feature delicate lines and intricate details, as well as bold colours and abstract patterns. The background could be painted with alcohol ink and tea ink, while the foreground could be painted with traditional Japanese materials and techniques, such as Sumi ink and Washi paper. The artwork could also include elements of calligraphy and mystical themes, amazing composition, hyper-realistic, soft illumination, trending on ArtStation, concept art, all in white, creating an expressive and unique piece of art. It should depict a lake at dawn, with sunlight streaming through the trees.",
+    "colour": "02.png",
+    "seed": 1331396351,
+    "colour_mode": "Specific"
+  },
+  "charcoal": {
+    "title": "Charcoal",
+    "prompt": "guache, lake at dawn with sunlight streaming through the trees in style of metal gear solid and Yoji Shinkawa and jeremy mann and Mucha ::1. 5 white paint on black texture paper::1 Traditional Chinese Ink painting, ink on watercolor, clean line art, ink drip and splatter::1 asymmetric composition::2 hyperdetailed, hyperornate --ar 5:10 --iw 2. 4 --stylize 2000",
+    "colour": "13.png",
+    "seed": 1950855858,
+    "colour_mode": "Specific"
+  }
+}

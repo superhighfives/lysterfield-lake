@@ -3,6 +3,7 @@ import path from 'node:path'
 import { exists, framesDir, listFrames, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
 import { readFileAsInput, runModelToFile } from '../replicate.ts'
+import { deforumSamples } from './dream-deforum.ts'
 
 export interface DreamResult {
   framesDir: string
@@ -43,6 +44,14 @@ export interface TakeConfig {
   direction?: { name: string; palette: string[]; rationale: string }
   /** Reviewer notes, free text. */
   notes?: string
+  /** How the dream is made: flux-kontext keyframes (default) or Deforum, the legacy dreams' method (dream-deforum.ts). */
+  method?: 'flux-kontext' | 'deforum'
+  /** Deforum: colour reference, a file in `resources/colours/` (or a path inside the take folder); unset = colours follow the footage. */
+  colour?: string
+  /** Deforum: which legacy dream's settings to start from (models/deforum/settings/). */
+  preset?: string
+  /** Deforum: negative prompt; unset = the legacy dreams' own (no people, faces, bodies...). */
+  negativePrompt?: string
 }
 
 const DEFAULT_STEP_FPS = 6
@@ -70,7 +79,17 @@ export async function saveTake(job: Job, take: string, update: Partial<TakeConfi
 export async function createTake(
   job: Job,
   take: string,
-  init: { prompt: string; seed?: number; stepFps?: number; brief?: string; direction?: TakeConfig['direction'] }
+  init: {
+    prompt: string
+    seed?: number
+    stepFps?: number
+    brief?: string
+    direction?: TakeConfig['direction']
+    method?: TakeConfig['method']
+    colour?: string
+    preset?: string
+    negativePrompt?: string
+  }
 ): Promise<TakeConfig> {
   if (await loadTake(job, take)) throw new Error(`Take "${take}" already exists — pick a new name.`)
   return saveTake(job, take, {
@@ -80,6 +99,10 @@ export async function createTake(
     status: 'proposed',
     brief: init.brief,
     direction: init.direction,
+    method: init.method,
+    colour: init.colour,
+    preset: init.preset,
+    negativePrompt: init.negativePrompt,
   })
 }
 
@@ -220,6 +243,7 @@ export async function dreamSamples(job: Job, sourceFramesDir: string, take: stri
   const config = await loadTake(job, take)
   if (!config) throw new Error(`Take "${take}" doesn't exist — create it from a direction first.`)
   if (!job.samples?.length) throw new Error(`job.json has no "samples" — add the frames every direction is judged on.`)
+  if (config.method === 'deforum') return deforumSamples(job, take, config)
 
   const samplesDir = await framesDir(job, `7-dreams/${take}/samples`)
   const framesOut = await framesDir(job, `7-dreams/${take}/frames`)

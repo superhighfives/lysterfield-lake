@@ -15,7 +15,12 @@ type Take = {
   notes?: string
   samples: number[]
   hasPreview: boolean
+  method?: 'flux-kontext' | 'deforum'
+  colour?: string
+  preset?: string
 }
+type Preset = { title: string; prompt: string; colour: string | null; seed: number }
+type DeforumOptions = { presets: Record<string, Preset>; colours: string[] }
 type JobDetail = {
   name: string
   config: { samples?: { frame: number; label: string }[]; clip?: { start: number; frames: number } }
@@ -56,6 +61,96 @@ function Palette({ colours }: { colours: string[] }) {
       {colours.map((c) => (
         <span key={c} title={c} className="h-5 w-5 rounded-sm border border-white/20" style={{ background: c }} />
       ))}
+    </div>
+  )
+}
+
+/** A new Deforum take: the legacy dreams' method. Prompt + colour reference, optionally starting from a legacy dream's settings. */
+function DeforumForm({ busy, onCreate }: { busy: boolean; onCreate: (body: Record<string, unknown>) => void }) {
+  const [options, setOptions] = useState<DeforumOptions>({ presets: {}, colours: [] })
+  const [preset, setPreset] = useState('lush-and-light')
+  const [prompt, setPrompt] = useState('')
+  const [colour, setColour] = useState<string | null>(null)
+  const [negative, setNegative] = useState('')
+  const [name, setName] = useState('')
+  const [uploadError, setUploadError] = useState('')
+
+  const load = useCallback(() => api<DeforumOptions>('/__admin/api/deforum').then(setOptions), [])
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const startFrom = (id: string) => {
+    setPreset(id)
+    const p = options.presets[id]
+    if (p) {
+      setPrompt(p.prompt)
+      setColour(p.colour)
+    }
+  }
+
+  const upload = async (fileInput: HTMLInputElement) => {
+    const f = fileInput.files?.[0]
+    if (!f) return
+    setUploadError('')
+    const data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result).split(',')[1])
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(f)
+    })
+    const fileName = f.name.replace(/[^\w.-]+/g, '-')
+    try {
+      await api('/__admin/api/colours', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: fileName, data }) })
+      await load()
+      setColour(fileName)
+    } catch (e) {
+      setUploadError((e as Error).message)
+    }
+  }
+
+  return (
+    <div className="max-w-5xl rounded border border-white/10 p-4">
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-neutral-400">Start from a legacy dream:</span>
+        {Object.entries(options.presets).map(([id, p]) => (
+          <button key={id} type="button" onClick={() => startFrom(id)} className={`rounded px-2 py-1 ${preset === id ? 'bg-white/25' : 'bg-white/10 hover:bg-white/20'}`}>
+            {p.title}
+          </button>
+        ))}
+      </div>
+      <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Landscape-only prompt — never describe the person" className="mb-3 h-20 w-full rounded bg-white/5 p-2 text-sm" />
+      <p className="mb-2 text-sm text-neutral-400">Colour reference (every frame is colour-matched to it):</p>
+      <div className="mb-3 flex flex-wrap gap-2">
+        <button type="button" onClick={() => setColour(null)} className={`h-16 w-16 rounded text-xs ${colour === null ? 'ring-2 ring-amber-400' : 'bg-white/10'}`}>
+          from the footage
+        </button>
+        {options.colours.map((c) => (
+          <button key={c} type="button" title={c} onClick={() => setColour(c)} className={`h-16 w-16 overflow-hidden rounded ${colour === c ? 'ring-2 ring-amber-400' : ''}`}>
+            <img src={`/__admin/colours/${c}`} alt={c} className="h-full w-full object-cover" />
+          </button>
+        ))}
+        <label className="flex h-16 w-16 cursor-pointer items-center justify-center rounded bg-white/10 text-xs hover:bg-white/20">
+          + upload
+          <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => upload(e.target)} />
+        </label>
+      </div>
+      {uploadError && <p className="mb-2 text-sm text-rose-300">{uploadError}</p>}
+      <details className="mb-3 text-sm">
+        <summary className="cursor-pointer text-neutral-400">Negative prompt (default: the legacy list — no people, faces, bodies…)</summary>
+        <textarea value={negative} onChange={(e) => setNegative(e.target.value)} placeholder="Leave empty for the legacy negative prompt" className="mt-2 h-20 w-full rounded bg-white/5 p-2 text-sm" />
+      </details>
+      <div className="flex gap-2">
+        <input value={name} onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-'))} placeholder="take-name" className="rounded bg-white/5 px-2 py-1 text-sm" />
+        <button
+          type="button"
+          disabled={busy || !prompt.trim() || !name}
+          onClick={() => onCreate({ action: 'take', method: 'deforum', take: name, prompt, colour, preset, negative: negative.trim() || undefined, seed: options.presets[preset]?.seed })}
+          className="rounded bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20 disabled:opacity-40"
+        >
+          Make Deforum take
+        </button>
+      </div>
     </div>
   )
 }
@@ -189,6 +284,10 @@ export default function Admin() {
       </section>
 
       <section>
+        <h2 className="mb-3 text-lg font-semibold">1b. Or a Deforum take (the legacy dreams&apos; method)</h2>
+        <div className="mb-10">
+          <DeforumForm busy={busy} onCreate={act} />
+        </div>
         <h2 className="mb-3 text-lg font-semibold">2. Takes</h2>
         {detail?.takes.filter((t) => t.status).length === 0 && <p className="text-sm text-neutral-400">No takes yet — make one from a direction.</p>}
         {detail?.takes
@@ -199,6 +298,12 @@ export default function Admin() {
                 <h3 className="font-semibold">{take.id}</h3>
                 <span className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLE[take.status!] ?? ''}`}>{take.status}</span>
                 {take.direction && <Palette colours={take.direction.palette} />}
+                {take.method === 'deforum' && (
+                  <span className="flex items-center gap-2 text-xs text-neutral-400">
+                    Deforum{take.preset ? ` · from ${take.preset}` : ''}
+                    {take.colour ? <img src={`/__admin/colours/${take.colour}`} alt={take.colour} className="h-6 w-6 rounded object-cover" /> : ' · colours from the footage'}
+                  </span>
+                )}
               </div>
               <p className="mb-3 max-w-3xl text-sm text-neutral-300">{take.prompt}</p>
 
@@ -207,7 +312,11 @@ export default function Admin() {
                   {samples.map((s) => (
                     <figure key={s.frame} className="w-48 shrink-0">
                       <img src={file(job, `0-source/frames/${pad(s.frame)}.jpg`)} alt="" className="aspect-square w-full object-cover opacity-60" />
-                      <img src={file(job, `7-dreams/${take.id}/samples/${pad(s.frame)}.jpg`)} alt="" className="aspect-square w-full object-cover" />
+                      {take.method === 'deforum' ? (
+                        <video src={file(job, `7-dreams/${take.id}/samples/${pad(s.frame)}.mp4`)} poster={file(job, `7-dreams/${take.id}/samples/${pad(s.frame)}.jpg`)} autoPlay loop muted playsInline className="aspect-square w-full object-cover" />
+                      ) : (
+                        <img src={file(job, `7-dreams/${take.id}/samples/${pad(s.frame)}.jpg`)} alt="" className="aspect-square w-full object-cover" />
+                      )}
                       <figcaption className="mt-1 text-xs text-neutral-400">{s.label}</figcaption>
                     </figure>
                   ))}
@@ -218,7 +327,7 @@ export default function Admin() {
                 {take.status === 'proposed' && (
                   <SpendButton
                     label={take.samples.length ? 'Regenerate samples' : 'Generate samples'}
-                    cost="~$0.15"
+                    cost={take.method === 'deforum' ? '5 GPU runs, cost TBC' : '~$0.15'}
                     disabled={busy}
                     onConfirm={() => act({ action: 'samples', take: take.id })}
                   />
@@ -228,7 +337,10 @@ export default function Admin() {
                     Approve samples
                   </button>
                 )}
-                {(take.status === 'samples-approved' || take.status === 'clip-approved') && (
+                {take.method === 'deforum' && take.status === 'samples-approved' && (
+                  <span className="text-xs text-neutral-400">Test clip for Deforum takes isn&apos;t wired up yet.</span>
+                )}
+                {take.method !== 'deforum' && (take.status === 'samples-approved' || take.status === 'clip-approved') && (
                   <SpendButton
                     label={take.hasPreview ? 'Re-render 15s clip' : 'Render 15s clip'}
                     cost="~$2.70"

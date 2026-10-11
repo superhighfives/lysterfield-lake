@@ -219,6 +219,7 @@ switch (step) {
 
   case 'dream-take': {
     // Creates a take at "proposed", from a direction (--directions <file> --index <n>) or a bare --prompt.
+    // Deforum takes (the legacy dreams' method): --method deforum [--colour <ref in resources/colours>] [--preset <legacy dream>] [--negative <prompt>].
     const job = await loadJob(requireFlag('job'))
     const take = requireFlag('take')
     let prompt = flags.prompt
@@ -233,10 +234,16 @@ switch (step) {
       direction = { name: picked.name, palette: picked.palette, rationale: picked.rationale }
     }
     if (!prompt) throw new Error('--prompt, or --directions <file> --index <n>, is required')
+    const method = flags.method as 'flux-kontext' | 'deforum' | undefined
+    if (method && method !== 'flux-kontext' && method !== 'deforum') throw new Error('--method must be flux-kontext or deforum')
     const config = await createTake(job, take, {
       prompt,
       brief,
       direction,
+      method,
+      colour: flags.colour,
+      preset: flags.preset,
+      negativePrompt: flags.negative,
       seed: flags.seed ? Number(flags.seed) : undefined,
       stepFps: flags['step-fps'] ? Number(flags['step-fps']) : undefined,
     })

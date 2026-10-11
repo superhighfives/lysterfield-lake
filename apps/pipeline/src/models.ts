@@ -91,4 +91,10 @@ export const MODELS = {
    * (Replicate keeps it on its latest version) rather than a pinned version.
    */
   directions: 'anthropic/claude-opus-4.7',
+  /**
+   * Dream takes the legacy way (`dream-deforum.ts`): Deforum 0.7.1 with the legacy render.py,
+   * settings, negative prompt and colour reference — `models/deforum/`, private, A100 (its pinned
+   * PyTorch 1.12.1 predates the L40S/H100). See plans/ready/own-deforum-dream-model.md.
+   */
+  deforum: 'superhighfives/lysterfield-deforum:99ec99ce7f002b570d728cf6db67a90e3a53b9804817d9a23a6f47f23330fda8',
 } as const satisfies Record<string, `${string}/${string}` | `${string}/${string}:${string}`>

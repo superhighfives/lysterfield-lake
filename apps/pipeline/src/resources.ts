@@ -12,3 +12,6 @@ const RESOURCES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '.
  */
 export const WORDS_VIDEO_PATH = path.join(RESOURCES_DIR, 'words', 'words.mov')
 export const AUDIO_PATH = path.join(RESOURCES_DIR, 'audio', 'lysterfield-lake.wav')
+
+/** Colour references for Deforum dream takes (the legacy PC's Dreaming/Colours; gitignored, ~55MB). */
+export const COLOURS_DIR = path.join(RESOURCES_DIR, 'colours')

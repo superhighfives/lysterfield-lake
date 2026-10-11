@@ -57,7 +57,19 @@ and `pc-settings/` on the HDD):
 is a 2023 build of the same project with most of these inputs (video init,
 mask video, hybrid composite, depth warping, Protogen), but not the custom
 colour modes, the DIS flow method, or a negative prompt. A 5s prototype of
-the legacy recipe on it ran on 2026-10-11 (`.jobs/spikes/dream-deforum/`).
+the legacy recipe on it (2026-10-11, `.jobs/spikes/dream-deforum/`, 60
+frames in 1,084s, ~18s a frame) **kept a person** (a different face in the
+subject's pose) where the legacy run made a red tower and its reflection. So
+the negative prompt, the colour reference and the CLIP/aesthetics guidance
+are what make the legacy look, and the hosted build can't do it.
+
+**The legacy checkout itself** is in the HDD's Linux backup
+(`~/ai/deforum-stable-diffusion`): upstream `main` @ `40f5c2e` (2023-06-02,
+"Merge 0.7.1"), plus the user's commits and edits to `render.py`,
+`conditioning.py` (weighted CLIP prompts split on `=`) and the notebook
+script. The legacy settings use `clip_scale` and `aesthetics_scale` 50, so
+CLIP ViT-L/14 guidance was on. `~/ai/dsd-cog` is an unmodified upstream
+clone. `models/deforum/fetch.sh` pins `40f5c2e` and applies both edits.
 
 **Why not a simpler model** (tested 2026-10-11, `.jobs/spikes/`):
 
@@ -70,6 +82,24 @@ the legacy recipe on it ran on 2026-10-11 (`.jobs/spikes/dream-deforum/`).
   frame + panel 2 inside the matte, img2img 0.5) collapsed into saturated,
   posterised noise after one frame. Deforum's colour coherence, noise
   schedule and depth-warped motion are what keep its loop stable.
+
+**First run (2026-10-11):** `superhighfives/lysterfield-deforum` on an A100
+reproduces the legacy look. With lush-and-light's prompt, seed and colour
+reference, a 12-frame warm-up ending on the shouting close-up (frame 4033)
+converges from a plain lake (Deforum's first frame has no init) to a red tree,
+a red house and then the red rock and its reflection, the same composition
+and palette as the published frame, with no person. ~21s a frame (CLIP and
+aesthetics guidance on), 253s for the run plus ~2 min cold boot; roughly
+$0.35 a sample run if the A100 rate is ~$0.0014/s (unconfirmed). A full song
+at 12 dream frames/s is ~2,580 frames, ~15h of GPU, roughly $75.
+
+**Build notes:** Cog 0.21's `python_requirements` step fails on GPU images
+(`uv run pip install` vs uv's managed Python, PEP 668), so packages install in
+a `run:` step with `uv pip install --system --index-strategy unsafe-best-match`
+and torch from the cu116 index. Upstream's `triton==2.0.0.dev20221202` is gone
+from PyPI and isn't needed; `pydantic` 1.10 had to be added (Cog used to ship
+it). Cog 0.13 builds fine but validates the schema by starting the container
+on a GPU, which fails on a Mac.
 
 ## Approach
 
@@ -105,13 +135,12 @@ the legacy recipe on it ran on 2026-10-11 (`.jobs/spikes/dream-deforum/`).
 
 ## Tasks
 
-- [ ] Finish scanning the Linux backup; extract the Deforum checkout,
-      weights and environment if present
-- [ ] Build `models/deforum/` and run it locally (cog) on a short clip
-- [ ] Push `superhighfives/lysterfield-deforum` (private) and time a run;
-      estimate the cost of a full song
-- [ ] Verify against lush-and-light
-- [ ] `dream.ts` deforum method, wired into the preview loop
+- [x] Find the legacy checkout in the Linux backup (`~/ai/deforum-stable-diffusion`)
+- [x] Build `models/deforum/` (fetch.sh pins the legacy base `40f5c2e` + legacy render.py/conditioning.py)
+- [x] Push `superhighfives/lysterfield-deforum` (private, A100) and time a run
+- [x] Verify against lush-and-light (one sample; see First run)
+- [x] `dream-deforum.ts` samples, wired into the preview loop and /admin
+- [ ] Deforum for the 15s clip and the full song (chunked, with resume)
 
 ## Open questions
 

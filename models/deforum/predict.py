@@ -36,7 +36,6 @@ WEIGHTS = {
     "models/AdaBins_nyu.pt": "https://huggingface.co/deforum/AdaBins/resolve/main/AdaBins_nyu.pt",
 }
 
-PRESETS = sorted(f[:-5] for f in os.listdir(SETTINGS) if f.endswith(".json"))
 with open(os.path.join(SETTINGS, "negative-prompt.txt")) as f:
     LEGACY_NEGATIVE_PROMPT = f.read().strip()
 
@@ -69,19 +68,29 @@ class Predictor(BasePredictor):
         self.model = load_model_from_config(config, "diffusion_models_cache/Protogen_V2.2.ckpt")
         self.model.to(self.device)
 
+        # The legacy settings use CLIP and aesthetics guidance (clip_scale/aesthetics_scale 50), which
+        # need CLIP loaded; ViT-L/14 (the legacy clip_name) is loaded once here.
+        import clip
+
+        self.clip_models = {"ViT-L/14": clip.load("ViT-L/14", jit=False)[0].eval().requires_grad_(False).to(self.device)}
+
     def predict(
         self,
         init_video: Path = Input(description="Panel 2 (painted portrait) as a video: the shape the dream grows from"),
         mask_video: Path = Input(description="The subject matte as a video (white = subject)", default=None),
         prompt: str = Input(description="Landscape-only prompt; never describe the person"),
-        negative_prompt: str = Input(description="Default: the legacy dreams' negative prompt (no people, faces, bodies...)", default=LEGACY_NEGATIVE_PROMPT),
+        negative_prompt: str = Input(description="Empty = the legacy dreams' negative prompt (no people, faces, bodies...)", default=""),
         colour_image: Path = Input(description="Colour reference: every frame's palette is matched to it (legacy 'Specific' mode)", default=None),
         colour_mode: str = Input(
             description="Specific = match colour_image; Sticky = match the first frame; others are Deforum's own",
             choices=["Specific", "Sticky", "Match Frame 0 LAB", "Match Frame 0 HSV", "Match Frame 0 RGB", "Video Input", "None"],
             default="Specific",
         ),
-        preset: str = Input(description="Legacy dream whose settings to start from", choices=PRESETS, default="lush-and-light"),
+        preset: str = Input(
+            description="Legacy dream whose settings to start from",
+            choices=["charcoal", "clouds-of-air", "dirty-palette", "ghiblis-dream", "horizon-storm", "ink-flight", "lush-and-light", "mood-lighting", "paper-planes", "watercolour"],
+            default="lush-and-light",
+        ),
         settings_overrides: str = Input(description="JSON object of Deforum setting overrides, applied after the preset", default="{}"),
         extract_nth_frame: int = Input(description="Use every Nth init frame (legacy: 6 on a 60fps init = 10 dream frames/s)", default=6, ge=1),
         max_frames: int = Input(description="Dream frames to render (capped by the init video's length)", default=60, ge=1, le=3000),
@@ -151,9 +160,20 @@ class Predictor(BasePredictor):
         root = SimpleNamespace(device="cuda", models_path="models", configs_path="configs", model=self.model)
         root.model.linear_decode = make_linear_decode("sd-v1", self.device)
         ns_args, ns_anim = SimpleNamespace(**args), SimpleNamespace(**anim)
+        if ns_args.clip_scale > 0 or ns_args.aesthetics_scale > 0:
+            if ns_args.clip_name not in self.clip_models:
+                import clip
+
+                self.clip_models[ns_args.clip_name] = clip.load(ns_args.clip_name, jit=False)[0].eval().requires_grad_(False).to(self.device)
+            root.clip_model = self.clip_models[ns_args.clip_name]
+            if ns_args.aesthetics_scale > 0:
+                from helpers.aesthetics import load_aesthetics_model
+
+                root.aesthetics_model = load_aesthetics_model(ns_args, root)
 
         gc.collect()
         torch.cuda.empty_cache()
+        negative_prompt = negative_prompt.strip() or LEGACY_NEGATIVE_PROMPT
         cond, uncond = Prompts(prompt={0: prompt}, neg_prompt=negative_prompt).as_dict()
         render_animation(root, ns_anim, ns_args, cond, uncond)
 

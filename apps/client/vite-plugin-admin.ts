@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,6 +14,8 @@ import type { Plugin } from 'vite'
 
 const PIPELINE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'pipeline')
 const JOBS_DIR = path.join(PIPELINE_DIR, '.jobs')
+const COLOURS_DIR = path.join(PIPELINE_DIR, 'resources', 'colours')
+const DEFORUM_PRESETS = path.resolve(PIPELINE_DIR, '..', '..', 'models', 'deforum', 'settings', 'presets.json')
 
 const CONTENT_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg',
@@ -98,6 +100,18 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
       return ['dream-directions', ...base, '--brief', String(body.brief), ...(body.count ? ['--count', String(body.count)] : [])]
     case 'take':
       if (!takeOk) throw new Error('take name: letters, numbers, - and _ only')
+      if (body.method === 'deforum') {
+        if (!body.prompt) throw new Error('prompt is required')
+        if (body.colour && !/^[\w.-]+\.(png|jpe?g)$/i.test(String(body.colour))) throw new Error('bad colour reference')
+        if (body.preset && !/^[\w-]+$/.test(String(body.preset))) throw new Error('bad preset')
+        return [
+          'dream-take', ...base, '--take', take, '--method', 'deforum', '--prompt', String(body.prompt),
+          ...(body.colour ? ['--colour', String(body.colour)] : []),
+          ...(body.preset ? ['--preset', String(body.preset)] : []),
+          ...(body.negative ? ['--negative', String(body.negative)] : []),
+          ...(body.seed ? ['--seed', String(body.seed)] : []),
+        ]
+      }
       if (body.directions) {
         if (!/^[\w.-]+\.json$/.test(String(body.directions))) throw new Error('bad directions file')
         return ['dream-take', ...base, '--take', take, '--directions', String(body.directions), '--index', String(body.index ?? 0)]
@@ -169,7 +183,29 @@ export default function adminPlugin(): Plugin {
           const url = new URL(req.url ?? '/', 'http://localhost')
           const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent)
           if (parts[0] === 'files' && parts.length > 2) return serveFile(res, parts[1], parts.slice(2).join('/'))
+          if (parts[0] === 'colours' && parts[1]) {
+            const file = path.join(COLOURS_DIR, path.basename(parts[1]))
+            if (!existsSync(file)) return send(res, 404, { error: 'not found' })
+            res.setHeader('Content-Type', CONTENT_TYPES[path.extname(file).toLowerCase()] ?? 'image/jpeg')
+            return createReadStream(file).pipe(res)
+          }
           if (parts[0] !== 'api') return send(res, 404, { error: 'not found' })
+          if (parts[1] === 'deforum' && req.method === 'GET') {
+            return send(res, 200, {
+              presets: existsSync(DEFORUM_PRESETS) ? readJson(DEFORUM_PRESETS) : {},
+              colours: existsSync(COLOURS_DIR) ? readdirSync(COLOURS_DIR).filter((f) => /\.(png|jpe?g)$/i.test(f)).sort() : [],
+            })
+          }
+          if (parts[1] === 'colours' && req.method === 'POST') {
+            // A new colour reference: { name, data } with data as base64.
+            const { name, data } = (await readBody(req)) as { name?: string; data?: string }
+            if (!name || !/^[\w.-]+\.(png|jpe?g)$/i.test(name) || !data) throw new Error('name (.png/.jpg) and data are required')
+            mkdirSync(COLOURS_DIR, { recursive: true })
+            const file = path.join(COLOURS_DIR, name)
+            if (existsSync(file)) throw new Error(`${name} already exists`)
+            writeFileSync(file, Buffer.from(data, 'base64'))
+            return send(res, 200, { name })
+          }
           if (parts[1] === 'jobs' && parts.length === 2) return send(res, 200, listJobs())
           if (parts[1] === 'jobs' && parts.length === 3 && req.method === 'GET') return send(res, 200, jobDetail(parts[2]))
           if (parts[1] === 'jobs' && parts[3] === 'actions' && req.method === 'POST') {
