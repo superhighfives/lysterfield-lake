@@ -1,14 +1,16 @@
 #!/usr/bin/env bun
 // Bun loads .env from the cwd automatically — no dotenv package needed.
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeClientAssets } from './client-manifest.ts'
-import { compose } from './compose.ts'
+import { compose, composePreview } from './compose.ts'
 import { loadJob, videoPath, type Job } from './job.ts'
 import { backgroundPlate } from './steps/background-plate.ts'
 import { stabilizeBackground } from './steps/background-stabilize.ts'
 import { depth } from './steps/depth.ts'
-import { dream, loadTake } from './steps/dream.ts'
+import { createTake, dream, dreamSamples, loadTake, saveTake, TAKE_STATUSES, type TakeStatus } from './steps/dream.ts'
+import { dreamDirections } from './steps/dream-directions.ts'
 import { init } from './steps/init.ts'
 import { matte } from './steps/matte.ts'
 import { outline } from './steps/outline.ts'
@@ -177,6 +179,11 @@ switch (step) {
     const take = requireFlag('take')
     // Re-running an existing take picks its settings back up from take.json; flags override.
     const saved = await loadTake(job, take)
+    // The full song is the expensive stage: it needs the take's 15s clip approved first
+    // (plans/ready/frame-preview-approval-tool.md). Takes from before the approval loop have no status.
+    if (saved?.status && saved.status !== 'clip-approved' && saved.status !== 'generated' && flags.force !== 'true') {
+      throw new Error(`Take "${take}" is "${saved.status}"; the full dream run needs "clip-approved" (or --force true).`)
+    }
     const prompt = flags.prompt ?? saved?.prompt
     if (!prompt) throw new Error(`--prompt is required for a new take ("${take}" has no take.json yet)`)
     const result = await dream(job, frameDirFlag(job, '0-source/frames', 'source'), {
@@ -186,6 +193,7 @@ switch (step) {
       concurrency,
       seed: flags.seed ? Number(flags.seed) : saved?.seed,
     })
+    if (saved?.status) await saveTake(job, take, { status: 'generated' })
     console.log(JSON.stringify(result, null, 2))
 
     if (flags['skip-client'] !== 'true') {
@@ -194,6 +202,98 @@ switch (step) {
         clientDir: flags['client-dir'] ? path.resolve(flags['client-dir']) : undefined,
       })
     }
+    break
+  }
+
+  case 'dream-directions': {
+    const job = await loadJob(requireFlag('job'))
+    const result = await dreamDirections(
+      job,
+      frameDirFlag(job, '0-source/frames', 'source'),
+      requireFlag('brief'),
+      flags.count ? Number(flags.count) : undefined
+    )
+    console.log(JSON.stringify(result, null, 2))
+    break
+  }
+
+  case 'dream-take': {
+    // Creates a take at "proposed", from a direction (--directions <file> --index <n>) or a bare --prompt.
+    const job = await loadJob(requireFlag('job'))
+    const take = requireFlag('take')
+    let prompt = flags.prompt
+    let brief: string | undefined
+    let direction: { name: string; palette: string[]; rationale: string } | undefined
+    if (flags.directions) {
+      const file = JSON.parse(await readFile(path.join(job.dir, '7-dreams/_directions', flags.directions), 'utf8'))
+      const picked = file.directions[Number(flags.index ?? 0)]
+      if (!picked) throw new Error(`No direction ${flags.index ?? 0} in ${flags.directions}`)
+      prompt = picked.prompt
+      brief = file.brief
+      direction = { name: picked.name, palette: picked.palette, rationale: picked.rationale }
+    }
+    if (!prompt) throw new Error('--prompt, or --directions <file> --index <n>, is required')
+    const config = await createTake(job, take, {
+      prompt,
+      brief,
+      direction,
+      seed: flags.seed ? Number(flags.seed) : undefined,
+      stepFps: flags['step-fps'] ? Number(flags['step-fps']) : undefined,
+    })
+    console.log(JSON.stringify(config, null, 2))
+    break
+  }
+
+  case 'dream-samples': {
+    const job = await loadJob(requireFlag('job'))
+    const take = requireFlag('take')
+    const saved = await loadTake(job, take)
+    if (saved?.status !== 'proposed' && saved?.status !== 'samples-approved') {
+      throw new Error(`Take "${take}" is "${saved?.status}"; samples are for "proposed" takes.`)
+    }
+    const result = await dreamSamples(job, frameDirFlag(job, '0-source/frames', 'source'), take, concurrency)
+    console.log(JSON.stringify(result, null, 2))
+    break
+  }
+
+  case 'dream-clip': {
+    // The 15s test clip: dream frames for job.json's "clip" range (kept for the full run), then a short composite.
+    const job = await loadJob(requireFlag('job'))
+    const take = requireFlag('take')
+    const saved = await loadTake(job, take)
+    if (saved?.status !== 'samples-approved' && saved?.status !== 'clip-approved') {
+      throw new Error(`Take "${take}" is "${saved?.status}"; the test clip needs "samples-approved".`)
+    }
+    if (!job.clip) throw new Error('job.json has no "clip" range ({ "start": <frame>, "frames": <count> }).')
+    const sourceFrames = frameDirFlag(job, '0-source/frames', 'source')
+    await dream(job, sourceFrames, { prompt: saved.prompt, take, stepFps: saved.stepFps, seed: saved.seed, concurrency, range: job.clip })
+    const wordsResult = await words(job, sourceFrames)
+    const result = await composePreview(
+      job,
+      {
+        wordsFramesDir: wordsResult.framesDir,
+        portraitFramesDir: frameDirFlag(job, '2-portrait/upscaled', 'portrait'),
+        backgroundFramesDir: frameDirFlag(job, '3-background/frames', 'background'),
+        matteFramesDir: frameDirFlag(job, '4-matte/frames', 'matte'),
+        depthFramesDir: frameDirFlag(job, '5-depth/frames', 'depth'),
+        outlineFramesDir: frameDirFlag(job, '6-outline/frames', 'outline'),
+        take,
+        dreamFramesDir: path.join(job.dir, `7-dreams/${take}/frames`),
+      },
+      job.clip
+    )
+    console.log(JSON.stringify(result, null, 2))
+    break
+  }
+
+  case 'take-status': {
+    const job = await loadJob(requireFlag('job'))
+    const take = requireFlag('take')
+    if (!(await loadTake(job, take))) throw new Error(`Take "${take}" doesn't exist.`)
+    const status = flags.status as TakeStatus | undefined
+    if (status && !TAKE_STATUSES.includes(status)) throw new Error(`--status must be one of ${TAKE_STATUSES.join(', ')}`)
+    const config = await saveTake(job, take, { ...(status && { status }), ...(flags.notes !== undefined && { notes: flags.notes }) })
+    console.log(JSON.stringify(config, null, 2))
     break
   }
 
@@ -211,7 +311,7 @@ switch (step) {
 
   default:
     console.error(
-      `Usage: bun run src/cli.ts <init|words|matte|portrait|upscale|background-plate|background-stabilize|depth|outline|dream|compose> --job <dir> [options]`
+      `Usage: bun run src/cli.ts <init|words|matte|portrait|upscale|background-plate|background-stabilize|depth|outline|dream-directions|dream-take|dream-samples|dream-clip|take-status|dream|compose> --job <dir> [options]`
     )
     process.exit(1)
 }

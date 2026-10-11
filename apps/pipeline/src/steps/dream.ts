@@ -1,4 +1,4 @@
-import { copyFile, link, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, link, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { exists, framesDir, listFrames, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
@@ -18,13 +18,31 @@ export interface DreamOptions {
   concurrency?: number
   /** Fixed across every keyframe call so consecutive frames don't pick up unrelated color/composition drift from flux-kontext-dev's own random seed — same reasoning as background-plate.ts's fixed seed. */
   seed?: number
+  /** Only generate this stretch (first frame, 1-based, and frame count) — `dream-clip`'s test clip. Keyframes stay on the same global `stepFps` grid, so a later full run reuses them. */
+  range?: { start: number; frames: number }
 }
 
-/** A take's settings, saved to `7-dreams/<take>/take.json` so the take always remembers what made it. */
+/**
+ * Where a take is in the preview/approval loop
+ * (plans/ready/frame-preview-approval-tool.md). Each stage needs the one
+ * before it approved; the full `dream` run needs `clip-approved`.
+ */
+export const TAKE_STATUSES = ['proposed', 'samples-approved', 'clip-approved', 'generated', 'rejected'] as const
+export type TakeStatus = (typeof TAKE_STATUSES)[number]
+
+/** A take's settings and review state, saved to `7-dreams/<take>/take.json` so the take always remembers what made it. */
 export interface TakeConfig {
   prompt: string
   seed: number
   stepFps: number
+  /** Unset on takes made before the approval loop existed. */
+  status?: TakeStatus
+  /** The brief the take's direction came from, if any. */
+  brief?: string
+  /** The direction this take was made from (`dream-directions`), minus the prompt, which is above. */
+  direction?: { name: string; palette: string[]; rationale: string }
+  /** Reviewer notes, free text. */
+  notes?: string
 }
 
 const DEFAULT_STEP_FPS = 6
@@ -40,6 +58,31 @@ export async function loadTake(job: Job, take: string): Promise<TakeConfig | und
   return JSON.parse(await readFile(takePath(job, take), 'utf8'))
 }
 
+/** Writes a take's `take.json`, merging into whatever is already there. */
+export async function saveTake(job: Job, take: string, update: Partial<TakeConfig>): Promise<TakeConfig> {
+  const merged = { ...(await loadTake(job, take)), ...update } as TakeConfig
+  await mkdir(path.dirname(takePath(job, take)), { recursive: true })
+  await writeFile(takePath(job, take), `${JSON.stringify(merged, null, 2)}\n`)
+  return merged
+}
+
+/** Creates a new take at `proposed` from a prompt (and optionally the direction it came from). Refuses to overwrite an existing take. */
+export async function createTake(
+  job: Job,
+  take: string,
+  init: { prompt: string; seed?: number; stepFps?: number; brief?: string; direction?: TakeConfig['direction'] }
+): Promise<TakeConfig> {
+  if (await loadTake(job, take)) throw new Error(`Take "${take}" already exists — pick a new name.`)
+  return saveTake(job, take, {
+    prompt: init.prompt,
+    seed: init.seed ?? DEFAULT_SEED,
+    stepFps: init.stepFps ?? job.stepFps ?? DEFAULT_STEP_FPS,
+    status: 'proposed',
+    brief: init.brief,
+    direction: init.direction,
+  })
+}
+
 /**
  * Always appended to the caller-supplied prompt, never left to the caller
  * to remember — both `dream-styletransfer-v2` and `dream-styletransfer-
@@ -51,6 +94,30 @@ export async function loadTake(job: Job, take: string): Promise<TakeConfig | und
  */
 const NO_PEOPLE_SUFFIX =
   " Abstract painterly reinterpretation of the scene's shapes, light, and colour only — dissolve any person, face, or human figure completely into brushwork, texture, and form indistinguishable from the rest of the scene. Never depict a recognisable person or body."
+
+/** One dream keyframe: a real Replicate call, so callers must check the output doesn't exist first. */
+async function dreamFrame(sourcePath: string, outputPath: string, prompt: string, seed: number): Promise<void> {
+  await runModelToFile(
+    MODELS.dream,
+    {
+      input_image: await readFileAsInput(sourcePath),
+      prompt: prompt + NO_PEOPLE_SUFFIX,
+      aspect_ratio: 'match_input_image',
+      guidance: 2.5,
+      seed,
+    },
+    outputPath,
+    { jpegQuality: 90 }
+  )
+}
+
+/** Hard-links `from` to `to`, copying only when a link can't cross filesystems. */
+async function linkOrCopy(from: string, to: string): Promise<void> {
+  await link(from, to).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== 'EXDEV') throw error
+    return copyFile(from, to)
+  })
+}
 
 /**
  * `black-forest-labs/flux-kontext-dev`, once per kept frame — see
@@ -90,34 +157,24 @@ export async function dream(job: Job, sourceFramesDir: string, opts: DreamOption
       `Take "${opts.take}" already has frames made with different settings (${JSON.stringify(saved)}) — use a new --take name rather than mixing two looks in one take.`
     )
   }
-  await writeFile(takePath(job, opts.take), `${JSON.stringify({ prompt: opts.prompt, seed, stepFps } satisfies TakeConfig, null, 2)}\n`)
+  await saveTake(job, opts.take, { prompt: opts.prompt, seed, stepFps })
 
   const frames = await listFrames(sourceFramesDir)
   if (frames.length === 0) throw new Error(`No frames found in ${sourceFramesDir}`)
 
+  // Indices are 0-based into `frames`; a range's start is a 1-based frame number.
+  const first = opts.range ? opts.range.start - 1 : 0
+  const end = opts.range ? Math.min(frames.length, first + opts.range.frames) : frames.length
   const keyframeIndices: number[] = []
-  for (let i = 0; i < frames.length; i += interval) keyframeIndices.push(i)
+  for (let i = Math.ceil(first / interval) * interval; i < end; i += interval) keyframeIndices.push(i)
 
   let cursor = 0
   async function worker() {
     while (cursor < keyframeIndices.length) {
-      const i = keyframeIndices[cursor++]
-      const frame = frames[i]
+      const frame = frames[keyframeIndices[cursor++]]
       const outputPath = path.join(outputDir, frame)
       if (await exists(outputPath)) continue
-
-      await runModelToFile(
-        MODELS.dream,
-        {
-          input_image: await readFileAsInput(path.join(sourceFramesDir, frame)),
-          prompt: opts.prompt + NO_PEOPLE_SUFFIX,
-          aspect_ratio: 'match_input_image',
-          guidance: 2.5,
-          seed,
-        },
-        outputPath,
-        { jpegQuality: 90 }
-      )
+      await dreamFrame(path.join(sourceFramesDir, frame), outputPath, opts.prompt, seed)
     }
   }
   await Promise.all(Array.from({ length: concurrency }, worker))
@@ -131,15 +188,60 @@ export async function dream(job: Job, sourceFramesDir: string, opts: DreamOption
     const keyframeOutputPath = path.join(outputDir, frames[i])
     for (let j = i + 1; j < Math.min(i + interval, frames.length); j++) {
       const heldPath = path.join(outputDir, frames[j])
-      if (!(await exists(heldPath))) {
-        await link(keyframeOutputPath, heldPath).catch((error: NodeJS.ErrnoException) => {
-          // Hard links can't cross filesystems; copy only in that case.
-          if (error.code !== 'EXDEV') throw error
-          return copyFile(keyframeOutputPath, heldPath)
-        })
-      }
+      if (!(await exists(heldPath))) await linkOrCopy(keyframeOutputPath, heldPath)
+    }
+  }
+  // A range that doesn't start on a keyframe still needs its first frames.
+  if (opts.range && first % interval !== 0) {
+    const before = first - (first % interval)
+    const keyframeOutputPath = path.join(outputDir, frames[before])
+    if (!(await exists(keyframeOutputPath))) await dreamFrame(path.join(sourceFramesDir, frames[before]), keyframeOutputPath, opts.prompt, seed)
+    for (let j = first; j < Math.min(before + interval, end); j++) {
+      const heldPath = path.join(outputDir, frames[j])
+      if (!(await exists(heldPath))) await linkOrCopy(keyframeOutputPath, heldPath)
     }
   }
 
   return { framesDir: outputDir }
+}
+
+export interface DreamSamplesResult {
+  samplesDir: string
+  samples: { frame: number; label: string; path: string }[]
+}
+
+/**
+ * Generates the take's look on the job's fixed sample frames only
+ * (`job.json` `samples`), into `7-dreams/<take>/samples/`. A sample that
+ * sits on a `stepFps` keyframe is also linked into the take's `frames/`, so
+ * the clip and full runs reuse it instead of paying for it again.
+ */
+export async function dreamSamples(job: Job, sourceFramesDir: string, take: string, concurrency = 4): Promise<DreamSamplesResult> {
+  const config = await loadTake(job, take)
+  if (!config) throw new Error(`Take "${take}" doesn't exist — create it from a direction first.`)
+  if (!job.samples?.length) throw new Error(`job.json has no "samples" — add the frames every direction is judged on.`)
+
+  const samplesDir = await framesDir(job, `7-dreams/${take}/samples`)
+  const framesOut = await framesDir(job, `7-dreams/${take}/frames`)
+  const interval = job.fps / config.stepFps
+  const samples = job.samples.map((s) => ({ ...s, name: `${String(s.frame).padStart(4, '0')}.jpg` }))
+
+  let cursor = 0
+  async function worker() {
+    while (cursor < samples.length) {
+      const sample = samples[cursor++]
+      const outputPath = path.join(samplesDir, sample.name)
+      if (!(await exists(outputPath))) {
+        await dreamFrame(path.join(sourceFramesDir, sample.name), outputPath, config!.prompt, config!.seed)
+      }
+      const keyframePath = path.join(framesOut, sample.name)
+      if ((sample.frame - 1) % interval === 0 && !(await exists(keyframePath))) await linkOrCopy(outputPath, keyframePath)
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, worker))
+
+  return {
+    samplesDir,
+    samples: samples.map(({ frame, label, name }) => ({ frame, label, path: path.join(samplesDir, name) })),
+  }
 }
