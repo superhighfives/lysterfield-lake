@@ -294,7 +294,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
               <source
                 src={
                   dream
-                    ? `${import.meta.env.VITE_APP_DREAMS}/${dream!.id}/video${
+                    ? `${dream!.src ?? `${import.meta.env.VITE_APP_DREAMS}/${dream!.id}`}/video${
                         isMobile || isTouch ? '-small' : ''
                       }.webm`
                     : `video/title.webm`
@@ -305,7 +305,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
               <source
                 src={
                   dream
-                    ? `${import.meta.env.VITE_APP_DREAMS}/${dream!.id}/video${
+                    ? `${dream!.src ?? `${import.meta.env.VITE_APP_DREAMS}/${dream!.id}`}/video${
                         isMobile || isTouch ? '-small' : ''
                       }.mov`
                     : `video/title.mov`
