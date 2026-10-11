@@ -59,6 +59,18 @@ mask video, hybrid composite, depth warping, Protogen), but not the custom
 colour modes, the DIS flow method, or a negative prompt. A 5s prototype of
 the legacy recipe on it ran on 2026-10-11 (`.jobs/spikes/dream-deforum/`).
 
+**Why not a simpler model** (tested 2026-10-11, `.jobs/spikes/`):
+
+- Per-frame image models from panel 2 (`dream-model-bakeoff/`): flux-kontext
+  and low-strength img2img keep the person; flux img2img at 0.65 and flux
+  depth/canny invent a new person in his pose. Only SDXL img2img at 0.65
+  turned the close-up into landscape the way Deforum does, and not reliably
+  (the walk-away kept a figure).
+- A hand-rolled SDXL feedback loop (`dream-sdxl-feedback/`: previous dream
+  frame + panel 2 inside the matte, img2img 0.5) collapsed into saturated,
+  posterised noise after one frame. Deforum's colour coherence, noise
+  schedule and depth-warped motion are what keep its loop stable.
+
 ## Approach
 
 1. **Recover the exact environment.** Check `backups/Linux Backups/
