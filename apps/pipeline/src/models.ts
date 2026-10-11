@@ -74,14 +74,12 @@ export const MODELS = {
    */
   dream: 'black-forest-labs/flux-kontext-dev:85723d503c17da3f9fd9cecfb9987a8bf60ef747fd8f68a25d7636f88260eb59',
   /**
-   * Outline step — the packaged ArtLine model from `models/outline/`
-   * (phase 2), no public port exists. Runs on CPU, not GPU — a `gpu: true`
-   * build of this same checkpoint boots fine locally but reliably failed to
-   * boot on Replicate's actual GPU workers (stuck in "starting", every
-   * hardware tier, across a week and several fresh pushes). See phase 3b's
-   * plan for the full diagnosis; the fix was dropping GPU entirely, not a
-   * code change — CPU predict time is ~0.8s per frame anyway.
+   * Outline step — cleaned coarse line art, the private Cog model in
+   * `models/lineart/` (replaced ArtLine, `models/outline/`, after the outline
+   * bake-off; see plans/in-progress/phase-4g-outline-coarse-lineart.md).
+   * CPU, like ArtLine before it: ~6s per 1024px frame, and CPU avoids the
+   * GPU boot problems ArtLine hit on Replicate.
    */
   outline:
-    'superhighfives/lysterfield-outline:0731a7247a52e0578f5b92ea6e6cbf763bcaa411d1927c40d86582514c9d0bb9',
+    'superhighfives/lysterfield-lineart:025736d04810b15b36ecc601992303a24df7880554a52b1c7bbac1ac9156cc81',
 } as const satisfies Record<string, `${string}/${string}:${string}`>
