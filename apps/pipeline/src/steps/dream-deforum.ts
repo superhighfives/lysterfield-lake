@@ -29,6 +29,24 @@ const SAMPLE_WARMUP_FRAMES = 12
 
 const name = (frame: number) => String(frame).padStart(4, '0')
 
+/**
+ * Panel 7 must never show a person (CLAUDE.md). For Deforum (Stable
+ * Diffusion) the guard is the legacy negative prompt, which the model always
+ * applies and a take can only add to (models/deforum/predict.py). Naming a
+ * person in the positive prompt would fight it, so such prompts are refused
+ * here rather than patched with a "no people" suffix, which in SD tends to
+ * summon what it names.
+ */
+const PERSON_TERMS =
+  /\b(person|people|man|men|woman|women|boy|girl|child|children|kid|human|figure|face|faces|portrait|selfie|body|bodies|singer|dancer|character|crowd)\b/i
+
+export function assertLandscapePrompt(prompt: string): void {
+  const match = prompt.match(PERSON_TERMS)
+  if (match) {
+    throw new Error(`Deforum prompts must describe a landscape only; "${match[0]}" names a person. Panel 7 must never show a person.`)
+  }
+}
+
 function colourPath(job: Job, take: string, colour: string): string {
   // A bare file name is one of the shared colour references; anything else is relative to the take.
   return colour.includes('/') ? path.join(job.dir, '7-dreams', take, colour) : path.join(COLOURS_DIR, colour)
@@ -47,9 +65,14 @@ export async function deforumRun(
   dreamFrames: number,
   outDir: string
 ): Promise<string[]> {
+  assertLandscapePrompt(config.prompt)
   await mkdir(outDir, { recursive: true })
-  const done = (await readdir(outDir)).filter((f) => f.endsWith('.png')).sort()
-  if (done.length > 0) return done.map((f) => path.join(outDir, f))
+  // `done` is written only after the frames are fully unzipped, so a run that died part-way
+  // (a truncated unzip, stale init/mask videos) is redone rather than mistaken for finished.
+  const marker = path.join(outDir, 'done')
+  const pngs = async () => (await readdir(outDir)).filter((f) => f.endsWith('.png')).sort()
+  if (await exists(marker)) return (await pngs()).map((f) => path.join(outDir, f))
+  for (const stale of await pngs()) await rm(path.join(outDir, stale))
 
   const count = (dreamFrames - 1) * DEFORUM_NTH_FRAME + 1
   const initPath = path.join(outDir, 'init.mp4')
@@ -82,8 +105,9 @@ export async function deforumRun(
   )
   await execFileAsync('unzip', ['-o', '-q', zipPath, '-d', outDir])
   await rm(zipPath)
-  const frames = (await readdir(outDir)).filter((f) => f.endsWith('.png')).sort()
+  const frames = await pngs()
   if (frames.length === 0) throw new Error(`Deforum returned no frames for ${take} at ${start}`)
+  await writeFile(marker, '')
   return frames.map((f) => path.join(outDir, f))
 }
 

@@ -15,6 +15,7 @@ import type { Plugin } from 'vite'
 const PIPELINE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'pipeline')
 const JOBS_DIR = path.join(PIPELINE_DIR, '.jobs')
 const COLOURS_DIR = path.join(PIPELINE_DIR, 'resources', 'colours')
+const MAX_COLOUR_UPLOAD = 20 * 1024 * 1024
 const DEFORUM_PRESETS = path.resolve(PIPELINE_DIR, '..', '..', 'models', 'deforum', 'settings', 'presets.json')
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -154,8 +155,13 @@ function startRun(job: string, args: string[]): Run {
 
 async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   let data = ''
-  for await (const chunk of req) data += chunk
-  return data ? JSON.parse(data) : {}
+  for await (const chunk of req) {
+    data += chunk
+    if (data.length > MAX_COLOUR_UPLOAD * 1.5) throw new Error('request body too large')
+  }
+  const parsed: unknown = data ? JSON.parse(data) : {}
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('request body must be a JSON object')
+  return parsed as Record<string, unknown>
 }
 
 function send(res: ServerResponse, status: number, body: unknown) {
@@ -181,6 +187,12 @@ export default function adminPlugin(): Plugin {
       server.middlewares.use('/__admin', async (req, res) => {
         try {
           const url = new URL(req.url ?? '/', 'http://localhost')
+          // POSTs here run the pipeline, which spends money, so only this dev server's own pages may
+          // send them: a page on any other origin in the same browser is refused.
+          if (req.method === 'POST') {
+            const origin = req.headers.origin
+            if (!origin || new URL(origin).host !== req.headers.host) return send(res, 403, { error: 'cross-origin request refused' })
+          }
           const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent)
           if (parts[0] === 'files' && parts.length > 2) return serveFile(res, parts[1], parts.slice(2).join('/'))
           if (parts[0] === 'colours' && parts[1]) {
@@ -198,8 +210,11 @@ export default function adminPlugin(): Plugin {
           }
           if (parts[1] === 'colours' && req.method === 'POST') {
             // A new colour reference: { name, data } with data as base64.
-            const { name, data } = (await readBody(req)) as { name?: string; data?: string }
-            if (!name || !/^[\w.-]+\.(png|jpe?g)$/i.test(name) || !data) throw new Error('name (.png/.jpg) and data are required')
+            const body = await readBody(req)
+            const { name, data } = body
+            if (typeof name !== 'string' || !/^[\w.-]+\.(png|jpe?g)$/i.test(name)) throw new Error('name must be a .png or .jpg file name')
+            if (typeof data !== 'string' || !/^[A-Za-z0-9+/]+=*$/.test(data)) throw new Error('data must be base64')
+            if (data.length > MAX_COLOUR_UPLOAD * 1.4) throw new Error('colour reference is too large (max 20MB)')
             mkdirSync(COLOURS_DIR, { recursive: true })
             const file = path.join(COLOURS_DIR, name)
             if (existsSync(file)) throw new Error(`${name} already exists`)

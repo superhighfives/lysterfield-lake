@@ -3,7 +3,7 @@ import path from 'node:path'
 import { exists, framesDir, listFrames, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
 import { readFileAsInput, runModelToFile } from '../replicate.ts'
-import { deforumSamples } from './dream-deforum.ts'
+import { assertLandscapePrompt, deforumSamples } from './dream-deforum.ts'
 
 export interface DreamResult {
   framesDir: string
@@ -50,7 +50,7 @@ export interface TakeConfig {
   colour?: string
   /** Deforum: which legacy dream's settings to start from (models/deforum/settings/). */
   preset?: string
-  /** Deforum: negative prompt; unset = the legacy dreams' own (no people, faces, bodies...). */
+  /** Deforum: extra negative prompt, added to the legacy dreams' own (no people, faces, bodies...), which always applies. */
   negativePrompt?: string
 }
 
@@ -92,6 +92,7 @@ export async function createTake(
   }
 ): Promise<TakeConfig> {
   if (await loadTake(job, take)) throw new Error(`Take "${take}" already exists — pick a new name.`)
+  if (init.method === 'deforum') assertLandscapePrompt(init.prompt)
   return saveTake(job, take, {
     prompt: init.prompt,
     seed: init.seed ?? DEFAULT_SEED,

@@ -96,5 +96,5 @@ export const MODELS = {
    * settings, negative prompt and colour reference — `models/deforum/`, private, A100 (its pinned
    * PyTorch 1.12.1 predates the L40S/H100). See plans/ready/own-deforum-dream-model.md.
    */
-  deforum: 'superhighfives/lysterfield-deforum:99ec99ce7f002b570d728cf6db67a90e3a53b9804817d9a23a6f47f23330fda8',
+  deforum: 'superhighfives/lysterfield-deforum:9443d371993212b57f9d5b1b45b8c4cad8f8906954b8ff46d3700afd2cdc7952',
 } as const satisfies Record<string, `${string}/${string}` | `${string}/${string}:${string}`>

@@ -137,8 +137,8 @@ function DeforumForm({ busy, onCreate }: { busy: boolean; onCreate: (body: Recor
       </div>
       {uploadError && <p className="mb-2 text-sm text-rose-300">{uploadError}</p>}
       <details className="mb-3 text-sm">
-        <summary className="cursor-pointer text-neutral-400">Negative prompt (default: the legacy list — no people, faces, bodies…)</summary>
-        <textarea value={negative} onChange={(e) => setNegative(e.target.value)} placeholder="Leave empty for the legacy negative prompt" className="mt-2 h-20 w-full rounded bg-white/5 p-2 text-sm" />
+        <summary className="cursor-pointer text-neutral-400">Extra negative prompt (the legacy list — no people, faces, bodies… — always applies)</summary>
+        <textarea value={negative} onChange={(e) => setNegative(e.target.value)} placeholder="Added to the legacy negative prompt; leave empty for just that" className="mt-2 h-20 w-full rounded bg-white/5 p-2 text-sm" />
       </details>
       <div className="flex gap-2">
         <input value={name} onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-'))} placeholder="take-name" className="rounded bg-white/5 px-2 py-1 text-sm" />

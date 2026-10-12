@@ -79,7 +79,7 @@ class Predictor(BasePredictor):
         init_video: Path = Input(description="Panel 2 (painted portrait) as a video: the shape the dream grows from"),
         mask_video: Path = Input(description="The subject matte as a video (white = subject)", default=None),
         prompt: str = Input(description="Landscape-only prompt; never describe the person"),
-        negative_prompt: str = Input(description="Empty = the legacy dreams' negative prompt (no people, faces, bodies...)", default=""),
+        negative_prompt: str = Input(description="Extra negative prompt, added to the legacy dreams' own (no people, faces, bodies...), which always applies", default=""),
         colour_image: Path = Input(description="Colour reference: every frame's palette is matched to it (legacy 'Specific' mode)", default=None),
         colour_mode: str = Input(
             description="Specific = match colour_image; Sticky = match the first frame; others are Deforum's own",
@@ -115,6 +115,8 @@ class Predictor(BasePredictor):
                 else:  # legacy-only keys: render.py may read them from either namespace
                     anim[key] = args[key] = value
         for key, value in json.loads(settings_overrides).items():
+            if key in NOT_FROM_PRESET:  # prompts and paths come from this run's inputs only
+                continue
             (anim if key in anim else args)[key] = value
 
         # Deforum fails if asked for more frames than it extracts from the init video.
@@ -173,7 +175,10 @@ class Predictor(BasePredictor):
 
         gc.collect()
         torch.cuda.empty_cache()
-        negative_prompt = negative_prompt.strip() or LEGACY_NEGATIVE_PROMPT
+        # Panel 7 must never show a person (CLAUDE.md). The legacy negative prompt is what excludes
+        # people, so it is always applied; a take's own negative prompt is added to it, never instead.
+        extra = negative_prompt.strip()
+        negative_prompt = f"{LEGACY_NEGATIVE_PROMPT}, {extra}" if extra else LEGACY_NEGATIVE_PROMPT
         cond, uncond = Prompts(prompt={0: prompt}, neg_prompt=negative_prompt).as_dict()
         render_animation(root, ns_anim, ns_args, cond, uncond)
 
