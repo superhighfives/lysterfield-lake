@@ -215,7 +215,8 @@ export default function Admin() {
   const samples = detail?.config.samples ?? []
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6 text-neutral-100 [font-family:system-ui]">
+    // The player's global styles lock the page (overflow hidden, touch-action none), so this view scrolls itself.
+    <div className="fixed inset-0 overflow-y-auto bg-neutral-950 p-6 text-neutral-100 [font-family:system-ui] [touch-action:auto]">
       <header className="mb-6 flex items-center gap-4">
         <h1 className="text-xl font-semibold">Dream review</h1>
         <select value={job} onChange={(e) => setJob(e.target.value)} className="rounded bg-white/10 px-2 py-1 text-sm">
