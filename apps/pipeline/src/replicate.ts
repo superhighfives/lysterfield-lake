@@ -67,6 +67,41 @@ export async function runModelToFile(
   await saveFileOutput(file, outputPath, opts)
 }
 
+/**
+ * `runModelToFile` for long, costly runs. The prediction's id is saved to
+ * `statePath` the moment it starts, so if this process dies while Replicate
+ * is still working, the next call picks the same prediction back up instead
+ * of paying for a second one. A prediction that failed or was cancelled is
+ * never rerun from here: that takes deleting `statePath`, a deliberate act.
+ */
+export async function runModelToFileResumable(
+  identifier: `${string}/${string}:${string}`,
+  input: Record<string, unknown>,
+  outputPath: string,
+  statePath: string
+): Promise<void> {
+  const replicate = getClient()
+  const saved = await readFile(statePath, 'utf8').then((text) => JSON.parse(text) as { id: string }, () => undefined)
+  let prediction = saved
+    ? await replicate.predictions.get(saved.id)
+    : await replicate.predictions.create({ version: identifier.split(':')[1], input })
+  if (saved) console.log(`Picking up prediction ${prediction.id} (${prediction.status})`)
+  else await writeFile(statePath, `${JSON.stringify({ id: prediction.id })}\n`)
+
+  const again = `It was not run again; delete ${statePath} to start a new one.`
+  // `wait` throws on a failed prediction; the status check below reports it with what to do next.
+  prediction = await replicate.wait(prediction, { interval: 5000 }).catch(() => replicate.predictions.get(prediction.id))
+  if (prediction.status !== 'succeeded') {
+    throw new Error(`Prediction ${prediction.id} ${prediction.status}${prediction.error ? `: ${String(prediction.error)}` : ''}. ${again}`)
+  }
+  const output: unknown = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output
+  if (typeof output !== 'string') throw new Error(`Prediction ${prediction.id} returned no file. ${again}`)
+  const response = await fetch(output)
+  // Replicate keeps a prediction's output files for about an hour.
+  if (!response.ok) throw new Error(`Prediction ${prediction.id} finished, but its output is no longer available (${response.status}). ${again}`)
+  await writeFile(outputPath, Buffer.from(await response.arrayBuffer()))
+}
+
 async function saveFileOutput(
   output: FileOutputLike,
   outputPath: string,

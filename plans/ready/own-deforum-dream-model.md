@@ -101,6 +101,50 @@ from PyPI and isn't needed; `pydantic` 1.10 had to be added (Cog used to ship
 it). Cog 0.13 builds fine but validates the schema by starting the container
 on a GPU, which fails on a Mac.
 
+**Chained runs (2026-10-11):** the clip and the full song are a chain of
+runs of 48 dream frames (~17 minutes each), strictly one after another. The
+model takes a `previous_frame` input: the last frame of the run before, which
+it loads through Deforum's own resume path (`resume_from_timestring`) with an
+init video that starts on that same frame. This is only the same as one long
+run because nothing in the legacy presets is keyframed over time (every
+schedule is a single value, `seed_behavior` is fixed, the sampler schedule is
+off); the model refuses to continue a run where that isn't true, or with a
+colour mode that matches the take's first frame. Each run's prediction id is
+saved before waiting on it, so a stopped pipeline picks the same prediction
+back up instead of paying for another, and a failed one is never rerun
+without deleting its `prediction.json`. Replicate keeps output files for
+about an hour, so a run that finished while the pipeline was stopped for
+longer than that has to be made again.
+
+Checked 2026-10-11 (`.jobs/spikes/deforum-chain-test/`, `seam.jpg`): 12 dream
+frames from job frame 2901 as one run and as a chain of two runs of 6. The
+chain carries straight across the join, and the two differ no more after it
+than before it (PSNR ~30dB throughout: two runs of the same settings are not
+bit-identical on the GPU, even with a fixed seed).
+
+**A person can still appear (2026-10-11).** That same test, started cold on
+the walk-away with lush-and-light's prompt, seed and colour reference, drew a
+person walking away from its third frame on, where the published
+lush-and-light shows none at that moment. The `neon-dream` take's "after the
+cut" sample (frame 4501) also shows a person from behind; its other four
+samples don't. So the legacy negative prompt is not a guarantee in this
+rebuild, the result depends on the frames leading up to a moment, and both
+leaks are back views without a face. Not yet understood. Until it is, every
+stage needs a person check by eye, and a full song should not be started on
+the strength of clean samples alone.
+
+Runs can't be parallel without changing the look: each frame depends on the
+one before. So a full song is ~15 hours of wall-clock time however it is
+split.
+
+The 15-second clip is its own chain (`preview/dream/`), with a one-second
+warm-up that is thrown away, and is not reused by the full song: a clip from
+the middle of the song isn't what a run from frame 1 will make there.
+
+Cog 0.21 treats `x: Path = Input(default=None)` as a required input; optional
+inputs need `Optional[...]`. Before this was fixed (version `06f47531…`),
+takes with colours "from the footage" could not have run.
+
 ## Approach
 
 1. **Recover the exact environment.** Check `backups/Linux Backups/
@@ -140,7 +184,9 @@ on a GPU, which fails on a Mac.
 - [x] Push `superhighfives/lysterfield-deforum` (private, A100) and time a run
 - [x] Verify against lush-and-light (one sample; see First run)
 - [x] `dream-deforum.ts` samples, wired into the preview loop and /admin
-- [ ] Deforum for the 15s clip and the full song (chunked, with resume)
+- [x] Deforum for the 15s clip and the full song (chained runs that pick up where they stopped; `dream-clip` and `dream`, and both from /admin)
+- [ ] Find out why back views of the subject can come through as a person (walk-away, after the cut) when the legacy run's didn't; compare init video, matte and composite settings against the legacy run at those moments
+- [ ] Run a real 15s clip and a real full song for a new take
 
 ## Open questions
 

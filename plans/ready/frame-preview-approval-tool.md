@@ -2,7 +2,7 @@
 title: Cheap pre-production preview/approval loop for dream art direction
 status: Ready
 created: 2026-09-30
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 # Cheap pre-production preview/approval loop for dream art direction
@@ -123,9 +123,9 @@ hosting it anywhere but local dev, and reviewing panels 1-6.
 - [x] `dream-directions` (Claude on Replicate, JSON validated with Zod)
 - [x] `dream-samples` (tested on `test-hazy-summer`; see Findings)
 - [x] Range support in `dream` and `compose`; `dream-clip` (not yet run for real)
-- [ ] Vite dev plugin with the `/__admin` endpoints
-- [ ] `/admin` view: directions, film strip, approvals
-- [ ] `?preview=` mode in the player
+- [x] Vite dev plugin with the `/__admin` endpoints
+- [x] `/admin` view. Redesigned 2026-10-11 as one flow for Deforum takes (describe a look, samples, clip, full song); the directions and flux-kontext forms were dropped from the page, their commands remain
+- [x] `?preview=` mode in the player
 - [ ] Try the whole loop on one new take for `full-video`
 
 ## Findings (2026-10-10)

@@ -10,6 +10,7 @@ import { backgroundPlate } from './steps/background-plate.ts'
 import { stabilizeBackground } from './steps/background-stabilize.ts'
 import { depth } from './steps/depth.ts'
 import { createTake, dream, dreamSamples, loadTake, saveTake, TAKE_STATUSES, type TakeStatus } from './steps/dream.ts'
+import { deforumFrames } from './steps/dream-deforum.ts'
 import { dreamDirections } from './steps/dream-directions.ts'
 import { init } from './steps/init.ts'
 import { matte } from './steps/matte.ts'
@@ -186,13 +187,20 @@ switch (step) {
     }
     const prompt = flags.prompt ?? saved?.prompt
     if (!prompt) throw new Error(`--prompt is required for a new take ("${take}" has no take.json yet)`)
-    const result = await dream(job, frameDirFlag(job, '0-source/frames', 'source'), {
-      prompt,
-      take,
-      stepFps: flags['step-fps'] ? Number(flags['step-fps']) : (saved?.stepFps ?? job.stepFps),
-      concurrency,
-      seed: flags.seed ? Number(flags.seed) : saved?.seed,
-    })
+    const result =
+      saved?.method === 'deforum'
+        ? // The whole song as one chain of Deforum runs: hours long, and safe to stop and start again.
+          await deforumFrames(job, take, saved, {
+            workDir: path.join(job.dir, `7-dreams/${take}/runs`),
+            framesDir: path.join(job.dir, `7-dreams/${take}/frames`),
+          })
+        : await dream(job, frameDirFlag(job, '0-source/frames', 'source'), {
+            prompt,
+            take,
+            stepFps: flags['step-fps'] ? Number(flags['step-fps']) : (saved?.stepFps ?? job.stepFps),
+            concurrency,
+            seed: flags.seed ? Number(flags.seed) : saved?.seed,
+          })
     if (saved?.status) await saveTake(job, take, { status: 'generated' })
     console.log(JSON.stringify(result, null, 2))
 
@@ -273,7 +281,20 @@ switch (step) {
     }
     if (!job.clip) throw new Error('job.json has no "clip" range ({ "start": <frame>, "frames": <count> }).')
     const sourceFrames = frameDirFlag(job, '0-source/frames', 'source')
-    await dream(job, sourceFrames, { prompt: saved.prompt, take, stepFps: saved.stepFps, seed: saved.seed, concurrency, range: job.clip })
+    // A Deforum clip is its own chain, kept apart from the full song's frames: each frame depends on
+    // the ones before it, so a clip from the middle of the song isn't what the full run will make there.
+    let dreamFramesDir = path.join(job.dir, `7-dreams/${take}/frames`)
+    if (saved.method === 'deforum') {
+      dreamFramesDir = path.join(job.dir, `7-dreams/${take}/preview/dream/frames`)
+      await deforumFrames(job, take, saved, {
+        range: job.clip,
+        warmUp: true,
+        workDir: path.join(job.dir, `7-dreams/${take}/preview/dream/runs`),
+        framesDir: dreamFramesDir,
+      })
+    } else {
+      await dream(job, sourceFrames, { prompt: saved.prompt, take, stepFps: saved.stepFps, seed: saved.seed, concurrency, range: job.clip })
+    }
     const wordsResult = await words(job, sourceFrames)
     const result = await composePreview(
       job,
@@ -285,7 +306,7 @@ switch (step) {
         depthFramesDir: frameDirFlag(job, '5-depth/frames', 'depth'),
         outlineFramesDir: frameDirFlag(job, '6-outline/frames', 'outline'),
         take,
-        dreamFramesDir: path.join(job.dir, `7-dreams/${take}/frames`),
+        dreamFramesDir,
       },
       job.clip
     )
