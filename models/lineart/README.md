@@ -2,7 +2,7 @@
 
 Private Cog model for panel 6 (outline): coarse line art of the subject.
 It replaced ArtLine (`models/outline/`) after the outline bake-off in
-[`phase-4g-outline-coarse-lineart.md`](../../plans/in-progress/phase-4g-outline-coarse-lineart.md).
+[`phase-4g-outline-coarse-lineart.md`](../../plans/done/phase-4g-outline-coarse-lineart.md).
 
 The line model is the "coarse" sketch generator from ControlNet's annotators,
 vendored from [controlnet_aux](https://github.com/huggingface/controlnet_aux)

@@ -9,7 +9,7 @@ export interface OutlineResult {
 /**
  * Panel 6: cleaned coarse line art of the subject, from the private
  * `models/lineart/` Cog model. It replaced ArtLine after the outline
- * bake-off (plans/in-progress/phase-4g-outline-coarse-lineart.md): ArtLine
+ * bake-off (plans/done/phase-4g-outline-coarse-lineart.md): ArtLine
  * ran at 300px and came out soft, and none of its pre-processing (cut-out
  * onto white, contrast stretch, soft-light depth blend) applies here.
  *

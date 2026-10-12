@@ -1,8 +1,8 @@
 ---
 title: "Phase 4g: replace ArtLine with cleaned coarse line art for panel 6"
-status: In Progress
+status: Complete
 created: 2026-10-09
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 # Phase 4g: replace ArtLine with cleaned coarse line art for panel 6
@@ -66,14 +66,41 @@ coarse line art ("5") as the runner-up. ArtLine is retired for panel 6.
 
 ## Tasks
 
-- [ ] Regenerate `full-video` panel 6 locally, both versions
+- [x] Regenerate `full-video` panel 6 locally, both versions
 - [x] Check the Cog model matches the local result on a test frame (mean difference 0.12/255 locally, identical on Replicate)
 - [x] Push `superhighfives/lysterfield-lineart` (private, CPU; version `025736d0…`, ~6s per frame)
 - [x] Switch `outline.ts` to it (source frame + matte in; depth no longer used)
-- [ ] User watches the new panel 6 over the whole song
-- [ ] Retire ArtLine (`models/outline/`, the Replicate model)
+- [x] User watches the new panel 6 over the whole song (approved 2026-10-11)
+- [x] Retire ArtLine: `models/outline/` removed from the repo
+- [ ] Delete `superhighfives/lysterfield-outline` on Replicate (the owner's call; nothing uses it)
 
 ## Open questions
 
 - Should panel 6 be shown over the portrait in the client (shader), as in
   `clip-15s-over-portrait.mp4`? That needs no change to panel 6 itself.
+
+## Overview
+
+Panel 6 is now cleaned coarse line art instead of ArtLine: crisper lines at
+the full 1024px, with far fewer stray marks on the face. The whole song was
+regenerated locally for `full-video` and approved. The pipeline's `outline`
+step calls the same model on Replicate (`superhighfives/lysterfield-lineart`),
+and ArtLine's Cog wrapper is gone from the repo.
+
+## Architecture
+
+- `models/lineart/`: Cog model (CPU). ControlNet's coarse line-art generator
+  with an edge-preserving smoothing pass before it (`cleanup`, on by
+  default), a brightness floor and gain after, and the matte dilated and
+  applied as a mask.
+- `apps/pipeline/src/steps/outline.ts`: sends the source frame and matte.
+  The depth blend and contrast stretch that fed ArtLine are gone, so the
+  step no longer needs panel 5.
+- `.jobs/full-video/6-outline/frames` holds the approved version;
+  `6-outline/coarse/` keeps the runner-up (no cleanup). The legacy ArtLine
+  frames are in `.jobs/spikes/legacy-artline-outline/`.
+
+Deviation from the plan: the full regeneration ran locally on the Mac
+rather than through Replicate, because the model wasn't pushed yet when it
+started. The Replicate model was checked against the local result on a test
+frame (identical) but has not processed a whole song.

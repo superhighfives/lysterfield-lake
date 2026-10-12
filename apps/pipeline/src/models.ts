@@ -76,7 +76,7 @@ export const MODELS = {
   /**
    * Outline step — cleaned coarse line art, the private Cog model in
    * `models/lineart/` (replaced ArtLine, `models/outline/`, after the outline
-   * bake-off; see plans/in-progress/phase-4g-outline-coarse-lineart.md).
+   * bake-off; see plans/done/phase-4g-outline-coarse-lineart.md).
    * CPU, like ArtLine before it: ~6s per 1024px frame, and CPU avoids the
    * GPU boot problems ArtLine hit on Replicate.
    */
