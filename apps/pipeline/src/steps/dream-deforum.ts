@@ -21,6 +21,12 @@ const execFileAsync = promisify(execFile)
  * sampled on its own: each sample is a short warm-up run ending on the
  * sample frame, and the sample is its last frame.
  *
+ * The very first frame of a run that doesn't continue another has nothing
+ * to grow from, so Deforum paints it from the prompt alone: a different
+ * picture from everything after it. It is never used. Wherever it would
+ * show, the second frame stands in for it, as was done by hand for the
+ * published dreams.
+ *
  * For the same reason a long stretch (the test clip, the full song) is a
  * chain of runs, one after another, each continuing from the last frame of
  * the one before (`deforumFrames`).
@@ -145,10 +151,14 @@ export async function deforumSamples(job: Job, take: string, config: TakeConfig)
       const outputPath = path.join(samplesDir, `${name(sample.frame)}.jpg`)
       const loopPath = path.join(samplesDir, `${name(sample.frame)}.mp4`)
       if ((await exists(outputPath)) && (await exists(loopPath))) return
+      // A sample too near the start of the job for a warm-up before it gets one after it instead:
+      // the run starts on the sample frame and the look is judged a second later.
       const start = Math.max(1, sample.frame - (SAMPLE_WARMUP_FRAMES - 1) * DEFORUM_NTH_FRAME)
-      const dreamFrames = Math.floor((sample.frame - start) / DEFORUM_NTH_FRAME) + 1
+      const dreamFrames = Math.max(SAMPLE_WARMUP_FRAMES, Math.floor((sample.frame - start) / DEFORUM_NTH_FRAME) + 1)
       const runDir = path.join(samplesDir, 'runs', name(sample.frame))
-      const frames = await deforumRun(job, take, config, { start, dreamFrames, outDir: runDir })
+      // Without the run's first frame, which is painted from the prompt alone (see the top of this file).
+      const frames = (await deforumRun(job, take, config, { start, dreamFrames, outDir: runDir })).slice(1)
+      if (frames.length === 0) throw new Error(`Sample ${sample.frame} needs at least two dream frames`)
       await sharp(frames[frames.length - 1]).jpeg({ quality: 90 }).toFile(outputPath)
       // The run as a short loop, so the review shows motion as well as the look. Deforum names
       // frames <timestring>_NNNNN.png, so they're fed to ffmpeg as a sorted concat list.
@@ -222,7 +232,9 @@ export async function deforumFrames(job: Job, take: string, config: TakeConfig, 
       for (let i = Math.max(from, warmUp); i < to; i++) {
         const frame = jobFrame(i)
         const jpg = path.join(opts.framesDir, `${name(frame)}.jpg`)
-        if (!(await exists(jpg))) await sharp(pngs[i - from]).jpeg({ quality: 90 }).toFile(jpg)
+        // The chain's first frame is painted from the prompt alone; the second stands in for it.
+        const png = i === 0 && pngs.length > 1 ? pngs[1] : pngs[i - from]
+        if (!(await exists(jpg))) await sharp(png).jpeg({ quality: 90 }).toFile(jpg)
         for (let held = frame + 1; held < frame + DEFORUM_NTH_FRAME && held <= last; held++) {
           const heldPath = path.join(opts.framesDir, `${name(held)}.jpg`)
           if (!(await exists(heldPath))) await link(jpg, heldPath)

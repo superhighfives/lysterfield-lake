@@ -133,6 +133,14 @@ leaks are back views without a face. Not yet understood. Until it is, every
 stage needs a person check by eye, and a full song should not be started on
 the strength of clean samples alone.
 
+**The first frame is never used (2026-10-11).** A run that doesn't continue
+another paints its first frame from the prompt alone (nothing to grow from
+yet), so it looks nothing like the rest. For the published dreams it was
+swapped by hand for the second frame; the pipeline now does the same for a
+chain, and leaves it out of sample loops (it flashed on every loop). A sample
+at the very start of the job is judged a second in, after a warm-up that runs
+forward from it.
+
 Runs can't be parallel without changing the look: each frame depends on the
 one before. So a full song is ~15 hours of wall-clock time however it is
 split.
