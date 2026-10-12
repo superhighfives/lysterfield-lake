@@ -81,7 +81,14 @@ export async function runModelToFileResumable(
   statePath: string
 ): Promise<void> {
   const replicate = getClient()
-  const saved = await readFile(statePath, 'utf8').then((text) => JSON.parse(text) as { id: string }, () => undefined)
+  // Only a missing file means "no saved prediction"; any other read error must not start a new paid one.
+  const saved = await readFile(statePath, 'utf8').then(
+    (text) => JSON.parse(text) as { id: string },
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return undefined
+      throw error
+    }
+  )
   let prediction = saved
     ? await replicate.predictions.get(saved.id)
     : await replicate.predictions.create({ version: identifier.split(':')[1], input })
@@ -90,7 +97,13 @@ export async function runModelToFileResumable(
 
   const again = `It was not run again; delete ${statePath} to start a new one.`
   // `wait` throws on a failed prediction; the status check below reports it with what to do next.
-  prediction = await replicate.wait(prediction, { interval: 5000 }).catch(() => replicate.predictions.get(prediction.id))
+  // It can also throw on a transient problem while the prediction is still running: rethrow that,
+  // since deleting `statePath` then would pay for a second prediction alongside the first.
+  prediction = await replicate.wait(prediction, { interval: 5000 }).catch(async (error: unknown) => {
+    const current = await replicate.predictions.get(prediction.id)
+    if (current.status === 'failed' || current.status === 'canceled') return current
+    throw new Error(`Waiting on prediction ${prediction.id} (${current.status}) failed; rerunning picks the same prediction back up.`, { cause: error })
+  })
   if (prediction.status !== 'succeeded') {
     throw new Error(`Prediction ${prediction.id} ${prediction.status}${prediction.error ? `: ${String(prediction.error)}` : ''}. ${again}`)
   }
