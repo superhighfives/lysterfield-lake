@@ -34,6 +34,8 @@ type NewTake = { name: string; prompt: string; colour: string | null; preset: st
 const COST: Record<Action, string> = { samples: 'about $2, 8 minutes', clip: 'about $6, 70 minutes', full: 'about $75, 15 hours' }
 const WORKING: Record<string, string> = { samples: 'Generating samples…', clip: 'Rendering the 15-second clip…', full: 'Generating the full song…' }
 const SAMPLES_COST = COST.samples
+/** "Start from" choice with nothing filled in. The model's default settings (Lush and Light's) still apply underneath. */
+const BLANK = 'blank'
 
 const pad = (n: number) => String(n).padStart(4, '0')
 const jobFile = (job: string, rel: string) => `/__admin/files/${job}/${rel}`
@@ -139,6 +141,13 @@ function NewDream({ options, busy, existing, onCreate, onUploaded }: {
 
   const startFrom = useCallback(
     (id: string) => {
+      if (id === BLANK) {
+        setPreset(BLANK)
+        setPrompt('')
+        setColour(null)
+        return
+      }
+
       const p = options.presets[id]
       if (!p) return
       setPreset(id)
@@ -182,9 +191,13 @@ function NewDream({ options, busy, existing, onCreate, onUploaded }: {
   return (
     <section className="mb-14">
       <h2 className="mb-1 font-serif text-2xl">New dream</h2>
-      <p className="mb-4 text-sm text-stone-600">Pick a published dream to start from, then change the prompt or the colours to make it your own.</p>
+      <p className="mb-4 text-sm text-stone-600">Pick a published dream to start from, then change the prompt or the colours to make it your own. Or start blank.</p>
 
-      <div className="mb-4 grid grid-cols-5 gap-2 sm:grid-cols-10">
+      <div className="mb-4 grid grid-cols-6 gap-2 sm:grid-cols-11">
+        <button type="button" onClick={() => startFrom(BLANK)} title="Start with an empty prompt" className={`overflow-hidden rounded text-left ${preset === BLANK ? 'ring-2 ring-stone-900 ring-offset-2 ring-offset-stone-100' : 'opacity-60 hover:opacity-100'}`}>
+          <span className="flex aspect-square w-full items-center justify-center border border-dashed border-stone-400 bg-white text-2xl text-stone-400">+</span>
+          <span className="block truncate bg-white px-1 py-0.5 text-[10px] leading-tight">Blank</span>
+        </button>
         {Object.entries(options.presets).map(([key, p]) => (
           <button key={key} type="button" onClick={() => startFrom(key)} title={p.title} className={`overflow-hidden rounded text-left ${preset === key ? 'ring-2 ring-stone-900 ring-offset-2 ring-offset-stone-100' : 'opacity-60 hover:opacity-100'}`}>
             <img src={`/assets/${key}/hero.jpg`} alt="" className="aspect-square w-full object-cover" />
@@ -193,7 +206,7 @@ function NewDream({ options, busy, existing, onCreate, onUploaded }: {
         ))}
       </div>
 
-      <GridForm.Root density="comfortable" onFormSubmit={() => ready && onCreate({ name: id, prompt, colour, preset, negative: negative.trim(), seed: options.presets[preset]?.seed })}>
+      <GridForm.Root density="comfortable" onFormSubmit={() => ready && onCreate({ name: id, prompt, colour, preset: preset === BLANK ? '' : preset, negative: negative.trim(), seed: options.presets[preset]?.seed })}>
         <GridForm.Section legend="The look">
           <GridForm.Row>
             <GridForm.Field name="prompt" label="Prompt" description="Describe a landscape only, never a person. The shape of the person in the footage becomes part of the scene.">
