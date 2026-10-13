@@ -27,8 +27,11 @@ const CONTENT_TYPES: Record<string, string> = {
   '.json': 'application/json',
 }
 
-type Run = { id: string; job: string; args: string[]; status: 'running' | 'succeeded' | 'failed'; log: string }
+type Run = { id: string; job: string; action: string; take: string; started: number; args: string[]; status: 'running' | 'succeeded' | 'failed'; log: string }
 const runs = new Map<string, Run>()
+/** Actions that spend money on Replicate: one at a time per job. The rest (creating a take, approving, notes) are instant and always allowed. */
+const PAID_ACTIONS = ['directions', 'samples', 'clip', 'full']
+const paidRun = (job: string) => Array.from(runs.values()).find((r) => r.job === job && r.status === 'running' && PAID_ACTIONS.includes(r.action))
 
 /** Pipeline env from its .env, applied over the dev server's own, so the shell's tokens never win. */
 function pipelineEnv(): NodeJS.ProcessEnv {
@@ -87,7 +90,10 @@ function jobDetail(job: string) {
         .reverse()
         .map((file) => ({ file, ...(readJson(path.join(directionsDir, file)) as object) }))
     : []
-  return { name: job, config: readJson(path.join(dir, 'job.json')), takes, directions }
+  // The paid run in progress, if any, so a reloaded page can pick its progress back up.
+  const active = paidRun(job)
+  const running = active ? { id: active.id, take: active.take, action: active.action, started: active.started } : null
+  return { name: job, config: readJson(path.join(dir, 'job.json')), takes, directions, running }
 }
 
 /** The pipeline command for an admin action. Each one is a stage of the loop; the pipeline enforces the approval order itself. */
@@ -125,6 +131,10 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
     case 'clip':
       if (!takeOk) throw new Error('bad take')
       return ['dream-clip', ...base, '--take', take]
+    case 'full':
+      // The whole song. Publishing to the client (which edits dreams.json) stays a separate, deliberate `compose`.
+      if (!takeOk) throw new Error('bad take')
+      return ['dream', ...base, '--take', take, '--skip-client', 'true']
     case 'status':
       if (!takeOk) throw new Error('bad take')
       return [
@@ -140,11 +150,11 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
   }
 }
 
-function startRun(job: string, args: string[]): Run {
-  if (Array.from(runs.values()).some((r) => r.job === job && r.status === 'running')) {
-    throw new Error('Something is already running for this job; wait for it to finish.')
-  }
-  const run: Run = { id: `${Date.now()}`, job, args, status: 'running', log: `$ ${args.join(' ')}\n` }
+function startRun(job: string, body: Record<string, unknown>): Run {
+  const args = actionArgs(job, body)
+  const action = String(body.action)
+  if (PAID_ACTIONS.includes(action) && paidRun(job)) throw new Error('Something is already generating for this footage; wait for it to finish.')
+  const run: Run = { id: `${Date.now()}-${runs.size}`, job, action, take: String(body.take ?? ''), started: Date.now(), args, status: 'running', log: `$ ${args.join(' ')}\n` }
   runs.set(run.id, run)
   const child = spawn('bun', ['run', 'src/cli.ts', ...args], { cwd: PIPELINE_DIR, env: pipelineEnv() })
   child.stdout.on('data', (d) => (run.log += d))
@@ -225,7 +235,7 @@ export default function adminPlugin(): Plugin {
           if (parts[1] === 'jobs' && parts.length === 3 && req.method === 'GET') return send(res, 200, jobDetail(parts[2]))
           if (parts[1] === 'jobs' && parts[3] === 'actions' && req.method === 'POST') {
             jobDir(parts[2])
-            const run = startRun(parts[2], actionArgs(parts[2], await readBody(req)))
+            const run = startRun(parts[2], await readBody(req))
             return send(res, 200, { runId: run.id })
           }
           if (parts[1] === 'runs' && parts[2]) {

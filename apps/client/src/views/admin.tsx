@@ -16,21 +16,32 @@ type Take = {
   status?: 'proposed' | 'samples-approved' | 'clip-approved' | 'generated' | 'rejected'
   notes?: string
   samples: number[]
+  hasPreview: boolean
   method?: 'flux-kontext' | 'deforum'
   colour?: string
   preset?: string
 }
-type JobDetail = { name: string; config: { samples?: { frame: number; label: string }[] }; takes: Take[] }
+type Action = 'samples' | 'clip' | 'full'
+type Running = { id: string; take: string; action: string; started: number }
+type JobDetail = { name: string; config: { samples?: { frame: number; label: string }[] }; takes: Take[]; running: Running | null }
 type Preset = { title: string; prompt: string; colour: string | null; seed: number }
 type DeforumOptions = { presets: Record<string, Preset>; colours: string[] }
-type Run = { id: string; status: 'running' | 'succeeded' | 'failed'; log: string }
-type Activity = { take: string; started: number; log: string; failed?: boolean }
+type Run = Running & { status: 'running' | 'succeeded' | 'failed'; log: string }
+type Activity = Running & { log: string; failed?: boolean }
 type NewTake = { name: string; prompt: string; colour: string | null; preset: string; negative: string; seed?: number }
 
-const SAMPLES_COST = 'about $2, 8 minutes'
+// Rough Replicate cost and time for each paid stage of a Deforum take (A100, ~21s a dream frame).
+const COST: Record<Action, string> = { samples: 'about $2, 8 minutes', clip: 'about $6, 70 minutes', full: 'about $75, 15 hours' }
+const WORKING: Record<string, string> = { samples: 'Generating samples…', clip: 'Rendering the 15-second clip…', full: 'Generating the full song…' }
+const SAMPLES_COST = COST.samples
+/** "Start from" choice with nothing filled in. The model's default settings (Lush and Light's) still apply underneath. */
+const BLANK = 'blank'
+
 const pad = (n: number) => String(n).padStart(4, '0')
 const jobFile = (job: string, rel: string) => `/__admin/files/${job}/${rel}`
 const colourUrl = (name: string) => `/__admin/colours/${name}`
+/** The pipeline's own error message from a failed run's log. */
+const reason = (log: string) => log.match(/^error: (.*)$/im)?.[1] ?? log.match(/Error: (.*)$/m)?.[1] ?? 'That failed; nothing was changed.'
 const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9-]+/g, '-')
 
 async function api<T>(url: string, body?: unknown): Promise<T> {
@@ -43,36 +54,60 @@ async function api<T>(url: string, body?: unknown): Promise<T> {
 // Formulaire ships its CSS inside `@layer formulaire`. Tailwind's reset is
 // unlayered, and unlayered rules always beat layered ones, so the layer
 // wrapper is removed here and the stylesheet injected as plain CSS.
-const FORMULAIRE_CSS = formulaireCss.replace(/@layer formulaire\s*\{/, '').replace(/\}\s*$/, '')
+const FORMULAIRE_CSS =
+  formulaireCss.replace(/@layer formulaire\s*\{/, '').replace(/\}\s*$/, '') +
+  // Formulaire doesn't style a disabled button.
+  '.gf-button:disabled { opacity: 0.45; cursor: not-allowed; }'
+
 
 /** What a take's status means for the person reviewing it. */
-function describe(take: Take, working: boolean): { label: string; tone: string } {
-  if (working) return { label: 'Generating samples…', tone: 'bg-amber-100 text-amber-900' }
-  if (take.status === 'rejected') return { label: 'Rejected', tone: 'bg-stone-200 text-stone-600' }
-  if (take.status === 'proposed') {
-    return take.samples.length > 0 ? { label: 'Ready to review', tone: 'bg-sky-100 text-sky-900' } : { label: 'No samples yet', tone: 'bg-stone-200 text-stone-700' }
+function describe(take: Take, working: string | null, expected: number): { label: string; tone: string } {
+  const waiting = 'bg-sky-100 text-sky-900'
+  const good = 'bg-emerald-100 text-emerald-900'
+  const idle = 'bg-stone-200 text-stone-700'
+  if (working) return { label: WORKING[working] ?? 'Working…', tone: 'bg-amber-100 text-amber-900' }
+  switch (take.status) {
+    case 'rejected':
+      return { label: 'Rejected', tone: 'bg-stone-200 text-stone-600' }
+    case 'proposed':
+      if (take.samples.length === 0) return { label: 'No samples yet', tone: idle }
+      return take.samples.length < expected ? { label: `${take.samples.length} of ${expected} samples made`, tone: idle } : { label: 'Samples ready to review', tone: waiting }
+    case 'samples-approved':
+      return take.hasPreview ? { label: 'Clip ready to review', tone: waiting } : { label: 'Samples approved', tone: good }
+    case 'clip-approved':
+      return { label: 'Clip approved', tone: good }
+    default:
+      return { label: 'Full song done', tone: good }
   }
-
-  return { label: 'Approved', tone: 'bg-emerald-100 text-emerald-900' }
 }
 
 function Steps() {
-  const steps: [string, boolean][] = [
-    ['Describe a look', true],
-    ['Review five samples', true],
-    ['15-second test clip', false],
-    ['Full song', false],
-  ]
+  const steps = ['Describe a look', 'Review five samples', 'Review a 15-second clip', 'Generate the full song']
   return (
     <ol className="mb-10 flex flex-wrap gap-x-6 gap-y-2 text-sm">
-      {steps.map(([label, ready], i) => (
-        <li key={label} className={`flex items-center gap-2 ${ready ? 'text-stone-900' : 'text-stone-400'}`}>
-          <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${ready ? 'bg-stone-900 text-white' : 'border border-stone-300'}`}>{i + 1}</span>
+      {steps.map((label, i) => (
+        <li key={label} className="flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-stone-900 text-xs font-semibold text-white">{i + 1}</span>
           {label}
-          {!ready && <span className="text-xs">(not built yet)</span>}
         </li>
       ))}
     </ol>
+  )
+}
+
+/** A button for the expensive stage: the first click arms it, the second spends. */
+function ConfirmButton({ label, cost, disabled, onConfirm }: { label: string; cost: string; disabled?: boolean; onConfirm: () => void }) {
+  const [armed, setArmed] = useState(false)
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => (armed ? (setArmed(false), onConfirm()) : setArmed(true))}
+      onBlur={() => setArmed(false)}
+      className={`rounded px-3 py-1.5 text-sm font-medium disabled:opacity-40 ${armed ? 'bg-amber-400 text-stone-900' : 'bg-stone-900 text-white'}`}
+    >
+      {armed ? `Click again to spend ${cost}` : `${label} (${cost})`}
+    </button>
   )
 }
 
@@ -106,6 +141,13 @@ function NewDream({ options, busy, existing, onCreate, onUploaded }: {
 
   const startFrom = useCallback(
     (id: string) => {
+      if (id === BLANK) {
+        setPreset(BLANK)
+        setPrompt('')
+        setColour(null)
+        return
+      }
+
       const p = options.presets[id]
       if (!p) return
       setPreset(id)
@@ -149,9 +191,13 @@ function NewDream({ options, busy, existing, onCreate, onUploaded }: {
   return (
     <section className="mb-14">
       <h2 className="mb-1 font-serif text-2xl">New dream</h2>
-      <p className="mb-4 text-sm text-stone-600">Pick a published dream to start from, then change the prompt or the colours to make it your own.</p>
+      <p className="mb-4 text-sm text-stone-600">Pick a published dream to start from, then change the prompt or the colours to make it your own. Or start blank.</p>
 
-      <div className="mb-4 grid grid-cols-5 gap-2 sm:grid-cols-10">
+      <div className="mb-4 grid grid-cols-6 gap-2 sm:grid-cols-11">
+        <button type="button" onClick={() => startFrom(BLANK)} title="Start with an empty prompt" className={`overflow-hidden rounded text-left ${preset === BLANK ? 'ring-2 ring-stone-900 ring-offset-2 ring-offset-stone-100' : 'opacity-60 hover:opacity-100'}`}>
+          <span className="flex aspect-square w-full items-center justify-center border border-dashed border-stone-400 bg-white text-2xl text-stone-400">+</span>
+          <span className="block truncate bg-white px-1 py-0.5 text-[10px] leading-tight">Blank</span>
+        </button>
         {Object.entries(options.presets).map(([key, p]) => (
           <button key={key} type="button" onClick={() => startFrom(key)} title={p.title} className={`overflow-hidden rounded text-left ${preset === key ? 'ring-2 ring-stone-900 ring-offset-2 ring-offset-stone-100' : 'opacity-60 hover:opacity-100'}`}>
             <img src={`/assets/${key}/hero.jpg`} alt="" className="aspect-square w-full object-cover" />
@@ -160,7 +206,7 @@ function NewDream({ options, busy, existing, onCreate, onUploaded }: {
         ))}
       </div>
 
-      <GridForm.Root density="comfortable" onFormSubmit={() => ready && onCreate({ name: id, prompt, colour, preset, negative: negative.trim(), seed: options.presets[preset]?.seed })}>
+      <GridForm.Root density="comfortable" onFormSubmit={() => ready && onCreate({ name: id, prompt, colour, preset: preset === BLANK ? '' : preset, negative: negative.trim(), seed: options.presets[preset]?.seed })}>
         <GridForm.Section legend="The look">
           <GridForm.Row>
             <GridForm.Field name="prompt" label="Prompt" description="Describe a landscape only, never a person. The shape of the person in the footage becomes part of the scene.">
@@ -210,20 +256,37 @@ function NewDream({ options, busy, existing, onCreate, onUploaded }: {
   )
 }
 
-function TakeCard({ job, take, samples, presets, activity, busy, onAct }: {
+function TakeCard({ job, take, samples, presets, activity, generating, onGenerate, onUpdate }: {
   job: string
   take: Take
   samples: { frame: number; label: string }[]
   presets: Record<string, Preset>
   activity: Activity | null
-  busy: boolean
-  onAct: (body: Record<string, unknown>, track?: boolean) => void
+  /** Something paid is already running for this footage. */
+  generating: boolean
+  onGenerate: (take: string, action: Action) => void
+  onUpdate: (take: string, change: { status?: Take['status']; notes?: string }) => void
 }) {
   const mine = activity?.take === take.id ? activity : null
   const working = mine !== null && !mine.failed
-  const status = describe(take, working)
+  const status = describe(take, working ? mine.action : null, samples.length)
+  const allSamples = take.samples.length >= samples.length
   const isDeforum = take.method === 'deforum'
   const sample = (frame: number, ext: string) => jobFile(job, `7-dreams/${take.id}/samples/${pad(frame)}.${ext}`)
+  const progress = mine?.log.match(/Dream frames: (\d+) of (\d+) done(?![\s\S]*Dream frames:)/)
+  const primary = 'rounded bg-stone-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40'
+  const approve = 'rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800'
+  const plain = 'rounded border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-100'
+  const watchClip = take.hasPreview && (
+    <a href={`/?preview=${job}/${take.id}`} target="_blank" rel="noreferrer" className={plain}>
+      Watch the clip in the player
+    </a>
+  )
+  const reject = (
+    <button type="button" onClick={() => onUpdate(take.id, { status: 'rejected' })} className={plain}>
+      Reject
+    </button>
+  )
 
   return (
     <article className="mb-6 rounded-lg border border-stone-300 bg-white p-4">
@@ -232,7 +295,9 @@ function TakeCard({ job, take, samples, presets, activity, busy, onAct }: {
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${status.tone}`}>{status.label}</span>
         {mine && working && (
           <span className="text-xs text-stone-500">
-            <Elapsed since={mine.started} /> so far, usually about 8 minutes
+            <Elapsed since={mine.started} />
+            {progress ? `, ${progress[1]} of ${progress[2]} frames` : ''}
+            {mine.action in COST ? ` (usually ${COST[mine.action as Action].split(', ')[1]})` : ''}
           </span>
         )}
         <span className="ml-auto flex items-center gap-2 text-xs text-stone-500">
@@ -242,12 +307,14 @@ function TakeCard({ job, take, samples, presets, activity, busy, onAct }: {
       </header>
       <p className="mb-3 max-w-3xl text-sm text-stone-700">{take.prompt}</p>
 
-      {take.samples.length > 0 && (
+      {(take.samples.length > 0 || (working && mine.action === 'samples')) && (
         <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
           {samples.map((s) => (
             <figure key={s.frame}>
               <div className="relative">
-                {isDeforum ? (
+                {!take.samples.includes(s.frame) ? (
+                  <div className="flex aspect-square w-full items-center justify-center rounded border border-dashed border-stone-300 text-xs text-stone-400">{working ? 'Generating…' : 'Not made yet'}</div>
+                ) : isDeforum ? (
                   <video src={sample(s.frame, 'mp4')} poster={sample(s.frame, 'jpg')} autoPlay loop muted playsInline className="aspect-square w-full rounded object-cover" />
                 ) : (
                   <img src={sample(s.frame, 'jpg')} alt="" className="aspect-square w-full rounded object-cover" />
@@ -261,31 +328,59 @@ function TakeCard({ job, take, samples, presets, activity, busy, onAct }: {
       )}
 
       {mine?.failed && (
-        <details className="mb-3 rounded bg-red-50 p-2 text-sm text-red-800" open>
-          <summary className="cursor-pointer">Something went wrong. Nothing is retried automatically.</summary>
-          <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs">{mine.log.slice(-2000)}</pre>
-        </details>
+        <div className="mb-3 rounded bg-red-50 p-3 text-sm text-red-800">
+          <p className="font-medium">That run stopped with an error.</p>
+          <p className="mt-1 break-words">{reason(mine.log)}</p>
+          <p className="mt-1 text-red-700">Nothing is retried automatically. Starting it again carries on from where it stopped, without paying twice for finished work.</p>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs">Full log</summary>
+            <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap text-xs">{mine.log.slice(-6000)}</pre>
+          </details>
+        </div>
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        {take.status === 'proposed' && take.samples.length > 0 && (
+        {take.status === 'proposed' && take.samples.length > 0 && !working && (
           <>
-            <button type="button" disabled={busy} onClick={() => onAct({ action: 'status', take: take.id, status: 'samples-approved' })} className="rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-40">
-              Approve
-            </button>
-            <button type="button" disabled={busy} onClick={() => onAct({ action: 'status', take: take.id, status: 'rejected' })} className="rounded border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-100 disabled:opacity-40">
-              Reject
-            </button>
+            {allSamples && (
+              <button type="button" onClick={() => onUpdate(take.id, { status: 'samples-approved' })} className={approve}>
+                Approve samples
+              </button>
+            )}
+            {reject}
           </>
         )}
         {take.status === 'proposed' && take.samples.length < samples.length && !working && (
-          <button type="button" disabled={busy} onClick={() => onAct({ action: 'samples', take: take.id }, true)} className="rounded bg-stone-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40">
-            {take.samples.length > 0 ? 'Generate the missing samples' : `Generate 5 samples (${isDeforum ? SAMPLES_COST : 'about $0.15'})`}
+          <button type="button" disabled={generating} onClick={() => onGenerate(take.id, 'samples')} className={primary}>
+            {take.samples.length > 0 || mine?.failed ? 'Generate the missing samples' : `Generate 5 samples (${isDeforum ? COST.samples : 'about $0.15'})`}
           </button>
         )}
-        {take.status === 'samples-approved' && <span className="text-sm text-stone-600">Next is the 15-second test clip, which isn&apos;t built yet.</span>}
+        {take.status === 'samples-approved' && !working && (
+          <>
+            {watchClip}
+            {take.hasPreview && (
+              <button type="button" onClick={() => onUpdate(take.id, { status: 'clip-approved' })} className={approve}>
+                Approve clip
+              </button>
+            )}
+            {isDeforum && !take.hasPreview && (
+              <button type="button" disabled={generating} onClick={() => onGenerate(take.id, 'clip')} className={primary}>
+                Render the 15-second clip ({COST.clip})
+              </button>
+            )}
+            {reject}
+          </>
+        )}
+        {take.status === 'clip-approved' && !working && (
+          <>
+            {watchClip}
+            {isDeforum && <ConfirmButton label="Generate the full song" cost={COST.full.split(',')[0]} disabled={generating} onConfirm={() => onGenerate(take.id, 'full')} />}
+            {reject}
+          </>
+        )}
+        {take.status === 'generated' && <span className="text-sm text-stone-600">Frames are in 7-dreams/{take.id}/frames. Publish it with the pipeline&apos;s compose command.</span>}
         {take.status === 'rejected' && (
-          <button type="button" disabled={busy} onClick={() => onAct({ action: 'status', take: take.id, status: 'proposed' })} className="text-sm underline disabled:opacity-40">
+          <button type="button" onClick={() => onUpdate(take.id, { status: 'proposed' })} className="text-sm underline">
             Move back to review
           </button>
         )}
@@ -293,10 +388,14 @@ function TakeCard({ job, take, samples, presets, activity, busy, onAct }: {
           defaultValue={take.notes ?? ''}
           placeholder="Notes"
           aria-label={`Notes on ${take.id}`}
-          onBlur={(e) => e.target.value !== (take.notes ?? '') && onAct({ action: 'status', take: take.id, notes: e.target.value })}
+          onBlur={(e) => e.target.value !== (take.notes ?? '') && onUpdate(take.id, { notes: e.target.value })}
           className="ml-auto w-full rounded border border-stone-300 bg-white px-2 py-1 text-sm text-stone-900 sm:w-72"
         />
       </div>
+      {isDeforum && (take.status === 'samples-approved' || take.status === 'clip-approved') && (
+        <p className="mt-2 text-xs text-stone-500">Long runs are safe to interrupt: starting one again carries on from where it stopped, without paying twice.</p>
+      )}
+      {!isDeforum && (take.status === 'samples-approved' || take.status === 'clip-approved') && <p className="mt-2 text-xs text-stone-500">Made with the older method; its clip and full song run from the pipeline&apos;s command line.</p>}
     </article>
   )
 }
@@ -307,14 +406,15 @@ export default function Admin() {
   const [detail, setDetail] = useState<JobDetail | null>(null)
   const [options, setOptions] = useState<DeforumOptions>({ presets: {}, colours: [] })
   const [activity, setActivity] = useState<Activity | null>(null)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const running = useRef(false)
+  /** The paid run this page is following, so it is never followed twice. */
+  const following = useRef('')
 
   const reload = useCallback(async () => {
     if (job) setDetail(await api<JobDetail>(`/__admin/api/jobs/${job}`))
   }, [job])
   const loadOptions = useCallback(async () => setOptions(await api<DeforumOptions>('/__admin/api/deforum')), [])
+  const fail = (e: unknown) => setError((e as Error).message)
 
   useEffect(() => {
     // Formulaire follows the OS colour scheme unless told otherwise; this page is always light.
@@ -324,60 +424,88 @@ export default function Admin() {
         setJobs(list)
         setJob((current) => current || (list.includes('full-video') ? 'full-video' : list[0] ?? ''))
       })
-      .catch((e) => setError(e.message))
-    loadOptions().catch((e) => setError(e.message))
+      .catch(fail)
+    loadOptions().catch(fail)
   }, [loadOptions])
   useEffect(() => {
-    reload().catch((e) => setError(e.message))
+    reload().catch(fail)
   }, [reload])
 
-  /** Runs one pipeline action to the end. `track` shows its progress on the take's card. Resolves true if it succeeded. */
-  const run = async (body: Record<string, unknown>, track = false): Promise<boolean> => {
-    const take = String(body.take ?? '')
-    const started = Date.now()
-    if (track) setActivity({ take, started, log: '' })
-    const { runId } = await api<{ runId: string }>(`/__admin/api/jobs/${job}/actions`, body)
+  /** Waits for a pipeline run to end, reporting its log as it goes. */
+  const wait = async (runId: string, onLog?: (run: Run) => void): Promise<Run> => {
     for (;;) {
+      const run = await api<Run>(`/__admin/api/runs/${runId}`)
+      onLog?.(run)
+      if (run.status !== 'running') return run
       await new Promise((resolve) => setTimeout(resolve, 2000))
-      const state = await api<Run>(`/__admin/api/runs/${runId}`)
-      if (state.status === 'running') continue
-      await reload()
-      if (state.status === 'failed') setActivity({ take, started, log: state.log, failed: true })
-      else if (track) setActivity(null)
-      return state.status === 'succeeded'
     }
   }
 
-  /** One thing at a time: the pipeline runs a single action per job. */
-  const guarded = async (work: () => Promise<unknown>) => {
-    if (running.current) return
-    running.current = true
-    setBusy(true)
+  /** Follows a paid run on its take's card until it ends. */
+  const follow = useCallback(
+    async (running: Running) => {
+      if (following.current === running.id) return
+      following.current = running.id
+      setActivity({ ...running, log: '' })
+      try {
+        const run = await wait(running.id, (state) => setActivity({ ...running, log: state.log }))
+        setActivity(run.status === 'failed' ? { ...running, log: run.log, failed: true } : null)
+        await reload()
+      } catch (e) {
+        setActivity(null)
+        fail(e)
+      }
+    },
+    [reload]
+  )
+  // A run that was already going when the page loaded (a reload during a long render).
+  useEffect(() => {
+    if (detail?.running) follow(detail.running)
+  }, [detail?.running, follow])
+
+  /** Starts a pipeline action and returns its run id. */
+  const start = (body: Record<string, unknown>) => api<{ runId: string }>(`/__admin/api/jobs/${job}/actions`, body).then((r) => r.runId)
+
+  const generate = async (take: string, action: Action) => {
     setError('')
     try {
-      await work()
+      await follow({ id: await start({ action, take }), take, action, started: Date.now() })
     } catch (e) {
-      setError((e as Error).message)
-      setActivity((current) => (current?.failed ? current : null))
-    } finally {
-      running.current = false
-      setBusy(false)
+      fail(e)
     }
   }
 
-  const act = (body: Record<string, unknown>, track?: boolean) => guarded(() => run(body, track))
-  const create = (take: NewTake) =>
-    guarded(async () => {
-      const made = await run({ action: 'take', method: 'deforum', take: take.name, prompt: take.prompt, colour: take.colour, preset: take.preset, negative: take.negative || undefined, seed: take.seed })
-      if (made) await run({ action: 'samples', take: take.name }, true)
-    })
+  /** Approvals and notes: instant, and allowed while something is generating. */
+  const update = async (take: string, change: { status?: Take['status']; notes?: string }) => {
+    setError('')
+    try {
+      const run = await wait(await start({ action: 'status', take, ...change }))
+      if (run.status === 'failed') setError(reason(run.log))
+      await reload()
+    } catch (e) {
+      fail(e)
+    }
+  }
 
+  const create = async (take: NewTake) => {
+    setError('')
+    try {
+      const made = await wait(await start({ action: 'take', method: 'deforum', take: take.name, prompt: take.prompt, colour: take.colour, preset: take.preset, negative: take.negative || undefined, seed: take.seed }))
+      await reload()
+      if (made.status === 'failed') return setError(reason(made.log))
+      await generate(take.name, 'samples')
+    } catch (e) {
+      fail(e)
+    }
+  }
+
+  const generating = activity !== null && !activity.failed
   const takes = detail?.takes.filter((t) => t.status) ?? []
   const samples = detail?.config.samples ?? []
-  const inReview = takes.filter((t) => t.status === 'proposed')
-  const approved = takes.filter((t) => t.status !== 'proposed' && t.status !== 'rejected')
+  const inReview = takes.filter((t) => t.status !== 'generated' && t.status !== 'rejected')
+  const finished = takes.filter((t) => t.status === 'generated')
   const rejected = takes.filter((t) => t.status === 'rejected')
-  const card = (take: Take) => <TakeCard key={take.id} job={job} take={take} samples={samples} presets={options.presets} activity={activity} busy={busy} onAct={act} />
+  const card = (take: Take) => <TakeCard key={take.id} job={job} take={take} samples={samples} presets={options.presets} activity={activity} generating={generating} onGenerate={generate} onUpdate={update} />
 
   return (
     // The player's global styles lock the page (overflow hidden, touch-action none), so this view scrolls itself.
@@ -390,7 +518,7 @@ export default function Admin() {
           {jobs.length > 1 && (
             <label className="ml-auto text-sm text-stone-600">
               Footage{' '}
-              <select value={job} onChange={(e) => setJob(e.target.value)} disabled={busy} className="rounded border border-stone-300 bg-white px-2 py-1">
+              <select value={job} onChange={(e) => setJob(e.target.value)} disabled={generating} className="rounded border border-stone-300 bg-white px-2 py-1 text-stone-900">
                 {jobs.map((j) => (
                   <option key={j}>{j}</option>
                 ))}
@@ -402,20 +530,22 @@ export default function Admin() {
 
         {error && <p className="mb-6 rounded bg-red-50 p-3 text-sm text-red-800">{error}</p>}
 
-        <NewDream options={options} busy={busy} existing={detail?.takes.map((t) => t.id) ?? []} onCreate={create} onUploaded={loadOptions} />
+        <NewDream options={options} busy={generating} existing={detail?.takes.map((t) => t.id) ?? []} onCreate={create} onUploaded={loadOptions} />
 
         <section className="mb-10">
           <h2 className="mb-1 font-serif text-2xl">In review</h2>
           <p className="mb-4 text-sm text-stone-600">
-            {inReview.length > 0 ? 'Five short loops per dream, one for each test moment in the song. The small inset is the footage at that moment.' : 'Nothing to review. Generate samples above to start.'}
+            {inReview.length > 0
+              ? 'Each dream moves through samples, a 15-second clip, then the full song, and needs your approval before each paid step. In the samples, the small inset is the footage at that moment.'
+              : 'Nothing to review. Generate samples above to start.'}
           </p>
           {inReview.map(card)}
         </section>
 
-        {approved.length > 0 && (
+        {finished.length > 0 && (
           <section className="mb-10">
-            <h2 className="mb-4 font-serif text-2xl">Approved</h2>
-            {approved.map(card)}
+            <h2 className="mb-4 font-serif text-2xl">Finished</h2>
+            {finished.map(card)}
           </section>
         )}
 

@@ -9,6 +9,10 @@ reference, seed and frame count. See plans/ready/own-deforum-dream-model.md.
 
 Output: a zip of the rendered frames (<timestring>_NNNNN.png, one per
 extracted init frame) plus settings.json with exactly what was run.
+
+A long take is rendered as a chain of runs. Each frame grows out of the one
+before it, so a run can continue another: pass the earlier run's last frame as
+previous_frame, with an init video that starts on that same frame.
 """
 
 import gc
@@ -21,6 +25,7 @@ import sys
 import time
 import zipfile
 from types import SimpleNamespace
+from typing import Optional
 
 from cog import BasePredictor, Input, Path
 
@@ -77,10 +82,10 @@ class Predictor(BasePredictor):
     def predict(
         self,
         init_video: Path = Input(description="Panel 2 (painted portrait) as a video: the shape the dream grows from"),
-        mask_video: Path = Input(description="The subject matte as a video (white = subject)", default=None),
+        mask_video: Optional[Path] = Input(description="The subject matte as a video (white = subject)", default=None),
         prompt: str = Input(description="Landscape-only prompt; never describe the person"),
         negative_prompt: str = Input(description="Extra negative prompt, added to the legacy dreams' own (no people, faces, bodies...), which always applies", default=""),
-        colour_image: Path = Input(description="Colour reference: every frame's palette is matched to it (legacy 'Specific' mode)", default=None),
+        colour_image: Optional[Path] = Input(description="Colour reference: every frame's palette is matched to it (legacy 'Specific' mode)", default=None),
         colour_mode: str = Input(
             description="Specific = match colour_image; Sticky = match the first frame; others are Deforum's own",
             choices=["Specific", "Sticky", "Match Frame 0 LAB", "Match Frame 0 HSV", "Match Frame 0 RGB", "Video Input", "None"],
@@ -94,7 +99,11 @@ class Predictor(BasePredictor):
         settings_overrides: str = Input(description="JSON object of Deforum setting overrides, applied after the preset", default="{}"),
         extract_nth_frame: int = Input(description="Use every Nth init frame (legacy: 6 on a 60fps init = 10 dream frames/s)", default=6, ge=1),
         max_frames: int = Input(description="Dream frames to render (capped by the init video's length)", default=60, ge=1, le=3000),
-        seed: int = Input(description="Default: the preset's seed", default=None),
+        seed: Optional[int] = Input(description="Default: the preset's seed", default=None),
+        previous_frame: Optional[Path] = Input(
+            description="Continue an earlier run: its last rendered frame. The init and mask videos must start on that frame's source frame; it is not rendered again or returned",
+            default=None,
+        ),
     ) -> Path:
         torch = self.torch
         from helpers.model_load import make_linear_decode
@@ -155,6 +164,21 @@ class Predictor(BasePredictor):
         shutil.rmtree(outdir, ignore_errors=True)
         os.makedirs(outdir)
         args.update(outdir=outdir, timestring=time.strftime("%Y%m%d%H%M%S"), save_settings=False, save_samples=True)
+        if previous_frame is not None:
+            # A continued run restarts Deforum's frame count at 0, which is only the same as one long
+            # run when nothing is keyframed over time. True of every legacy preset; refuse otherwise.
+            keyframed = [k for k, v in anim.items() if is_keyframed(v) and (k != "sampler_schedule" or anim.get("enable_schedule_samplers"))]
+            if keyframed:
+                raise ValueError(f"previous_frame can't continue a run with keyframed settings: {', '.join(keyframed)}")
+            if colour_mode in ("Sticky", "Match Frame 0 LAB", "Match Frame 0 HSV", "Match Frame 0 RGB"):
+                raise ValueError(f"previous_frame can't continue a run with colour_mode {colour_mode}: it matches the take's first frame, which this run doesn't have")
+            # Deforum's own resume: it counts this timestring's files (frames plus the settings file),
+            # loads the last frame as the previous sample and carries on from the next one.
+            from PIL import Image
+
+            Image.open(str(previous_frame)).convert("RGB").resize((args["W"], args["H"]), Image.LANCZOS).save(os.path.join(outdir, f"{args['timestring']}_00000.png"))
+            open(os.path.join(outdir, f"{args['timestring']}_settings.txt"), "w").close()
+            anim.update(resume_from_timestring=True, resume_timestring=args["timestring"])
         args["strength"] = max(0.0, min(1.0, args.get("strength", 0.65)))
         if args.get("sampler") != "ddim":
             args["ddim_eta"] = 0
@@ -183,10 +207,13 @@ class Predictor(BasePredictor):
         render_animation(root, ns_anim, ns_args, cond, uncond)
 
         frames = sorted(f for f in os.listdir(outdir) if f.startswith(ns_args.timestring) and f.endswith(".png"))
+        if previous_frame is not None:
+            frames = frames[1:]  # frame 0 is the previous run's frame, handed in
         if not frames:
             raise RuntimeError("Deforum produced no frames")
         used = {
             "preset": preset, "prompt": prompt, "negative_prompt": negative_prompt, "colour_mode": colour_mode,
+            "continued": previous_frame is not None,
             "args": {k: v for k, v in args.items() if is_json(v)}, "anim_args": {k: v for k, v in anim.items() if is_json(v)},
             "frames": len(frames),
         }
@@ -212,6 +239,11 @@ def load_model_from_config(config, ckpt):
     model = model.half().to("cuda")
     model.eval()
     return model
+
+
+def is_keyframed(value):
+    """True for a Deforum schedule string with more than one key, e.g. "0:(1), 30:(2)"."""
+    return isinstance(value, str) and len([part for part in value.split(",") if ":" in part]) > 1
 
 
 def is_json(value):
