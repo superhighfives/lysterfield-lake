@@ -19,13 +19,13 @@ type Detail = {
 /** Rough Replicate cost of re-rendering one dream frame (A100, ~21s), before rerolls: a frame still scored as a person is re-rendered up to twice more. */
 const COST_PER_FRAME = 0.03
 const dollars = (frames: number) => `about $${Math.max(0.05, frames * COST_PER_FRAME).toFixed(2)} before retries`
-const plain = 'rounded border border-stone-300 px-2.5 py-1 text-sm hover:bg-stone-100 disabled:opacity-40'
-const primary = 'rounded bg-stone-900 px-2.5 py-1 text-sm font-medium text-white disabled:opacity-40'
+const plain = 'rounded border border-stone-300 dark:border-stone-700 px-2.5 py-1 text-sm hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-40'
+const primary = 'rounded bg-stone-900 dark:bg-stone-100 px-2.5 py-1 text-sm font-medium text-white dark:text-stone-900 disabled:opacity-40'
 
 export function checkLabel(check: CheckSummary | null): { label: string; tone: string } {
-  if (!check) return { label: 'Not checked for people', tone: 'bg-stone-200 text-stone-700' }
-  if (check.flagged === 0) return { label: `No person found in ${check.frames} frames`, tone: 'bg-emerald-100 text-emerald-900' }
-  return { label: `${check.flagged} of ${check.frames} frames flagged, in ${check.stretches} ${check.stretches === 1 ? 'stretch' : 'stretches'}`, tone: 'bg-amber-100 text-amber-900' }
+  if (!check) return { label: 'Not checked for people', tone: 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300' }
+  if (check.flagged === 0) return { label: `No person found in ${check.frames} frames`, tone: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-200' }
+  return { label: `${check.flagged} of ${check.frames} frames flagged, in ${check.stretches} ${check.stretches === 1 ? 'stretch' : 'stretches'}`, tone: 'bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200' }
 }
 
 /** A button that asks once more before spending money. */
@@ -127,11 +127,11 @@ export function PersonCheck({ job, take, title, clip = false, summary, busy, onC
   const current = detail?.frames[Math.min(cursor, (detail?.frames.length ?? 1) - 1)]
 
   return (
-    <div className="border-t border-stone-200 py-3 first:border-t-0">
+    <div className="border-t border-stone-200 dark:border-stone-800 py-3 first:border-t-0">
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-medium">{title}</span>
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${status.tone}`}>{status.label}</span>
-        {working && <span className="text-xs text-stone-500">{working}</span>}
+        {working && <span className="text-xs text-stone-500 dark:text-stone-400">{working}</span>}
         <span className="ml-auto flex gap-2">
           <button type="button" disabled={working !== ''} onClick={() => act('Checking every frame (about 6 minutes for a full song)…', { action: 'check' })} className={plain}>
             {summary ? 'Check again' : 'Check for people (free)'}
@@ -141,17 +141,17 @@ export function PersonCheck({ job, take, title, clip = false, summary, busy, onC
           </button>
         </span>
       </div>
-      {error && <p className="mt-2 rounded bg-red-50 p-2 text-sm text-red-800">{error}</p>}
+      {error && <p className="mt-2 rounded bg-red-50 dark:bg-red-950/50 p-2 text-sm text-red-800 dark:text-red-200">{error}</p>}
 
       {open && detail && (
         <div className="mt-3">
-          {!detail.check && <p className="text-sm text-stone-600">Not checked yet. You can still go through the frames below and replace any by hand.</p>}
-          {detail.check && stretches.length === 0 && <p className="text-sm text-stone-600">Nothing flagged. {detail.replaced.length > 0 ? `${detail.replaced.length} frames have been replaced; the originals are in the take's replaced folder.` : ''}</p>}
+          {!detail.check && <p className="text-sm text-stone-600 dark:text-stone-400">Not checked yet. You can still go through the frames below and replace any by hand.</p>}
+          {detail.check && stretches.length === 0 && <p className="text-sm text-stone-600 dark:text-stone-400">Nothing flagged. {detail.replaced.length > 0 ? `${detail.replaced.length} frames have been replaced; the originals are in the take's replaced folder.` : ''}</p>}
 
           {stretches.length > 1 && (
             <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
               <Paid label={`Re-render all ${flaggedFrames} flagged frames`} cost={dollars(flaggedFrames)} disabled={busy || working !== ''} onConfirm={() => repair('rerender', stretches)} />
-              <span className="text-stone-500">Each stretch is a separate run, one after another.</span>
+              <span className="text-stone-500 dark:text-stone-400">Each stretch is a separate run, one after another.</span>
             </div>
           )}
 
@@ -163,7 +163,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, busy, onC
             const before = detail.frames[from - 1]
             const after = detail.frames[to + 1]
             return (
-              <div key={s.start} className="mb-3 rounded border border-stone-200 p-2">
+              <div key={s.start} className="mb-3 rounded border border-stone-200 dark:border-stone-800 p-2">
                 <div className="flex gap-1 overflow-x-auto">
                   {before !== undefined && <img src={frameUrl(before)} alt="" title={`Frame ${before}, before`} className="h-28 w-28 shrink-0 rounded object-cover opacity-60" />}
                   {shown.map((frame) => (
@@ -175,7 +175,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, busy, onC
                       </span>
                     </div>
                   ))}
-                  {inside.length > shown.length && <div className="flex h-28 w-20 shrink-0 items-center justify-center text-xs text-stone-500">+{inside.length - shown.length} more</div>}
+                  {inside.length > shown.length && <div className="flex h-28 w-20 shrink-0 items-center justify-center text-xs text-stone-500 dark:text-stone-400">+{inside.length - shown.length} more</div>}
                   {after !== undefined && <img src={frameUrl(after)} alt="" title={`Frame ${after}, after`} className="h-28 w-28 shrink-0 rounded object-cover opacity-60" />}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -194,7 +194,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, busy, onC
           })}
 
           {kept.length > 0 && (
-            <p className="mb-3 text-sm text-stone-600">
+            <p className="mb-3 text-sm text-stone-600 dark:text-stone-400">
               {kept.length} flagged {kept.length === 1 ? 'stretch' : 'stretches'} kept as fine.{' '}
               <button type="button" onClick={() => setKeep([])} className="underline">
                 Show them again
@@ -204,7 +204,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, busy, onC
 
           {current !== undefined && (
             <details className="mt-2">
-              <summary className="cursor-pointer text-sm text-stone-600">Go through every frame</summary>
+              <summary className="cursor-pointer text-sm text-stone-600 dark:text-stone-400">Go through every frame</summary>
               <div className="mt-2 flex flex-wrap items-start gap-3">
                 <img src={frameUrl(current)} alt="" className="h-64 w-64 rounded object-cover" />
                 <img src={sourceUrl(current)} alt="" title="The footage at this moment" className="h-64 w-64 rounded object-cover" />
@@ -217,7 +217,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, busy, onC
                     <button type="button" onClick={() => setCursor(Math.min(detail.frames.length - 1, cursor + 1))} className={plain}>
                       Next
                     </button>
-                    <span className="text-stone-600">
+                    <span className="text-stone-600 dark:text-stone-400">
                       Frame {current}
                       {score(current) !== undefined ? `, person score ${score(current)!.toFixed(2)}` : ''}
                       {detail.replaced.includes(current) ? ', replaced' : ''}
