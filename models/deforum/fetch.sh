@@ -11,4 +11,6 @@ git -C deforum checkout -q "$COMMIT"
 git -C deforum checkout -q -- helpers
 cp legacy/render.py deforum/helpers/render.py
 cp legacy/conditioning.py deforum/helpers/conditioning.py
+# The person classifier predict.py scores each frame with: one copy, owned by models/person-check.
+cp ../person-check/probe.json probe.json
 echo "deforum @ $(git -C deforum rev-parse --short HEAD) with the legacy render.py and conditioning.py"

@@ -14,7 +14,7 @@ const execFileAsync = promisify(execFile)
 /**
  * Dream (panel 7) takes made the way the ten legacy dreams were: Deforum
  * 0.7.1 with the legacy render.py, settings, negative prompt and colour
- * reference (`models/deforum/`, plans/ready/own-deforum-dream-model.md).
+ * reference (`models/deforum/`, plans/done/own-deforum-dream-model.md).
  *
  * Deforum grows each frame out of the previous one, with the subject's
  * shape (panel 2 inside the matte) steering it. So a single frame can't be
@@ -68,11 +68,18 @@ function colourPath(job: Job, take: string, colour: string): string {
   return colour.includes('/') ? path.join(job.dir, '7-dreams', take, colour) : path.join(COLOURS_DIR, colour)
 }
 
-interface DeforumRun {
+export interface DeforumRun {
   /** First job frame (1-based) of the init video. */
   start: number
   /** Dream frames the init video covers. */
   dreamFrames: number
+  /**
+   * The job frame each dream frame is made from, when they aren't evenly
+   * `DEFORUM_NTH_FRAME` apart from `start` (a repair of a legacy dream,
+   * whose frames sit at 10 per second of song). Overrides `start` and
+   * `dreamFrames`.
+   */
+  jobFrames?: number[]
   outDir: string
   /**
    * Continue an earlier run: its last frame (a PNG). `start` must then be
@@ -90,7 +97,8 @@ interface DeforumRun {
  * started again (`runModelToFileResumable`).
  */
 export async function deforumRun(job: Job, take: string, config: TakeConfig, run: DeforumRun): Promise<string[]> {
-  const { start, dreamFrames, outDir } = run
+  const { outDir } = run
+  const jobFrames = run.jobFrames ?? Array.from({ length: run.dreamFrames }, (_, i) => run.start + i * DEFORUM_NTH_FRAME)
   assertLandscapePrompt(config.prompt)
   await mkdir(outDir, { recursive: true })
   // `done` is written only after the frames are fully unzipped, so a run that died part-way
@@ -101,14 +109,18 @@ export async function deforumRun(job: Job, take: string, config: TakeConfig, run
   if (await exists(marker)) return (await pngs()).map((f) => path.join(outDir, f))
   for (const stale of await pngs()) await rm(path.join(outDir, stale))
 
-  const count = (dreamFrames - 1) * DEFORUM_NTH_FRAME + 1
+  // The init and mask videos hold exactly the frames Deforum should use, one per dream frame.
   const initPath = path.join(outDir, 'init.mp4')
   const maskPath = path.join(outDir, 'mask.mp4')
-  const encode = ['-c:v', 'libx264', '-crf', '14', '-pix_fmt', 'yuv420p']
-  await execFileAsync('ffmpeg', ['-v', 'error', '-y', '-framerate', String(job.fps), '-start_number', String(start),
-    '-i', path.join(job.dir, '2-portrait/upscaled/%04d.jpg'), '-frames:v', String(count), ...encode, initPath])
-  await execFileAsync('ffmpeg', ['-v', 'error', '-y', '-framerate', String(job.fps), '-start_number', String(start),
-    '-i', path.join(job.dir, '4-matte/frames/%04d.png'), '-frames:v', String(count), '-vf', 'scale=1024:1024', ...encode, maskPath])
+  const encode = ['-c:v', 'libx264', '-crf', '14', '-pix_fmt', 'yuv420p', '-r', String(job.fps)]
+  const concat = async (listName: string, dir: string, ext: string, extra: string[], out: string) => {
+    const list = path.join(outDir, listName)
+    await writeFile(list, jobFrames.map((f) => `file '${path.resolve(job.dir, dir, `${name(f)}.${ext}`)}'\nduration ${1 / job.fps}`).join('\n'))
+    await execFileAsync('ffmpeg', ['-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', list, ...extra, ...encode, out])
+    await rm(list)
+  }
+  await concat('init.txt', '2-portrait/upscaled', 'jpg', [], initPath)
+  await concat('mask.txt', '4-matte/frames', 'png', ['-vf', 'scale=1024:1024'], maskPath)
 
   const zipPath = path.join(outDir, 'frames.zip')
   await runModelToFileResumable(
@@ -124,8 +136,8 @@ export async function deforumRun(job: Job, take: string, config: TakeConfig, run
         ? { colour_image: await readFileAsInput(colourPath(job, take, config.colour)), colour_mode: 'Specific' }
         : { colour_mode: 'Video Input' }),
       preset: config.preset ?? 'lush-and-light',
-      extract_nth_frame: DEFORUM_NTH_FRAME,
-      max_frames: dreamFrames,
+      extract_nth_frame: 1,
+      max_frames: jobFrames.length,
       seed: config.seed,
       ...(run.previousFrame && { previous_frame: await readFileAsInput(run.previousFrame) }),
     },
@@ -135,7 +147,7 @@ export async function deforumRun(job: Job, take: string, config: TakeConfig, run
   await execFileAsync('unzip', ['-o', '-q', zipPath, '-d', outDir])
   await rm(zipPath)
   const frames = await pngs()
-  if (frames.length === 0) throw new Error(`Deforum returned no frames for ${take} at ${start}`)
+  if (frames.length === 0) throw new Error(`Deforum returned no frames for ${take} at ${jobFrames[0]}`)
   await writeFile(marker, '')
   return frames.map((f) => path.join(outDir, f))
 }
