@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { GridForm } from 'formulaire-ui'
 import formulaireCss from 'formulaire-ui/styles.css?raw'
+import { api, jobFile, pad, reason } from './admin-api.ts'
+import { PersonCheck, type CheckSummary } from './admin-person-check.tsx'
 
-// Dev-only page for making and reviewing new dreams (panel 7):
-// plans/ready/frame-preview-approval-tool.md. Talks to the /__admin API that
+// Dev-only page for making and reviewing new dreams (panel 7), and for
+// checking any dream for people: plans/in-progress/dreams.md. Talks to the /__admin API that
 // vite-plugin-admin.ts adds to the dev server; never part of a build.
 //
 // One flow: describe a look (starting from a published dream), five samples
@@ -18,13 +20,16 @@ type Take = {
   notes?: string
   samples: number[]
   hasPreview: boolean
+  /** The person check on the 15-second clip: undefined if there is no clip yet, null if it hasn't been checked. */
+  clipCheck?: CheckSummary | null
   method?: 'flux-kontext' | 'deforum'
   colour?: string
   preset?: string
 }
 type Action = 'samples' | 'clip' | 'full'
 type Running = { id: string; take: string; action: string; started: number }
-type JobDetail = { name: string; config: { samples?: { frame: number; label: string }[] }; takes: Take[]; running: Running | null }
+type Song = { id: string; title: string; published: boolean; check: CheckSummary | null }
+type JobDetail = { name: string; config: { samples?: { frame: number; label: string }[] }; takes: Take[]; songs: Song[]; running: Running | null }
 type Preset = { title: string; prompt: string; colour: string | null; seed: number }
 type DeforumOptions = { presets: Record<string, Preset>; colours: string[] }
 type Run = Running & { status: 'running' | 'succeeded' | 'failed'; log: string }
@@ -38,19 +43,8 @@ const SAMPLES_COST = COST.samples
 /** "Start from" choice with nothing filled in. The model's default settings (Lush and Light's) still apply underneath. */
 const BLANK = 'blank'
 
-const pad = (n: number) => String(n).padStart(4, '0')
-const jobFile = (job: string, rel: string) => `/__admin/files/${job}/${rel}`
 const colourUrl = (name: string) => `/__admin/colours/${name}`
-/** The pipeline's own error message from a failed run's log. */
-const reason = (log: string) => log.match(/^error: (.*)$/im)?.[1] ?? log.match(/Error: (.*)$/m)?.[1] ?? 'That failed; nothing was changed.'
 const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9-]+/g, '-')
-
-async function api<T>(url: string, body?: unknown): Promise<T> {
-  const res = await fetch(url, body === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-  const json = await res.json()
-  if (!res.ok) throw new Error(json.error ?? res.statusText)
-  return json as T
-}
 
 // Formulaire ships its CSS inside `@layer formulaire`. Tailwind's reset is
 // unlayered, and unlayered rules always beat layered ones, so the layer
@@ -293,7 +287,7 @@ function NewDream({ options, busy, existing, onCreate, onUploaded }: {
   )
 }
 
-function TakeCard({ job, take, samples, presets, activity, generating, onGenerate, onUpdate }: {
+function TakeCard({ job, take, samples, presets, activity, generating, onGenerate, onUpdate, onChanged }: {
   job: string
   take: Take
   samples: { frame: number; label: string }[]
@@ -303,6 +297,7 @@ function TakeCard({ job, take, samples, presets, activity, generating, onGenerat
   generating: boolean
   onGenerate: (take: string, action: Action) => void
   onUpdate: (take: string, change: { status?: Take['status']; notes?: string }) => void
+  onChanged: () => void
 }) {
   const mine = activity?.take === take.id ? activity : null
   const working = mine !== null && !mine.failed
@@ -429,6 +424,12 @@ function TakeCard({ job, take, samples, presets, activity, generating, onGenerat
           className="ml-auto w-full rounded border border-stone-300 bg-white px-2 py-1 text-sm text-stone-900 sm:w-72"
         />
       </div>
+      {take.clipCheck !== undefined && take.status !== 'rejected' && (
+        <div className="mt-3">
+          <PersonCheck job={job} take={take.id} title="People in the clip" clip summary={take.clipCheck} busy={generating} onChanged={onChanged} />
+          <p className="text-xs text-stone-500">The share of clip frames flagged is roughly what the full song will need replaced.</p>
+        </div>
+      )}
       {isDeforum && (take.status === 'samples-approved' || take.status === 'clip-approved') && (
         <p className="mt-2 text-xs text-stone-500">Long runs are safe to interrupt: starting one again carries on from where it stopped, without paying twice.</p>
       )}
@@ -542,7 +543,7 @@ export default function Admin() {
   const inReview = takes.filter((t) => t.status !== 'generated' && t.status !== 'rejected')
   const finished = takes.filter((t) => t.status === 'generated')
   const rejected = takes.filter((t) => t.status === 'rejected')
-  const card = (take: Take) => <TakeCard key={take.id} job={job} take={take} samples={samples} presets={options.presets} activity={activity} generating={generating} onGenerate={generate} onUpdate={update} />
+  const card = (take: Take) => <TakeCard key={take.id} job={job} take={take} samples={samples} presets={options.presets} activity={activity} generating={generating} onGenerate={generate} onUpdate={update} onChanged={() => reload().catch(fail)} />
 
   return (
     // The player's global styles lock the page (overflow hidden, touch-action none), so this view scrolls itself.
@@ -583,6 +584,21 @@ export default function Admin() {
           <section className="mb-10">
             <h2 className="mb-4 font-serif text-2xl">Finished</h2>
             {finished.map(card)}
+          </section>
+        )}
+
+        {(detail?.songs.length ?? 0) > 0 && (
+          <section className="mb-10">
+            <h2 className="mb-1 font-serif text-2xl">People check</h2>
+            <p className="mb-3 text-sm text-stone-600">
+              Every dream with a full song, published ones included. The check is free and runs on this machine. It flags a literal person, hands, or a cut-out of the subject; a shape that only looks like a person is the
+              intended look and is left alone. A flagged frame is re-rendered from the frame before it, or that frame is held; the original is always kept.
+            </p>
+            <div className="rounded-lg border border-stone-300 bg-white px-4">
+              {detail!.songs.map((song) => (
+                <PersonCheck key={song.id} job={job} take={song.id} title={song.published ? `${song.title} (published)` : song.title} summary={song.check} busy={generating} onChanged={() => reload().catch(fail)} />
+              ))}
+            </div>
           </section>
         )}
 
