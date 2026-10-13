@@ -230,6 +230,8 @@ function startRun(job: string, body: Record<string, unknown>): Run {
   const args = actionArgs(job, body)
   const action = String(body.action)
   if (PAID_ACTIONS.includes(action) && paidRun(job)) throw new Error('Something is already generating for this footage; wait for it to finish.')
+  // A check or hold rewrites the same frames/, replaced/ and check.json a paid run is writing.
+  if ((action === 'check' || action === 'hold') && paidRun(job)) throw new Error('Wait for the current generation on this footage to finish first.')
   const run: Run = { id: `${Date.now()}-${runs.size}`, job, action, take: String(body.take ?? ''), started: Date.now(), args, status: 'running', log: `$ ${args.join(' ')}\n` }
   runs.set(run.id, run)
   const child = spawn('bun', ['run', 'src/cli.ts', ...args], { cwd: PIPELINE_DIR, env: pipelineEnv() })

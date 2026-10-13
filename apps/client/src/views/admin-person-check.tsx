@@ -16,9 +16,9 @@ type Detail = {
   replaced: number[]
 }
 
-/** Rough Replicate cost of re-rendering one dream frame (A100, ~21s). */
+/** Rough Replicate cost of re-rendering one dream frame (A100, ~21s), before rerolls: a frame still scored as a person is re-rendered up to twice more. */
 const COST_PER_FRAME = 0.03
-const dollars = (frames: number) => `about $${Math.max(0.05, frames * COST_PER_FRAME).toFixed(2)}`
+const dollars = (frames: number) => `about $${Math.max(0.05, frames * COST_PER_FRAME).toFixed(2)} before retries`
 const plain = 'rounded border border-stone-300 px-2.5 py-1 text-sm hover:bg-stone-100 disabled:opacity-40'
 const primary = 'rounded bg-stone-900 px-2.5 py-1 text-sm font-medium text-white disabled:opacity-40'
 
