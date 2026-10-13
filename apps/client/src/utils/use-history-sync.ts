@@ -31,7 +31,23 @@ function urlFor(dreamId: string | null) {
 }
 
 function findDream(id: string | null) {
+  const preview = previewDream()
+  if (preview) return preview
   return id ? (dreams as Dream[]).find((dream) => dream.id === id) : undefined
+}
+
+/**
+ * Dev only: `?preview=<job>/<take>` plays a take's 15s test clip from the
+ * admin dev server (see vite-plugin-admin.ts) in the real player, without
+ * it being in dreams.json.
+ */
+function previewDream(): Dream | undefined {
+  if (!import.meta.env.DEV) return undefined
+  const preview = new URLSearchParams(location.search).get('preview')
+  const match = preview?.match(/^([\w-]+)\/([\w-]+)$/)
+  if (!match) return undefined
+  const [, job, take] = match
+  return { id: `preview-${take}`, title: `Preview: ${take}`, link: '', prompt: '', src: `/__admin/files/${job}/7-dreams/${take}/preview` }
 }
 
 function savedTime(dreamId: string) {

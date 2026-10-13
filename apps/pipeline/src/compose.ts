@@ -146,6 +146,64 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
   }
 }
 
+export interface ComposePreviewResult {
+  /** `7-dreams/<take>/preview/` — `video.mov` and `video-small.mov`, the same names the player loads. */
+  previewDir: string
+  videoPath: string
+  videoSmallPath: string
+}
+
+/**
+ * A short test composite of one frame range (`dream-clip`), with the
+ * matching slice of the song's audio, for reviewing a take in the real
+ * player before paying for the full song
+ * (plans/ready/frame-preview-approval-tool.md). Same 7-panel order as
+ * `compose`; everything lands in `7-dreams/<take>/preview/`, so the shared
+ * panel videos and the take's real output are untouched.
+ */
+export async function composePreview(
+  job: Job,
+  input: Omit<ComposeInput, 'durationSeconds'>,
+  range: { start: number; frames: number }
+): Promise<ComposePreviewResult> {
+  const previewDir = `7-dreams/${input.take}/preview`
+  const panelInputs: [string, string, 'png' | 'jpg'][] = [
+    ['1-words', input.wordsFramesDir, 'jpg'],
+    ['2-portrait', input.portraitFramesDir, 'jpg'],
+    ['3-background', input.backgroundFramesDir, 'jpg'],
+    ['4-matte', input.matteFramesDir, 'png'],
+    ['5-depth', input.depthFramesDir, 'jpg'],
+    ['6-outline', input.outlineFramesDir, 'jpg'],
+    ['7-dream', input.dreamFramesDir, 'jpg'],
+  ]
+  const panels: string[] = []
+  for (const [name, dir, ext] of panelInputs) {
+    const out = await videoPath(job, `${previewDir}/panels/${name}`)
+    await compileFramesToVideo(dir, out, {
+      fps: job.fps,
+      scale: `${PANEL_SIZE}:${PANEL_SIZE}`,
+      ext,
+      startNumber: range.start,
+      frameCount: range.frames,
+    })
+    panels.push(out)
+  }
+
+  const compositePath = await videoPath(job, `${previewDir}/composite`)
+  await hstackWithAudio(panels, compositePath, {
+    fps: job.fps,
+    duration: range.frames / job.fps,
+    audioOffset: (range.start - 1) / job.fps,
+  })
+
+  const videoPathOut = await videoPath(job, `${previewDir}/video`)
+  const videoSmallPath = await videoPath(job, `${previewDir}/video-small`)
+  await compress(compositePath, videoPathOut)
+  await compress(compositePath, videoSmallPath, { half: true })
+
+  return { previewDir: path.join(job.dir, previewDir), videoPath: videoPathOut, videoSmallPath }
+}
+
 /** Compiles a frame folder into a PANEL_SIZE² square panel video — every frame-based panel is already square, so this is a plain resize, no crop. `panelDir` is the panel's own folder relative to the job root (e.g. `2-portrait`, or `7-dreams/<take>` for the one per-take panel) — its compiled video lands at `<panelDir>/video/panel.mov`. `ext` must match the frame folder's actual format (alpha/matte stays png; everything else is jpg — see init.ts). */
 async function normalizePanel(job: Job, panelDir: string, framesDir: string, ext: 'png' | 'jpg'): Promise<string> {
   const out = await videoPath(job, `${panelDir}/video/panel`)
@@ -156,9 +214,10 @@ async function normalizePanel(job: Job, panelDir: string, framesDir: string, ext
 async function hstackWithAudio(
   panels: string[],
   outputPath: string,
-  opts: { fps: number; duration: number }
+  opts: { fps: number; duration: number; audioOffset?: number }
 ): Promise<void> {
   const inputArgs = panels.flatMap((p) => ['-i', p])
+  if (opts.audioOffset) inputArgs.push('-ss', String(opts.audioOffset))
   const labels = panels.map((_, i) => `[${i}:v]`).join('')
   const filter = `${labels}hstack=inputs=${panels.length}[v]`
 

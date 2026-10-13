@@ -25,3 +25,9 @@ models/**/output.png
 
 # Pipeline working directories — extracted frames, per-step Replicate outputs
 apps/pipeline/.jobs
+
+# Deforum 0.7.1 source, fetched by models/deforum/fetch.sh (pinned commit), not committed.
+models/deforum/deforum/
+
+# Colour references for dream takes (from the HDD backups/Dreaming/Colours, ~55MB), not committed.
+apps/pipeline/resources/colours/

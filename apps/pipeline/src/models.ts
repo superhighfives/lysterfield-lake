@@ -82,4 +82,17 @@ export const MODELS = {
    */
   outline:
     'superhighfives/lysterfield-lineart:025736d04810b15b36ecc601992303a24df7880554a52b1c7bbac1ac9156cc81',
-} as const satisfies Record<string, `${string}/${string}:${string}`>
+  /**
+   * Dream directions brainstorm (`dream-directions`) — Claude via Replicate,
+   * so the pipeline needs no separate Anthropic key. Opus 4.7 is the most
+   * capable Opus Replicate hosts. An official model, so it runs by name
+   * (Replicate keeps it on its latest version) rather than a pinned version.
+   */
+  directions: 'anthropic/claude-opus-4.7',
+  /**
+   * Dream takes the legacy way (`dream-deforum.ts`): Deforum 0.7.1 with the legacy render.py,
+   * settings, negative prompt and colour reference — `models/deforum/`, private, A100 (its pinned
+   * PyTorch 1.12.1 predates the L40S/H100). See plans/ready/own-deforum-dream-model.md.
+   */
+  deforum: 'superhighfives/lysterfield-deforum:06f4753192bff10b1be840a545b510d290f5a1059f182aa638c7de60c9400000',
+} as const satisfies Record<string, `${string}/${string}` | `${string}/${string}:${string}`>

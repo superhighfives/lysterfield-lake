@@ -19,6 +19,15 @@ export interface JobConfig {
   stepFps?: number
   /** Free-text note per panel folder on where its frames came from, for jobs that mix reused and generated panels. */
   panels?: Record<string, string>
+  /**
+   * Fixed frames every dream direction is judged on (`dream-samples`), by
+   * 1-based frame number. Picked to stress the look (close-up, fast motion,
+   * no person...), and ideally on `stepFps` keyframes so the full take can
+   * reuse them.
+   */
+  samples?: { frame: number; label: string }[]
+  /** The stretch `dream-clip` renders as a short test composite: first frame (1-based) and frame count. */
+  clip?: { start: number; frames: number }
 }
 
 export interface Job extends JobConfig {
@@ -199,19 +208,19 @@ export async function extractFrames(
 export async function compileFramesToVideo(
   inputFramesDir: string,
   outputVideoPath: string,
-  opts: { fps: number; scale?: string; crf?: number; ext?: 'png' | 'jpg' }
+  opts: { fps: number; scale?: string; crf?: number; ext?: 'png' | 'jpg'; startNumber?: number; frameCount?: number }
 ): Promise<void> {
-  const args = [
-    '-y',
-    '-framerate',
-    String(opts.fps),
+  const args = ['-y', '-framerate', String(opts.fps)]
+  if (opts.startNumber !== undefined) args.push('-start_number', String(opts.startNumber))
+  args.push(
     '-i',
     path.join(inputFramesDir, `%04d.${opts.ext ?? 'png'}`),
     '-c:v',
     'libx264',
     '-pix_fmt',
-    'yuv420p',
-  ]
+    'yuv420p'
+  )
+  if (opts.frameCount !== undefined) args.push('-frames:v', String(opts.frameCount))
   if (opts.scale) args.push('-vf', `scale=${opts.scale}`)
   if (opts.crf !== undefined) args.push('-crf', String(opts.crf))
   args.push(outputVideoPath)

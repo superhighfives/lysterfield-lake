@@ -1,0 +1,4 @@
+deforum/.git
+deforum/*.ipynb
+legacy/Deforum_Stable_Diffusion.py
+__pycache__
