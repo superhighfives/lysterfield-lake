@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { GridForm } from 'formulaire-ui'
 import formulaireCss from 'formulaire-ui/styles.css?raw'
 
@@ -95,19 +96,55 @@ function Steps() {
   )
 }
 
-/** A button for the expensive stage: the first click arms it, the second spends. */
-function ConfirmButton({ label, cost, disabled, onConfirm }: { label: string; cost: string; disabled?: boolean; onConfirm: () => void }) {
-  const [armed, setArmed] = useState(false)
+/**
+ * The full song is the one expensive, slow step, so it asks first: a dialog
+ * that says what it costs, and won't start until the reviewer confirms the
+ * clip shows no person (panel 7 must never show one, and clean samples
+ * aren't proof of that).
+ */
+function FullSongButton({ take, disabled, onConfirm }: { take: string; disabled?: boolean; onConfirm: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [checked, setChecked] = useState(false)
+  const [cost, time] = COST.full.split(', ')
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => (armed ? (setArmed(false), onConfirm()) : setArmed(true))}
-      onBlur={() => setArmed(false)}
-      className={`rounded px-3 py-1.5 text-sm font-medium disabled:opacity-40 ${armed ? 'bg-amber-400 text-stone-900' : 'bg-stone-900 text-white'}`}
+    <AlertDialog.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        setChecked(false)
+      }}
     >
-      {armed ? `Click again to spend ${cost}` : `${label} (${cost})`}
-    </button>
+      <AlertDialog.Trigger disabled={disabled} className="rounded bg-stone-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40">
+        Generate the full song…
+      </AlertDialog.Trigger>
+      <AlertDialog.Portal>
+        <AlertDialog.Backdrop className="fixed inset-0 z-40 bg-stone-900/40" />
+        <AlertDialog.Popup className="fixed left-1/2 top-1/2 z-50 w-[min(30rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white p-6 font-sans text-stone-900 shadow-xl [color-scheme:light] [touch-action:auto]">
+          <AlertDialog.Title className="font-serif text-2xl">Generate the full song for {take}?</AlertDialog.Title>
+          <AlertDialog.Description className="mt-2 text-sm text-stone-600">
+            This renders the whole song on Replicate: {cost}, over {time}. It can be stopped and started again without paying twice for finished work, but the money for what has already rendered is spent.
+          </AlertDialog.Description>
+          <label className="mt-4 flex cursor-pointer items-start gap-2 rounded bg-amber-50 p-3 text-sm">
+            <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="mt-0.5" />
+            <span>I watched the whole 15-second clip and no person appears in the dream. A person has come through on back views before, even when the samples looked clean.</span>
+          </label>
+          <div className="mt-5 flex justify-end gap-2">
+            <AlertDialog.Close className="rounded border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-100">Cancel</AlertDialog.Close>
+            <button
+              type="button"
+              disabled={!checked}
+              onClick={() => {
+                setOpen(false)
+                onConfirm()
+              }}
+              className="rounded bg-stone-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+            >
+              Spend {cost} and start
+            </button>
+          </div>
+        </AlertDialog.Popup>
+      </AlertDialog.Portal>
+    </AlertDialog.Root>
   )
 }
 
@@ -374,7 +411,7 @@ function TakeCard({ job, take, samples, presets, activity, generating, onGenerat
         {take.status === 'clip-approved' && !working && (
           <>
             {watchClip}
-            {isDeforum && <ConfirmButton label="Generate the full song" cost={COST.full.split(',')[0]} disabled={generating} onConfirm={() => onGenerate(take.id, 'full')} />}
+            {isDeforum && <FullSongButton take={take.id} disabled={generating} onConfirm={() => onGenerate(take.id, 'full')} />}
             {reject}
           </>
         )}
