@@ -162,7 +162,6 @@ switch (step) {
       job,
       frameDirFlag(job, '0-source/frames', 'source'),
       frameDirFlag(job, '4-matte/frames', 'alpha'),
-      frameDirFlag(job, '5-depth/frames', 'depth'),
       concurrency
     )
     console.log(JSON.stringify(result, null, 2))

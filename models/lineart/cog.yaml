@@ -1,0 +1,7 @@
+build:
+  # CPU, like models/outline: a small 3-block generator at 1024px doesn't need
+  # a GPU, and CPU avoids the GPU boot problems that model hit on Replicate.
+  gpu: false
+  python_version: "3.11"
+  python_requirements: requirements.txt
+predict: "predict.py:Predictor"
