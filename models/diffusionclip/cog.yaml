@@ -13,7 +13,7 @@ build:
   python_requirements: cog-requirements.txt
 
   run:
-    # python3 -> python symlink: same fix as models/outline/cog.yaml — the
+    # python3 -> python symlink: same fix the retired ArtLine model (models/outline) needed — the
     # default CUDA base image only provides python3, and cog's own
     # verification step fails without this.
     - ln -sf $(which python3) /usr/bin/python
