@@ -385,7 +385,7 @@ parent plan, not a substitute for per-phase specs.
 - [x] Phase 4a-4c: compose/manifest, player and choose screen polish, frontend polish
 - [x] Phase 5: end-to-end run + parity check against an existing published scene — superseded by 4e, see `done/phase-5-end-to-end-parity-check.md`
 - [x] Phase 4e: full-song job `.jobs/full-video` — legacy panels reused, panel 3 via Bria, legacy dreams imported under readable ids, numbered job layout
-- [ ] Phase 4f: regenerate and publish all ten dreams (`ready/phase-4f-regenerate-and-publish-dreams.md`)
+- [ ] Phase 4f: regenerate and publish all ten dreams (now the Publish stage of `in-progress/dreams.md`)
 - [ ] Phase 6: archive `lysterfield-lake-pipeline`
 
 ## Phase 1 notes (done 2026-08-17)

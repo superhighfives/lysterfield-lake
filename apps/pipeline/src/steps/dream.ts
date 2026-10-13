@@ -25,7 +25,7 @@ export interface DreamOptions {
 
 /**
  * Where a take is in the preview/approval loop
- * (plans/ready/frame-preview-approval-tool.md). Each stage needs the one
+ * (plans/done/frame-preview-approval-tool.md). Each stage needs the one
  * before it approved; the full `dream` run needs `clip-approved`.
  */
 export const TAKE_STATUSES = ['proposed', 'samples-approved', 'clip-approved', 'generated', 'rejected'] as const

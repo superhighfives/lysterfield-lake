@@ -157,7 +157,7 @@ export interface ComposePreviewResult {
  * A short test composite of one frame range (`dream-clip`), with the
  * matching slice of the song's audio, for reviewing a take in the real
  * player before paying for the full song
- * (plans/ready/frame-preview-approval-tool.md). Same 7-panel order as
+ * (plans/done/frame-preview-approval-tool.md). Same 7-panel order as
  * `compose`; everything lands in `7-dreams/<take>/preview/`, so the shared
  * panel videos and the take's real output are untouched.
  */

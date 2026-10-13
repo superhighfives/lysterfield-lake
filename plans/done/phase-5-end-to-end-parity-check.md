@@ -19,7 +19,7 @@ regenerating panels, the full-song job reuses the legacy run's portrait,
 matte, depth and outline frames and its ten Deforum dreams, and generates
 only panel 3 (Bria). The fixed-seed flicker test's verdict was never
 recorded. Regenerating and publishing the dreams is
-[phase 4f](../ready/phase-4f-regenerate-and-publish-dreams.md).
+[phase 4f](../in-progress/dreams.md).
 
 ## Architecture
 
