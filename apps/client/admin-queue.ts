@@ -182,6 +182,10 @@ export function createQueue(opts: { dir: string; cwd: string; env: () => NodeJS.
       finish(task, 'cancelled')
       pump()
     },
+    /** Stops pumping. A dev-server restart makes a new queue over the same files, and two pumping queues could both start one queued task. */
+    close() {
+      clearInterval(timer)
+    },
     /** Forgets a job's finished tasks. */
     clear(job: string) {
       for (const task of Array.from(tasks.values()).filter((t) => t.job === job && ended(t))) {

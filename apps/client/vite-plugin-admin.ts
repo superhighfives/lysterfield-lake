@@ -252,6 +252,10 @@ export default function adminPlugin(): Plugin {
     name: 'lysterfield-admin',
     apply: 'serve',
     configureServer(server) {
+      server.httpServer?.on('close', () => {
+        queue?.close()
+        queue = undefined
+      })
       server.middlewares.use('/__admin', async (req, res) => {
         try {
           const url = new URL(req.url ?? '/', 'http://localhost')
