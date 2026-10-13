@@ -54,7 +54,11 @@ const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9-]+/g, '-')
 const FORMULAIRE_CSS =
   formulaireCss.replace(/@layer formulaire\s*\{/, '').replace(/\}\s*$/, '') +
   // Formulaire doesn't style a disabled button.
-  '.gf-button:disabled { opacity: 0.45; cursor: not-allowed; }'
+  '.gf-button:disabled { opacity: 0.45; cursor: not-allowed; }' +
+  // Formulaire's own palette is cool blue-grey with a blue accent; the rest of this page is warm
+  // stone with a neutral primary button. These are Tailwind's stone values, so the form sits in it.
+  ':root :is(.gf, .gf-popup) { --gf-accent: #1c1917; --gf-ink: #1c1917; --gf-muted: #57534e; --gf-faint: #78716c; --gf-line: #d6d3d1; --gf-paper: #ffffff; --gf-paper-2: #f5f5f4; --gf-highlight: #e7e5e4; }' +
+  ':root.dark :is(.gf, .gf-popup) { --gf-accent: #f5f5f4; --gf-ink: #f5f5f4; --gf-muted: #a8a29e; --gf-faint: #a8a29e; --gf-line: #44403c; --gf-paper: #1c1917; --gf-paper-2: #292524; --gf-highlight: #44403c; }'
 
 
 /** What a take's status means for the person reviewing it. */
