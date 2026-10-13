@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { GridForm } from 'formulaire-ui'
 import formulaireCss from 'formulaire-ui/styles.css?raw'
+import ThemeToggle from '../components/theme-toggle.tsx'
+import { useStore } from '../store.ts'
 import { api, jobFile, pad, reason } from './admin-api.ts'
 import { PersonCheck, type CheckSummary } from './admin-person-check.tsx'
 
@@ -454,23 +456,12 @@ export default function Admin() {
   const loadOptions = useCallback(async () => setOptions(await api<DeforumOptions>('/__admin/api/deforum')), [])
   const fail = (e: unknown) => setError((e as Error).message)
 
-  // Light or dark with the system. Tailwind's dark variants key off a `dark` class and Formulaire off
-  // `data-theme`, both on <html> so the confirmation dialog (rendered outside this view) follows too.
+  // The same light/dark toggle (and saved preference) as the main site. It sets the `dark` class on
+  // <html> that Tailwind's dark variants key off; Formulaire keys off `data-theme` instead.
+  const colorScheme = useStore((state) => state.colorScheme)
   useEffect(() => {
-    const query = matchMedia('(prefers-color-scheme: dark)')
-    const apply = () => {
-      document.documentElement.classList.toggle('dark', query.matches)
-      document.documentElement.dataset.theme = query.matches ? 'dark' : 'light'
-    }
-
-    apply()
-    query.addEventListener('change', apply)
-    return () => {
-      query.removeEventListener('change', apply)
-      document.documentElement.classList.remove('dark')
-      delete document.documentElement.dataset.theme
-    }
-  }, [])
+    document.documentElement.dataset.theme = colorScheme
+  }, [colorScheme])
   useEffect(() => {
     api<string[]>('/__admin/api/jobs')
       .then((list) => {
@@ -567,17 +558,19 @@ export default function Admin() {
       <div className="mx-auto max-w-5xl px-6 py-10">
         <header className="mb-6 flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <h1 className="font-serif text-4xl">Dreams</h1>
-          <p className="text-sm text-stone-600 dark:text-stone-400">Make and review new looks for the dream panel. Only runs on this machine.</p>
-          {jobs.length > 1 && (
-            <label className="ml-auto text-sm text-stone-600 dark:text-stone-400">
-              Footage{' '}
-              <select value={job} onChange={(e) => setJob(e.target.value)} disabled={generating} className="rounded border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-2 py-1 text-stone-900 dark:text-stone-100">
-                {jobs.map((j) => (
-                  <option key={j}>{j}</option>
-                ))}
-              </select>
-            </label>
-          )}
+          <p className="text-sm text-stone-600 dark:text-stone-400">Make and review new looks for the dream panel.</p>
+          <div className="ml-auto flex items-center gap-4">
+            {jobs.length > 1 && (
+              <label className="text-sm text-stone-600 dark:text-stone-400">
+                Footage{' '}
+                <select value={job} onChange={(e) => setJob(e.target.value)} disabled={generating} className="rounded border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-2 py-1 text-stone-900 dark:text-stone-100">
+                  {jobs.map((j) => (
+                    <option key={j}>{j}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
         </header>
         <Steps />
 
@@ -623,6 +616,11 @@ export default function Admin() {
             <div className="mt-4">{rejected.map(card)}</div>
           </details>
         )}
+
+        <footer className="flex items-center justify-between border-t border-stone-300 dark:border-stone-700 pt-4 text-sm text-stone-500 dark:text-stone-400">
+          <span>Only runs on this machine.</span>
+          <ThemeToggle />
+        </footer>
       </div>
     </div>
   )
