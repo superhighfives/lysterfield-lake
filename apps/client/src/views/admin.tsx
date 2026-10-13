@@ -4,7 +4,8 @@ import { GridForm } from 'formulaire-ui'
 import formulaireCss from 'formulaire-ui/styles.css?raw'
 import ThemeToggle from '../components/theme-toggle.tsx'
 import { useStore } from '../store.ts'
-import { api, jobFile, pad, reason } from './admin-api.ts'
+import { active, api, jobFile, pad, reason, runAction, type Task } from './admin-api.ts'
+import { Tasks } from './admin-tasks.tsx'
 import { PersonCheck, type CheckSummary } from './admin-person-check.tsx'
 
 // Dev-only page for making and reviewing new dreams (panel 7), and for
@@ -29,13 +30,10 @@ type Take = {
   preset?: string
 }
 type Action = 'samples' | 'clip' | 'full'
-type Running = { id: string; take: string; action: string; started: number }
 type Song = { id: string; title: string; published: boolean; check: CheckSummary | null }
-type JobDetail = { name: string; config: { samples?: { frame: number; label: string }[] }; takes: Take[]; songs: Song[]; running: Running | null }
+type JobDetail = { name: string; config: { samples?: { frame: number; label: string }[] }; takes: Take[]; songs: Song[] }
 type Preset = { title: string; prompt: string; colour: string | null; seed: number }
 type DeforumOptions = { presets: Record<string, Preset>; colours: string[] }
-type Run = Running & { status: 'running' | 'succeeded' | 'failed'; log: string }
-type Activity = Running & { log: string; failed?: boolean }
 type NewTake = { name: string; prompt: string; colour: string | null; preset: string; negative: string; seed?: number }
 
 // Rough Replicate cost and time for each paid stage of a Deforum take (A100, ~21s a dream frame).
@@ -162,9 +160,8 @@ function Elapsed({ since }: { since: number }) {
   )
 }
 
-function NewDream({ options, busy, existing, onCreate, onUploaded }: {
+function NewDream({ options, existing, onCreate, onUploaded }: {
   options: DeforumOptions
-  busy: boolean
   existing: string[]
   onCreate: (take: NewTake) => void
   onUploaded: () => Promise<void>
@@ -222,7 +219,7 @@ function NewDream({ options, busy, existing, onCreate, onUploaded }: {
 
   const id = name.replace(/^-+|-+$/g, '')
   const taken = existing.includes(id)
-  const ready = !busy && prompt.trim() !== '' && id !== '' && !taken && preset !== ''
+  const ready = prompt.trim() !== '' && id !== '' && !taken && preset !== ''
   const swatch = (selected: boolean) => `h-14 w-14 overflow-hidden rounded ${selected ? 'ring-2 ring-stone-900 dark:ring-stone-100 ring-offset-2 dark:ring-offset-stone-950' : 'opacity-80 hover:opacity-100'}`
 
   return (
@@ -283,7 +280,7 @@ function NewDream({ options, busy, existing, onCreate, onUploaded }: {
           </GridForm.Row>
         </GridForm.Section>
         <GridForm.Actions>
-          <span className="text-sm text-stone-600 dark:text-stone-400">{busy ? 'Wait for the current run to finish.' : `Runs on Replicate: ${SAMPLES_COST}.`}</span>
+          <span className="text-sm text-stone-600 dark:text-stone-400">{`Runs on Replicate: ${SAMPLES_COST}.`}</span>
           <GridForm.Button type="submit" variant="primary" disabled={!ready}>
             Generate 5 samples
           </GridForm.Button>
@@ -293,21 +290,25 @@ function NewDream({ options, busy, existing, onCreate, onUploaded }: {
   )
 }
 
-function TakeCard({ job, take, samples, presets, activity, generating, onGenerate, onUpdate, onChanged }: {
+function TakeCard({ job, take, samples, presets, tasks, onGenerate, onUpdate, onChanged }: {
   job: string
   take: Take
   samples: { frame: number; label: string }[]
   presets: Record<string, Preset>
-  activity: Activity | null
-  /** Something paid is already running for this footage. */
-  generating: boolean
+  /** This footage's queued, running and recent tasks. */
+  tasks: Task[]
   onGenerate: (take: string, action: Action) => void
   onUpdate: (take: string, change: { status?: Take['status']; notes?: string }) => void
   onChanged: () => void
 }) {
-  const mine = activity?.take === take.id ? activity : null
+  // The take's latest generation task: shown while it waits or runs, and afterwards only if it failed.
+  const latest = tasks.filter((t) => t.take === take.id && t.action in COST).at(-1)
+  const mine = latest && (active(latest) || latest.status === 'failed') ? { ...latest, failed: latest.status === 'failed' } : null
   const working = mine !== null && !mine.failed
-  const status = describe(take, working ? mine.action : null, samples.length)
+  const queued = mine?.status === 'queued'
+  /** Anything at all waiting or running for this take: one task per dream at a time, so a second would only queue. */
+  const generating = tasks.some((t) => t.take === take.id && active(t))
+  const status = queued ? { label: 'Queued', tone: 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300' } : describe(take, working ? mine.action : null, samples.length)
   const allSamples = take.samples.length >= samples.length
   const isDeforum = take.method === 'deforum'
   const sample = (frame: number, ext: string) => jobFile(job, `7-dreams/${take.id}/samples/${pad(frame)}.${ext}`)
@@ -331,9 +332,9 @@ function TakeCard({ job, take, samples, presets, activity, generating, onGenerat
       <header className="mb-2 flex flex-wrap items-center gap-3">
         <h3 className="font-serif text-xl">{take.id}</h3>
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${status.tone}`}>{status.label}</span>
-        {mine && working && (
+        {mine && working && !queued && (
           <span className="text-xs text-stone-500 dark:text-stone-400">
-            <Elapsed since={mine.started} />
+            <Elapsed since={mine.started ?? mine.created} />
             {progress ? `, ${progress[1]} of ${progress[2]} frames` : ''}
             {mine.action in COST ? ` (usually ${COST[mine.action as Action].split(', ')[1]})` : ''}
           </span>
@@ -432,7 +433,7 @@ function TakeCard({ job, take, samples, presets, activity, generating, onGenerat
       </div>
       {take.clipCheck !== undefined && take.status !== 'rejected' && (
         <div className="mt-3">
-          <PersonCheck job={job} take={take.id} title="People in the clip" clip summary={take.clipCheck} busy={generating} onChanged={onChanged} />
+          <PersonCheck job={job} take={take.id} title="People in the clip" clip summary={take.clipCheck} tasks={tasks} onChanged={onChanged} />
           <p className="text-xs text-stone-500 dark:text-stone-400">The share of clip frames flagged is roughly what the full song will need replaced.</p>
         </div>
       )}
@@ -449,10 +450,11 @@ export default function Admin() {
   const [job, setJob] = useState('')
   const [detail, setDetail] = useState<JobDetail | null>(null)
   const [options, setOptions] = useState<DeforumOptions>({ presets: {}, colours: [] })
-  const [activity, setActivity] = useState<Activity | null>(null)
+  /** This footage's tasks (admin-queue.ts): everything waiting or running, and the most recent finished ones. */
+  const [tasks, setTasks] = useState<Task[]>([])
   const [error, setError] = useState('')
-  /** The paid run this page is following, so it is never followed twice. */
-  const following = useRef('')
+  /** Tasks seen waiting or running, so the page reloads the footage's details once when each ends. */
+  const unfinished = useRef(new Set<string>())
 
   const reload = useCallback(async () => {
     if (job) setDetail(await api<JobDetail>(`/__admin/api/jobs/${job}`))
@@ -479,45 +481,28 @@ export default function Admin() {
     reload().catch(fail)
   }, [reload])
 
-  /** Waits for a pipeline run to end, reporting its log as it goes. */
-  const wait = async (runId: string, onLog?: (run: Run) => void): Promise<Run> => {
-    for (;;) {
-      const run = await api<Run>(`/__admin/api/runs/${runId}`)
-      onLog?.(run)
-      if (run.status !== 'running') return run
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-    }
-  }
-
-  /** Follows a paid run on its take's card until it ends. */
-  const follow = useCallback(
-    async (running: Running) => {
-      if (following.current === running.id) return
-      following.current = running.id
-      setActivity({ ...running, log: '' })
-      try {
-        const run = await wait(running.id, (state) => setActivity({ ...running, log: state.log }))
-        setActivity(run.status === 'failed' ? { ...running, log: run.log, failed: true } : null)
-        await reload()
-      } catch (e) {
-        setActivity(null)
-        fail(e)
-      }
-    },
-    [reload]
-  )
-  // A run that was already going when the page loaded (a reload during a long render).
+  const loadTasks = useCallback(async () => {
+    if (!job) return
+    const list = await api<Task[]>(`/__admin/api/jobs/${job}/tasks`)
+    setTasks(list)
+    const ended = list.filter((t) => !active(t) && unfinished.current.has(t.id))
+    unfinished.current = new Set(list.filter(active).map((t) => t.id))
+    if (ended.length > 0) await reload()
+  }, [job, reload])
+  // The queue is polled rather than followed task by task: it also holds work started before this
+  // page loaded (a reload during a long render), and several tasks can be going at once.
   useEffect(() => {
-    if (detail?.running) follow(detail.running)
-  }, [detail?.running, follow])
+    loadTasks().catch(fail)
+    const timer = setInterval(() => loadTasks().catch(fail), 2000)
+    return () => clearInterval(timer)
+  }, [loadTasks])
 
-  /** Starts a pipeline action and returns its run id. */
-  const start = (body: Record<string, unknown>) => api<{ runId: string }>(`/__admin/api/jobs/${job}/actions`, body).then((r) => r.runId)
-
+  /** Queues a generation for a take. Its card follows it from the task list. */
   const generate = async (take: string, action: Action) => {
     setError('')
     try {
-      await follow({ id: await start({ action, take }), take, action, started: Date.now() })
+      await api(`/__admin/api/jobs/${job}/actions`, { action, take })
+      await loadTasks()
     } catch (e) {
       fail(e)
     }
@@ -527,7 +512,7 @@ export default function Admin() {
   const update = async (take: string, change: { status?: Take['status']; notes?: string }) => {
     setError('')
     try {
-      const run = await wait(await start({ action: 'status', take, ...change }))
+      const run = await runAction(job, { action: 'status', take, ...change })
       if (run.status === 'failed') setError(reason(run.log))
       await reload()
     } catch (e) {
@@ -538,7 +523,7 @@ export default function Admin() {
   const create = async (take: NewTake) => {
     setError('')
     try {
-      const made = await wait(await start({ action: 'take', method: 'deforum', take: take.name, prompt: take.prompt, colour: take.colour, preset: take.preset, negative: take.negative || undefined, seed: take.seed }))
+      const made = await runAction(job, { action: 'take', method: 'deforum', take: take.name, prompt: take.prompt, colour: take.colour, preset: take.preset, negative: take.negative || undefined, seed: take.seed })
       await reload()
       if (made.status === 'failed') return setError(reason(made.log))
       await generate(take.name, 'samples')
@@ -547,13 +532,12 @@ export default function Admin() {
     }
   }
 
-  const generating = activity !== null && !activity.failed
   const takes = detail?.takes.filter((t) => t.status) ?? []
   const samples = detail?.config.samples ?? []
   const inReview = takes.filter((t) => t.status !== 'generated' && t.status !== 'rejected')
   const finished = takes.filter((t) => t.status === 'generated')
   const rejected = takes.filter((t) => t.status === 'rejected')
-  const card = (take: Take) => <TakeCard key={take.id} job={job} take={take} samples={samples} presets={options.presets} activity={activity} generating={generating} onGenerate={generate} onUpdate={update} onChanged={() => reload().catch(fail)} />
+  const card = (take: Take) => <TakeCard key={take.id} job={job} take={take} samples={samples} presets={options.presets} tasks={tasks} onGenerate={generate} onUpdate={update} onChanged={() => reload().catch(fail)} />
 
   return (
     // The player's global styles lock the page (overflow hidden, touch-action none), so this view scrolls itself.
@@ -567,7 +551,7 @@ export default function Admin() {
             {jobs.length > 1 && (
               <label className="text-sm text-stone-600 dark:text-stone-400">
                 Footage{' '}
-                <select value={job} onChange={(e) => setJob(e.target.value)} disabled={generating} className="rounded border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-2 py-1 text-stone-900 dark:text-stone-100">
+                <select value={job} onChange={(e) => setJob(e.target.value)} className="rounded border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-2 py-1 text-stone-900 dark:text-stone-100">
                   {jobs.map((j) => (
                     <option key={j}>{j}</option>
                   ))}
@@ -580,13 +564,15 @@ export default function Admin() {
 
         {error && <p className="mb-6 rounded bg-red-50 dark:bg-red-950/50 p-3 text-sm text-red-800 dark:text-red-200">{error}</p>}
 
-        <NewDream options={options} busy={generating} existing={detail?.takes.map((t) => t.id) ?? []} onCreate={create} onUploaded={loadOptions} />
+        <Tasks job={job} tasks={tasks} titles={Object.fromEntries((detail?.songs ?? []).map((song) => [song.id, song.title]))} onChanged={() => loadTasks().catch(fail)} />
+
+        <NewDream options={options} existing={detail?.takes.map((t) => t.id) ?? []} onCreate={create} onUploaded={loadOptions} />
 
         <section className="mb-10">
           <h2 className="mb-1 font-serif text-2xl">In review</h2>
           <p className="mb-4 text-sm text-stone-600 dark:text-stone-400">
             {inReview.length > 0
-              ? 'Each dream moves through samples, a 15-second clip, then the full song, and needs your approval before each paid step. In the samples, the small inset is the footage at that moment.'
+              ? 'Each dream moves through samples, a 15-second clip, then the full song, and needs your approval before each paid step. Several dreams can generate at once. In the samples, the small inset is the footage at that moment.'
               : 'Nothing to review. Generate samples above to start.'}
           </p>
           {inReview.map(card)}
@@ -608,7 +594,7 @@ export default function Admin() {
             </p>
             <div className="rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4">
               {detail!.songs.map((song) => (
-                <PersonCheck key={song.id} job={job} take={song.id} title={song.published ? `${song.title} (published)` : song.title} summary={song.check} busy={generating} onChanged={() => reload().catch(fail)} />
+                <PersonCheck key={song.id} job={job} take={song.id} title={song.published ? `${song.title} (published)` : song.title} summary={song.check} tasks={tasks} onChanged={() => reload().catch(fail)} />
               ))}
             </div>
           </section>

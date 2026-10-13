@@ -1,9 +1,9 @@
-import { spawn } from 'node:child_process'
 import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Plugin } from 'vite'
+import { createQueue } from './admin-queue.ts'
 
 /**
  * Dev-only API for the /admin page (plans/in-progress/dreams.md): reads
@@ -27,12 +27,6 @@ const CONTENT_TYPES: Record<string, string> = {
   '.webm': 'video/webm',
   '.json': 'application/json',
 }
-
-type Run = { id: string; job: string; action: string; take: string; started: number; args: string[]; status: 'running' | 'succeeded' | 'failed'; log: string }
-const runs = new Map<string, Run>()
-/** Actions that spend money on Replicate: one at a time per job. The rest (creating a take, approving, notes) are instant and always allowed. */
-const PAID_ACTIONS = ['directions', 'samples', 'clip', 'full', 'rerender']
-const paidRun = (job: string) => Array.from(runs.values()).find((r) => r.job === job && r.status === 'running' && PAID_ACTIONS.includes(r.action))
 
 /** Pipeline env from its .env, applied over the dev server's own, so the shell's tokens never win. */
 function pipelineEnv(): NodeJS.ProcessEnv {
@@ -156,10 +150,7 @@ function jobDetail(job: string) {
           check: checkSummary(path.join(dreams, d.name)) ?? null,
         }))
     : []
-  // The paid run in progress, if any, so a reloaded page can pick its progress back up.
-  const active = paidRun(job)
-  const running = active ? { id: active.id, take: active.take, action: active.action, started: active.started } : null
-  return { name: job, config: readJson(path.join(dir, 'job.json')), takes, songs, directions, running }
+  return { name: job, config: readJson(path.join(dir, 'job.json')), takes, songs, directions }
 }
 
 /** The pipeline command for an admin action. Each one is a stage of the loop; the pipeline enforces the approval order itself. */
@@ -226,20 +217,9 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
   }
 }
 
-function startRun(job: string, body: Record<string, unknown>): Run {
-  const args = actionArgs(job, body)
-  const action = String(body.action)
-  if (PAID_ACTIONS.includes(action) && paidRun(job)) throw new Error('Something is already generating for this footage; wait for it to finish.')
-  // A check or hold rewrites the same frames/, replaced/ and check.json a paid run is writing.
-  if ((action === 'check' || action === 'hold') && paidRun(job)) throw new Error('Wait for the current generation on this footage to finish first.')
-  const run: Run = { id: `${Date.now()}-${runs.size}`, job, action, take: String(body.take ?? ''), started: Date.now(), args, status: 'running', log: `$ ${args.join(' ')}\n` }
-  runs.set(run.id, run)
-  const child = spawn('bun', ['run', 'src/cli.ts', ...args], { cwd: PIPELINE_DIR, env: pipelineEnv() })
-  child.stdout.on('data', (d) => (run.log += d))
-  child.stderr.on('data', (d) => (run.log += d))
-  child.on('close', (code) => (run.status = code === 0 ? 'succeeded' : 'failed'))
-  return run
-}
+/** Every pipeline command the page starts goes through the queue (admin-queue.ts). Made on first use, so nothing touches .jobs until the admin API is called. */
+let queue: ReturnType<typeof createQueue> | undefined
+const tasks = () => (queue ??= createQueue({ dir: path.join(JOBS_DIR, '_queue'), cwd: PIPELINE_DIR, env: pipelineEnv }))
 
 async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   let data = ''
@@ -324,12 +304,22 @@ export default function adminPlugin(): Plugin {
           }
           if (parts[1] === 'jobs' && parts[3] === 'actions' && req.method === 'POST') {
             jobDir(parts[2])
-            const run = startRun(parts[2], await readBody(req))
-            return send(res, 200, { runId: run.id })
+            const body = await readBody(req)
+            const task = tasks().add(parts[2], body, actionArgs(parts[2], body))
+            return send(res, 200, { runId: task.id })
           }
           if (parts[1] === 'runs' && parts[2]) {
-            const run = runs.get(parts[2])
-            return run ? send(res, 200, run) : send(res, 404, { error: 'no such run' })
+            const task = tasks().get(parts[2])
+            return task ? send(res, 200, task) : send(res, 404, { error: 'no such task' })
+          }
+          if (parts[1] === 'jobs' && parts[3] === 'tasks' && req.method === 'GET') return send(res, 200, tasks().list(parts[2]))
+          if (parts[1] === 'jobs' && parts[3] === 'tasks' && parts[4] === 'clear' && req.method === 'POST') {
+            tasks().clear(parts[2])
+            return send(res, 200, {})
+          }
+          if (parts[1] === 'tasks' && parts[3] === 'cancel' && req.method === 'POST') {
+            tasks().cancel(parts[2])
+            return send(res, 200, {})
           }
           return send(res, 404, { error: 'not found' })
         } catch (error) {

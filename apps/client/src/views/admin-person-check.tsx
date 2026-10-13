@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, jobFile, pad, reason, runAction } from './admin-api.ts'
+import { active, api, jobFile, pad, reason, type Task } from './admin-api.ts'
 
 // The person check and its repairs (plans/in-progress/dreams.md). Panel 7
 // must never show a person, and Deforum draws one into a few percent of
@@ -18,6 +18,8 @@ type Detail = {
 
 /** Rough Replicate cost of re-rendering one dream frame (A100, ~21s), before rerolls: a frame still scored as a person is re-rendered up to twice more. */
 const COST_PER_FRAME = 0.03
+/** What a check or repair task is doing, for the row's status line. */
+const WORKING: Record<string, string> = { check: 'Checking every frame (about 6 minutes for a full song)…', rerender: 'Re-rendering on Replicate…', hold: 'Holding the frame before…' }
 const dollars = (frames: number) => `about $${Math.max(0.05, frames * COST_PER_FRAME).toFixed(2)} before retries`
 const plain = 'rounded border border-stone-300 dark:border-stone-700 px-2.5 py-1 text-sm hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-40'
 const primary = 'rounded bg-stone-900 dark:bg-stone-100 px-2.5 py-1 text-sm font-medium text-white dark:text-stone-900 disabled:opacity-40'
@@ -59,21 +61,20 @@ function Paid({ label, cost, disabled, onConfirm }: { label: string; cost: strin
   )
 }
 
-export function PersonCheck({ job, take, title, clip = false, summary, busy, onChanged }: {
+export function PersonCheck({ job, take, title, clip = false, summary, tasks, onChanged }: {
   job: string
   take: string
   title: string
   /** Check the take's 15-second clip rather than its full song. */
   clip?: boolean
   summary: CheckSummary | null
-  /** Something paid is already running for this footage. */
-  busy: boolean
+  /** This footage's queued, running and recent tasks. */
+  tasks: Task[]
   onChanged: () => void
 }) {
   // `/admin#check-<take>` opens that take's review straight away.
   const [open, setOpen] = useState(() => location.hash === `#check-${take}${clip ? '-clip' : ''}`)
   const [detail, setDetail] = useState<Detail | null>(null)
-  const [working, setWorking] = useState('')
   const [error, setError] = useState('')
   /** Bumped after every change, so replaced frames aren't shown from the browser's cache. */
   const [version, setVersion] = useState(0)
@@ -89,25 +90,36 @@ export function PersonCheck({ job, take, title, clip = false, summary, busy, onC
     if (open) load().catch((e) => setError((e as Error).message))
   }, [open, load])
 
-  const act = async (label: string, body: Record<string, unknown>) => {
+  // This take's check and repair tasks, from the queue. What is shown as going on comes from there
+  // rather than from this component, so it survives a page reload and shows work queued elsewhere.
+  const mine = tasks.filter((t) => t.take === take && t.clip === clip && t.action in WORKING)
+  const going = mine.find(active)
+  const working = going ? (going.status === 'queued' ? 'Queued' : WORKING[going.action]) : ''
+  /** Anything waiting or running for this dream, a generation included: one task per dream at a time. */
+  const busy = tasks.some((t) => t.take === take && active(t))
+  const lastEnded = mine.filter((t) => !active(t)).at(-1)
+  // When one of them ends: show the new frames and counts, or why it failed.
+  useEffect(() => {
+    if (!lastEnded) return
+    setError(lastEnded.status === 'failed' ? reason(lastEnded.log) : '')
+    setVersion((v) => v + 1)
+    if (open) load().catch((e) => setError((e as Error).message))
+    // Only when a different task becomes the last one ended, so the task's other fields are left out.
+  }, [lastEnded?.id])
+
+  const act = async (body: Record<string, unknown>) => {
     setError('')
-    setWorking(label)
     try {
-      const run = await runAction(job, { ...body, take, clip })
-      if (run.status === 'failed') setError(reason(run.log))
-      setVersion((v) => v + 1)
-      if (open) await load()
+      await api(`/__admin/api/jobs/${job}/actions`, { ...body, take, clip })
       onChanged()
     } catch (e) {
       setError((e as Error).message)
-    } finally {
-      setWorking('')
     }
   }
 
   const range = (s: { start: number; end: number }) => (s.start === s.end ? String(s.start) : `${s.start}-${s.end}`)
   const repair = (action: 'rerender' | 'hold', stretches: { start: number; end: number }[]) =>
-    act(action === 'rerender' ? 'Re-rendering on Replicate…' : 'Holding the frame before…', { action, frames: stretches.map(range).join(',') })
+    act({ action, frames: stretches.map(range).join(',') })
   const setKeep = async (keep: number[]) => {
     setError('')
     try {
@@ -133,7 +145,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, busy, onC
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${status.tone}`}>{status.label}</span>
         {working && <span className="text-xs text-stone-500 dark:text-stone-400">{working}</span>}
         <span className="ml-auto flex gap-2">
-          <button type="button" disabled={working !== ''} onClick={() => act('Checking every frame (about 6 minutes for a full song)…', { action: 'check' })} className={plain}>
+          <button type="button" disabled={busy} onClick={() => act({ action: 'check' })} className={plain}>
             {summary ? 'Check again' : 'Check for people (free)'}
           </button>
           <button type="button" onClick={() => setOpen(!open)} className={plain}>
@@ -150,7 +162,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, busy, onC
 
           {stretches.length > 1 && (
             <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-              <Paid label={`Re-render all ${flaggedFrames} flagged frames`} cost={dollars(flaggedFrames)} disabled={busy || working !== ''} onConfirm={() => repair('rerender', stretches)} />
+              <Paid label={`Re-render all ${flaggedFrames} flagged frames`} cost={dollars(flaggedFrames)} disabled={busy} onConfirm={() => repair('rerender', stretches)} />
               <span className="text-stone-500 dark:text-stone-400">Each stretch is a separate run, one after another.</span>
             </div>
           )}
@@ -179,9 +191,9 @@ export function PersonCheck({ job, take, title, clip = false, summary, busy, onC
                   {after !== undefined && <img src={frameUrl(after)} alt="" title={`Frame ${after}, after`} className="h-28 w-28 shrink-0 rounded object-cover opacity-60" />}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Paid label={s.frames === 1 ? 'Re-render' : `Re-render ${s.frames} frames`} cost={dollars(s.frames)} disabled={busy || working !== '' || from === 0} onConfirm={() => repair('rerender', [s])} />
+                  <Paid label={s.frames === 1 ? 'Re-render' : `Re-render ${s.frames} frames`} cost={dollars(s.frames)} disabled={busy || from === 0} onConfirm={() => repair('rerender', [s])} />
                   {s.frames <= 2 && (
-                    <button type="button" disabled={working !== '' || from === 0} onClick={() => repair('hold', [s])} className={plain} title="Free: the frame before is held a little longer">
+                    <button type="button" disabled={busy || from === 0} onClick={() => repair('hold', [s])} className={plain} title="Free: the frame before is held a little longer">
                       Hold the frame before (free)
                     </button>
                   )}
@@ -224,8 +236,8 @@ export function PersonCheck({ job, take, title, clip = false, summary, busy, onC
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Paid label="Re-render this frame" cost={dollars(1)} disabled={busy || working !== '' || cursor === 0} onConfirm={() => repair('rerender', [{ start: current, end: current }])} />
-                    <button type="button" disabled={working !== '' || cursor === 0} onClick={() => repair('hold', [{ start: current, end: current }])} className={plain}>
+                    <Paid label="Re-render this frame" cost={dollars(1)} disabled={busy || cursor === 0} onConfirm={() => repair('rerender', [{ start: current, end: current }])} />
+                    <button type="button" disabled={busy || cursor === 0} onClick={() => repair('hold', [{ start: current, end: current }])} className={plain}>
                       Hold the frame before (free)
                     </button>
                   </div>

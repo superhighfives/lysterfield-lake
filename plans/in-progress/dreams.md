@@ -264,6 +264,13 @@ Check and repair:
       stretch (re-render, hold, or keep), go through every frame by hand.
       The clip's check shows on its take card. `/admin#check-<take>` opens a
       take's review directly
+- [x] `/admin` task queue (`apps/client/admin-queue.ts`): every pipeline
+      command the page starts is a task in `.jobs/_queue/`, run as its own
+      detached process. Up to three Replicate runs and one person check at a
+      time, one task per dream; a Tasks panel shows what is running, waiting
+      and finished, with logs and stop. Local on purpose: the pipeline works
+      on frames on this machine, so a hosted queue (Cloudflare Queues) could
+      only hand the work back to a consumer running here
 - [ ] Refuse to publish a take with unreviewed flags
 - [ ] Run the check automatically when a clip or song finishes, and on sample runs
 
