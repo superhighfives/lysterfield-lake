@@ -18,9 +18,10 @@ build:
     # Fetched at build time, not mid-run. Deforum's depth model (AdaBins) builds its encoder with
     # torch.hub from GitHub, and its aesthetics guidance downloads a small model from GitHub, both on
     # every new container: a GitHub 500 then failed the prediction six seconds in (2026-10-13). The
-    # hub repo is pinned; its ImageNet weights are what it downloads on first use.
+    # hub repo and the aesthetics model are pinned to commits; the ImageNet weights are what the hub
+    # repo downloads on first use.
     - mkdir -p /opt/torch-hub /opt/deforum-models && curl -sfL https://github.com/rwightman/gen-efficientnet-pytorch/archive/771ce082b2ce6d033f55b3d47c1f77389ad3c180.tar.gz | tar xz -C /opt/torch-hub && mv /opt/torch-hub/gen-efficientnet-pytorch-771ce082b2ce6d033f55b3d47c1f77389ad3c180 /opt/torch-hub/gen-efficientnet-pytorch
     - TORCH_HOME=/opt/torch-home python -c "import torch; torch.hub.load('/opt/torch-hub/gen-efficientnet-pytorch', 'tf_efficientnet_b5_ap', source='local', pretrained=True)"
-    - curl -sfL -o /opt/deforum-models/sac_public_2022_06_29_vit_l_14_linear.pth https://github.com/crowsonkb/simulacra-aesthetic-models/raw/master/models/sac_public_2022_06_29_vit_l_14_linear.pth
+    - curl -sfL -o /opt/deforum-models/sac_public_2022_06_29_vit_l_14_linear.pth https://github.com/crowsonkb/simulacra-aesthetic-models/raw/701f7678b305acf8a0634350365a86beb95dd87d/models/sac_public_2022_06_29_vit_l_14_linear.pth
     - curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/download/v0.8.2/pget_linux_x86_64" && chmod +x /usr/local/bin/pget
 predict: "predict.py:Predictor"

@@ -180,11 +180,13 @@ export async function restoreFrames(opts: { takeDir: string; framesDir: string; 
     if (!(await exists(kept))) throw new Error(`Frame ${frame} hasn't been replaced; there is no original to put back.`)
     const target = path.join(opts.framesDir, `${name(frame)}.jpg`)
     // The job frames that held this frame are the ones from it onward still sharing its picture
-    // (a re-render or a hold relinked them all together).
+    // (a re-render or a hold relinked them all together). A frame with its own original in
+    // `replaced/` was repaired in its own right (a hold onto this one), so it and what follows stay.
     const { ino } = await stat(target)
     const held: string[] = []
     for (const other of names.filter((f) => Number(f.slice(0, 4)) > frame)) {
       if ((await stat(path.join(opts.framesDir, other))).ino !== ino) break
+      if (await exists(path.join(replacedDir, other))) break
       held.push(path.join(opts.framesDir, other))
     }
     for (const file of [target, ...held]) await rm(file)
