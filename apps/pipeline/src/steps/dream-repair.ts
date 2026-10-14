@@ -1,9 +1,10 @@
-import { link, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { link, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { exists, type Job } from '../job.ts'
-import { flaggedStretches, listDreamFrames, type DreamCheck, type DreamFrame } from './dream-check.ts'
+import { flaggedStretches, listDreamFrames, runCheck, type DreamCheck, type DreamFrame } from './dream-check.ts'
 import { deforumRun } from './dream-deforum.ts'
 import { loadTake, type TakeConfig } from './dream.ts'
 
@@ -32,7 +33,7 @@ export interface RepairStretch {
   end: number
 }
 
-export type RepairAction = 'rerender' | 'hold'
+export type RepairAction = 'rerender' | 'hold' | 'restore'
 
 const name = (frame: number) => String(frame).padStart(4, '0')
 
@@ -162,6 +163,49 @@ async function updateCheck(checkPath: string, changes: { frame: number; score?: 
   check.frames = scored.length
   check.flagged = check.stretches.reduce((sum, s) => sum + s.frames, 0)
   await writeFile(checkPath, JSON.stringify(check, null, 2) + '\n')
+}
+
+/**
+ * Undoes a repair: puts each frame's original (kept in `replaced/`) back,
+ * held over the same job frames as before. For when a re-render came out
+ * worse, or a frame was flagged that was fine. Free and local; the frames
+ * are scored again so check.json stays right.
+ */
+export async function restoreFrames(opts: { takeDir: string; framesDir: string; frames: number[] }): Promise<number[]> {
+  const replacedDir = path.join(opts.takeDir, 'replaced')
+  const names = (await readdir(opts.framesDir)).filter((f) => /^\d{4}\.jpg$/.test(f)).sort()
+  const restored: string[] = []
+  for (const frame of opts.frames) {
+    const kept = path.join(replacedDir, `${name(frame)}.jpg`)
+    if (!(await exists(kept))) throw new Error(`Frame ${frame} hasn't been replaced; there is no original to put back.`)
+    const target = path.join(opts.framesDir, `${name(frame)}.jpg`)
+    // The job frames that held this frame are the ones from it onward still sharing its picture
+    // (a re-render or a hold relinked them all together).
+    const { ino } = await stat(target)
+    const held: string[] = []
+    for (const other of names.filter((f) => Number(f.slice(0, 4)) > frame)) {
+      if ((await stat(path.join(opts.framesDir, other))).ino !== ino) break
+      held.push(path.join(opts.framesDir, other))
+    }
+    for (const file of [target, ...held]) await rm(file)
+    await rename(kept, target)
+    for (const file of held) await link(target, file)
+    // A later re-render of this frame must run again, not find this one marked done.
+    for (const dir of (await readdir(path.join(opts.takeDir, 'repairs')).catch(() => [] as string[])).filter((d) => /^\d{4}-\d{4}$/.test(d))) {
+      const [start, end] = dir.split('-').map(Number)
+      if (frame >= start && frame <= end) await rm(path.join(opts.takeDir, 'repairs', dir), { recursive: true, force: true })
+    }
+    restored.push(target)
+  }
+  const workDir = await mkdtemp(path.join(os.tmpdir(), 'dream-restore-'))
+  try {
+    await runCheck(restored, path.join(workDir, 'scores.json'))
+    const { scores } = JSON.parse(await readFile(path.join(workDir, 'scores.json'), 'utf8')) as { scores: Record<string, number> }
+    await updateCheck(path.join(opts.takeDir, 'check.json'), restored.map((file) => ({ frame: Number(path.basename(file).slice(0, 4)), score: scores[file] })))
+  } finally {
+    await rm(workDir, { recursive: true, force: true })
+  }
+  return opts.frames
 }
 
 /** Parses `--frames 1735,934-936` into stretches. */

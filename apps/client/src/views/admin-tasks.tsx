@@ -12,6 +12,7 @@ const LABELS: Record<string, string> = {
   check: 'People check',
   rerender: 'Re-render frames',
   hold: 'Hold frames',
+  restore: 'Put originals back',
 }
 const TONES: Record<Task['status'], string> = {
   queued: 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300',

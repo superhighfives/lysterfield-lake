@@ -19,7 +19,7 @@ type Detail = {
 /** Rough Replicate cost of re-rendering one dream frame (A100, ~21s), before rerolls: a frame still scored as a person is re-rendered up to twice more. */
 const COST_PER_FRAME = 0.03
 /** What a check or repair task is doing, for the row's status line. */
-const WORKING: Record<string, string> = { check: 'Checking every frame (about 6 minutes for a full song)…', rerender: 'Re-rendering on Replicate…', hold: 'Holding the frame before…' }
+const WORKING: Record<string, string> = { check: 'Checking every frame (about 6 minutes for a full song)…', rerender: 'Re-rendering on Replicate…', hold: 'Holding the frame before…', restore: 'Putting the originals back…' }
 const dollars = (frames: number) => `about $${Math.max(0.05, frames * COST_PER_FRAME).toFixed(2)} before retries`
 const plain = 'rounded border border-stone-300 dark:border-stone-700 px-2.5 py-1 text-sm hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-40'
 const primary = 'rounded bg-stone-900 dark:bg-stone-100 px-2.5 py-1 text-sm font-medium text-white dark:text-stone-900 disabled:opacity-40'
@@ -128,7 +128,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
   }
 
   const range = (s: { start: number; end: number }) => (s.start === s.end ? String(s.start) : `${s.start}-${s.end}`)
-  const repair = (action: 'rerender' | 'hold', stretches: { start: number; end: number }[]) =>
+  const repair = (action: 'rerender' | 'hold' | 'restore', stretches: { start: number; end: number }[]) =>
     act({ action, frames: stretches.map(range).join(',') })
   const setKeep = async (keep: number[]) => {
     setError('')
@@ -216,6 +216,11 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
                       Hold the frame before (free)
                     </button>
                   )}
+                  {inside.some((frame) => detail.replaced.includes(frame)) && (
+                    <button type="button" disabled={busy} onClick={() => repair('restore', [s])} className={plain} title="Free: undoes the repair, putting the frames that were here before back">
+                      Put the original back
+                    </button>
+                  )}
                   <button type="button" onClick={() => setKeep([...detail.keep, s.start])} className={plain}>
                     Keep, it&apos;s fine
                   </button>
@@ -259,6 +264,11 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
                     <button type="button" disabled={busy || cursor === 0} onClick={() => repair('hold', [{ start: current, end: current }])} className={plain}>
                       Hold the frame before (free)
                     </button>
+                    {detail.replaced.includes(current) && (
+                      <button type="button" disabled={busy} onClick={() => repair('restore', [{ start: current, end: current }])} className={plain}>
+                        Put the original back (free)
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

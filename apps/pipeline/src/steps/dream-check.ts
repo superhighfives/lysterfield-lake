@@ -74,7 +74,7 @@ export function flaggedStretches(scored: { frame: number; score: number }[], thr
   return stretches
 }
 
-function runCheck(paths: string[], outPath: string): Promise<void> {
+export function runCheck(paths: string[], outPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn('uv', ['run', '--quiet', CHECK_SCRIPT, '--out', outPath], { stdio: ['pipe', 'inherit', 'inherit'] })
     child.on('error', (error) => reject(new Error(`Couldn't run uv (needed for the person check): ${error.message}`)))

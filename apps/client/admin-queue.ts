@@ -44,7 +44,7 @@ export interface Task {
 
 /** How many tasks a lane runs at once. `instant` tasks (creating a take, approvals, notes) take milliseconds and never wait. */
 const CAPACITY: Record<Lane, number> = { replicate: 3, local: 1, quick: Infinity, instant: Infinity }
-const LANES: Record<string, Lane> = { directions: 'replicate', samples: 'replicate', clip: 'replicate', full: 'replicate', rerender: 'replicate', check: 'local', hold: 'quick' }
+const LANES: Record<string, Lane> = { directions: 'replicate', samples: 'replicate', clip: 'replicate', full: 'replicate', rerender: 'replicate', check: 'local', hold: 'quick', restore: 'local' }
 /** Finished tasks kept on disk; older ones are swept when the queue loads. */
 const KEEP_FINISHED = 100
 
