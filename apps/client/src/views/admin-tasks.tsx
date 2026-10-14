@@ -62,7 +62,7 @@ export function Tasks({ job, tasks, titles, onChanged }: {
           </button>
         )}
       </div>
-      <ul className="rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 text-sm">
+      <ul className="max-h-[200px] overflow-y-auto rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 text-sm">
         {[...going, ...finished.reverse()].map((task) => {
           const progress = task.log.match(/(?:Dream frames: |Scored )(\d+) of (\d+)(?![\s\S]*(?:Dream frames: |Scored )\d)/)
           return (
