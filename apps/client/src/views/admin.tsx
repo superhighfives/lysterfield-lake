@@ -290,7 +290,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
   )
 }
 
-function TakeCard({ job, take, samples, presets, tasks, onGenerate, onUpdate, onChanged }: {
+function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onUpdate, onChanged }: {
   job: string
   take: Take
   samples: { frame: number; label: string }[]
@@ -298,6 +298,7 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onUpdate, on
   /** This footage's queued, running and recent tasks. */
   tasks: Task[]
   onGenerate: (take: string, action: Action) => void
+  onRetry: (task: string) => void
   onUpdate: (take: string, change: { status?: Take['status']; notes?: string }) => void
   onChanged: () => void
 }) {
@@ -370,7 +371,12 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onUpdate, on
         <div className="mb-3 rounded bg-red-50 dark:bg-red-950/50 p-3 text-sm text-red-800 dark:text-red-200">
           <p className="font-medium">That run stopped with an error.</p>
           <p className="mt-1 break-words">{reason(mine.log)}</p>
-          <p className="mt-1 text-red-700 dark:text-red-300">Nothing is retried automatically. Starting it again carries on from where it stopped, without paying twice for finished work.</p>
+          <p className="mt-1 text-red-700 dark:text-red-300">Nothing is retried automatically. Retrying carries on from where it stopped, without paying twice for finished work.</p>
+          {!mine.retriedBy && (
+            <button type="button" disabled={generating} onClick={() => onRetry(mine.id)} className={`mt-2 ${plain}`}>
+              Retry
+            </button>
+          )}
           <details className="mt-2">
             <summary className="cursor-pointer text-xs">Full log</summary>
             <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap text-xs">{mine.log.slice(-6000)}</pre>
@@ -508,6 +514,16 @@ export default function Admin() {
     }
   }
 
+  const retry = async (task: string) => {
+    setError('')
+    try {
+      await api(`/__admin/api/tasks/${task}/retry`, {})
+      await loadTasks()
+    } catch (e) {
+      fail(e)
+    }
+  }
+
   /** Approvals and notes: instant, and allowed while something is generating. */
   const update = async (take: string, change: { status?: Take['status']; notes?: string }) => {
     setError('')
@@ -537,7 +553,7 @@ export default function Admin() {
   const inReview = takes.filter((t) => t.status !== 'generated' && t.status !== 'rejected')
   const finished = takes.filter((t) => t.status === 'generated')
   const rejected = takes.filter((t) => t.status === 'rejected')
-  const card = (take: Take) => <TakeCard key={take.id} job={job} take={take} samples={samples} presets={options.presets} tasks={tasks} onGenerate={generate} onUpdate={update} onChanged={() => reload().catch(fail)} />
+  const card = (take: Take) => <TakeCard key={take.id} job={job} take={take} samples={samples} presets={options.presets} tasks={tasks} onGenerate={generate} onRetry={retry} onUpdate={update} onChanged={() => reload().catch(fail)} />
 
   return (
     // The player's global styles lock the page (overflow hidden, touch-action none), so this view scrolls itself.

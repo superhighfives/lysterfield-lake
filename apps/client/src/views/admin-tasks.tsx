@@ -78,6 +78,11 @@ export function Tasks({ job, tasks, titles, onChanged }: {
                   {task.status === 'running' && `${duration(Date.now() - (task.started ?? task.created))}${progress ? `, ${progress[1]} of ${progress[2]} frames` : ''}`}
                   {!active(task) && task.started && task.ended && `took ${duration(task.ended - task.started)}`}
                 </span>
+                {(task.status === 'failed' || task.status === 'cancelled') && !task.retriedBy && (
+                  <button type="button" onClick={() => post(`/__admin/api/tasks/${task.id}/retry`)} className={`ml-auto ${plain}`} title="Runs it again. Finished work is kept, so only what didn't finish is redone.">
+                    Retry
+                  </button>
+                )}
                 {active(task) && (
                   <button type="button" onClick={() => post(`/__admin/api/tasks/${task.id}/cancel`)} className={`ml-auto ${plain}`} title={task.status === 'running' ? 'Stops it here. A Replicate run already started carries on there; starting the task again picks that run back up.' : undefined}>
                     {task.status === 'queued' ? 'Remove' : 'Stop'}

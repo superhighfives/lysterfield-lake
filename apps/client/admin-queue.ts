@@ -38,6 +38,8 @@ export interface Task {
   started?: number
   ended?: number
   pid?: number
+  /** The task that retried this one: a task is retried once, so a double click can't queue it twice. */
+  retriedBy?: string
 }
 
 /** How many tasks a lane runs at once. `instant` tasks (creating a take, approvals, notes) take milliseconds and never wait. */
@@ -181,6 +183,23 @@ export function createQueue(opts: { dir: string; cwd: string; env: () => NodeJS.
       }
       finish(task, 'cancelled')
       pump()
+    },
+    /**
+     * Runs a failed or stopped task again, as a new task at the back of the queue. Finished work is
+     * kept, so it only redoes what didn't finish. A Replicate run that failed is replaced with a
+     * fresh one (`--retry true`); one still going or done is picked back up, never paid for twice.
+     */
+    retry(id: string): Task | undefined {
+      const old = tasks.get(id)
+      if (!old || (old.status !== 'failed' && old.status !== 'cancelled') || old.retriedBy) return undefined
+      const args = old.lane === 'replicate' && !old.args.includes('--retry') ? [...old.args, '--retry', 'true'] : old.args
+      const task: Task = { ...old, retriedBy: undefined, id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, args, status: 'queued', created: Date.now(), started: undefined, ended: undefined, pid: undefined }
+      tasks.set(task.id, task)
+      save(task)
+      old.retriedBy = task.id
+      save(old)
+      pump()
+      return task
     },
     /** Stops pumping. A dev-server restart makes a new queue over the same files, and two pumping queues could both start one queued task. */
     close() {

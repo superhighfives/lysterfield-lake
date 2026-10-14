@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { writeClientAssets } from './client-manifest.ts'
 import { compose, composePreview } from './compose.ts'
 import { loadJob, videoPath, type Job } from './job.ts'
+import { retryFailedPredictions } from './replicate.ts'
 import { backgroundPlate } from './steps/background-plate.ts'
 import { stabilizeBackground } from './steps/background-stabilize.ts'
 import { depth } from './steps/depth.ts'
@@ -70,6 +71,8 @@ function outputFlag(defaultRelativePath: string): string {
 }
 
 const concurrency = Number(flags.concurrency ?? 4)
+// --retry true: a person asked to run a failed or cancelled Replicate prediction again. Never set by default.
+if (flags.retry === 'true') retryFailedPredictions()
 
 /** `--step-fps` if passed, else the job's own `stepFps` from job.json, else the step's built-in default. */
 function stepFpsFlag(job: Job): number | undefined {

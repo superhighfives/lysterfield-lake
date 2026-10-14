@@ -117,6 +117,16 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
     }
   }
 
+  const retry = async (id: string) => {
+    setError('')
+    try {
+      await api(`/__admin/api/tasks/${id}/retry`, {})
+      onChanged()
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
   const range = (s: { start: number; end: number }) => (s.start === s.end ? String(s.start) : `${s.start}-${s.end}`)
   const repair = (action: 'rerender' | 'hold', stretches: { start: number; end: number }[]) =>
     act({ action, frames: stretches.map(range).join(',') })
@@ -153,7 +163,16 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
           </button>
         </span>
       </div>
-      {error && <p className="mt-2 rounded bg-red-50 dark:bg-red-950/50 p-2 text-sm text-red-800 dark:text-red-200">{error}</p>}
+      {error && (
+        <div className="mt-2 flex items-start gap-3 rounded bg-red-50 dark:bg-red-950/50 p-2 text-sm text-red-800 dark:text-red-200">
+          <p className="flex-1 break-words">{error}</p>
+          {lastEnded?.status === 'failed' && !lastEnded.retriedBy && !busy && (
+            <button type="button" onClick={() => retry(lastEnded.id)} className={plain} title="Runs it again. Frames already replaced are kept; only what didn't finish is redone.">
+              Retry
+            </button>
+          )}
+        </div>
+      )}
 
       {open && detail && (
         <div className="mt-3">

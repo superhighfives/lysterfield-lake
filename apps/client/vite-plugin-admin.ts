@@ -321,6 +321,10 @@ export default function adminPlugin(): Plugin {
             tasks().clear(parts[2])
             return send(res, 200, {})
           }
+          if (parts[1] === 'tasks' && parts[3] === 'retry' && req.method === 'POST') {
+            const task = tasks().retry(parts[2])
+            return task ? send(res, 200, { runId: task.id }) : send(res, 400, { error: 'Only a failed or stopped task can be retried, and only once' })
+          }
           if (parts[1] === 'tasks' && parts[3] === 'cancel' && req.method === 'POST') {
             tasks().cancel(parts[2])
             return send(res, 200, {})
