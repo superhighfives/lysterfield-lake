@@ -21,7 +21,7 @@ regenerate it.
 5,156 frames at 24fps), and one dream (`lush-and-light`) has been composed
 end to end through the new pipeline and approved by the user. Composing and
 publishing all ten dreams is the next plan,
-[`phase-4f-regenerate-and-publish-dreams.md`](../ready/phase-4f-regenerate-and-publish-dreams.md).
+[`phase-4f-regenerate-and-publish-dreams.md`](../in-progress/dreams.md).
 
 Most panels were **reused from the legacy run** on the HDD instead of being
 regenerated, which kept Replicate spend for the whole song to panel 3:
@@ -554,7 +554,7 @@ holds a **complete per-frame set for the whole song**: `alpha` (2160px),
 - [x] Compose one dream end to end (`lush-and-light`), reviewed by the user
 - [x] Fix the stray legacy frames the review found (panel 2 frames 142 and
       802, panel 3 frame 142)
-- Moved to [`phase-4f`](../ready/phase-4f-regenerate-and-publish-dreams.md):
+- Moved to [`phase-4f`](../in-progress/dreams.md):
   compose all ten, publish, sync R2, deploy
 - Dropped: confirm flux-fill-pro's per-call price (flux no longer used);
   fix `real-15s-60fps`'s panel 3 (that job isn't used for anything)

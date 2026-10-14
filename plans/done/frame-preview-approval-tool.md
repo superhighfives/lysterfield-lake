@@ -1,11 +1,23 @@
 ---
 title: Cheap pre-production preview/approval loop for dream art direction
-status: Ready
+status: Complete
 created: 2026-09-30
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 # Cheap pre-production preview/approval loop for dream art direction
+
+## Overview
+
+Shipped 2026-10-11: the staged loop (directions, samples, 15s clip, full
+song) gated by `take.json` status, the dev-only `/__admin` API and `/admin`
+page, and `?preview=` in the player. The page was redesigned as one flow for
+Deforum takes; the directions and flux-kontext commands remain on the CLI.
+The sections below are the record of how it was built.
+
+Closed 2026-10-12 with one task moved to
+[`dreams.md`](../in-progress/dreams.md): trying the whole loop on a new
+take. The automatic person check proposed in Findings is specced there.
 
 ## Goal
 

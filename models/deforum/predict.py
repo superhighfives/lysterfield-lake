@@ -5,10 +5,17 @@ legacy PC's render.py (legacy/: custom Random/Specific/Sticky colour modes).
 Every setting starts from a legacy dream's saved settings (settings/<id>.json,
 default lush-and-light), then the take's inputs are applied on top: prompt,
 negative prompt, the panel 2 init video and matte mask video, the colour
-reference, seed and frame count. See plans/ready/own-deforum-dream-model.md.
+reference, seed and frame count. See plans/done/own-deforum-dream-model.md.
 
 Output: a zip of the rendered frames (<timestring>_NNNNN.png, one per
-extracted init frame) plus settings.json with exactly what was run.
+extracted init frame) plus settings.json with exactly what was run and
+scores.json, each frame's person score.
+
+Panel 7 must never show a person, and Deforum draws one into a few percent of
+frames whatever the negative prompt says. So each frame is scored as it is
+made (person_score, the same classifier as the pipeline's dream-check), and
+one that fails is rendered again before it is saved or fed forward into the
+next frame: what was done by hand in 2023, deleting bad frames and rebuilding.
 
 A long take is rendered as a chain of runs. Each frame grows out of the one
 before it, so a run can continue another: pass the earlier run's last frame as
@@ -33,6 +40,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DEFORUM = os.path.join(HERE, "deforum")
 SETTINGS = os.path.join(HERE, "settings")
 COLOURS = "/tmp/colours"
+# Fetched into the image at build time (cog.yaml), so a run never depends on GitHub being up.
+EFFICIENTNET_HUB = "/opt/torch-hub/gen-efficientnet-pytorch"
+BAKED_MODELS = "/opt/deforum-models"
+os.environ["TORCH_HOME"] = "/opt/torch-home"
 os.environ["DEFORUM_COLOURS_DIR"] = COLOURS + "/"
 
 WEIGHTS = {
@@ -43,6 +54,14 @@ WEIGHTS = {
 
 with open(os.path.join(SETTINGS, "negative-prompt.txt")) as f:
     LEGACY_NEGATIVE_PROMPT = f.read().strip()
+
+# The person classifier's weights (models/person-check/probe.json, copied in by fetch.sh).
+with open(os.path.join(HERE, "probe.json")) as f:
+    PROBE = json.load(f)
+# How much less of the previous frame each retry keeps (Deforum's strength), on top of a new seed.
+# The first retry only changes the seed; later ones repaint more, since the same init tends to
+# lead back to the same person.
+RETRY_STRENGTH_STEP = 0.15
 
 # Settings that describe the legacy PC's files and session rather than the look; never taken from a preset.
 NOT_FROM_PRESET = {
@@ -59,6 +78,10 @@ class Predictor(BasePredictor):
     def setup(self):
         os.chdir(DEFORUM)
         sys.path[:0] = [DEFORUM, os.path.join(DEFORUM, "src")]
+        for name in os.listdir(BAKED_MODELS):
+            os.makedirs("models", exist_ok=True)
+            if not os.path.exists(os.path.join("models", name)):
+                shutil.copy(os.path.join(BAKED_MODELS, name), os.path.join("models", name))
         for rel, url in WEIGHTS.items():
             if not os.path.exists(rel):
                 os.makedirs(os.path.dirname(rel), exist_ok=True)
@@ -66,6 +89,17 @@ class Predictor(BasePredictor):
 
         import torch
         from omegaconf import OmegaConf
+
+        # AdaBins asks torch.hub for its encoder by GitHub name on every new container; hand it the
+        # copy baked into the image instead (same pinned code, same weights).
+        hub_load = torch.hub.load
+
+        def local_hub_load(repo_or_dir, model, *args, **kwargs):
+            if repo_or_dir == "rwightman/gen-efficientnet-pytorch":
+                return hub_load(EFFICIENTNET_HUB, model, *args, source="local", **kwargs)
+            return hub_load(repo_or_dir, model, *args, **kwargs)
+
+        torch.hub.load = local_hub_load
 
         self.torch = torch
         self.device = torch.device("cuda")
@@ -104,6 +138,8 @@ class Predictor(BasePredictor):
             description="Continue an earlier run: its last rendered frame. The init and mask videos must start on that frame's source frame; it is not rendered again or returned",
             default=None,
         ),
+        max_rerolls: int = Input(description="Times a frame that shows a person is rendered again (new seed, then repainting more) before the best attempt is kept and flagged. 0 only scores", default=2, ge=0, le=4),
+        person_threshold: float = Input(description="Person score above which a frame is rendered again", default=0.35, ge=0, le=1),
     ) -> Path:
         torch = self.torch
         from helpers.model_load import make_linear_decode
@@ -204,7 +240,54 @@ class Predictor(BasePredictor):
         extra = negative_prompt.strip()
         negative_prompt = f"{LEGACY_NEGATIVE_PROMPT}, {extra}" if extra else LEGACY_NEGATIVE_PROMPT
         cond, uncond = Prompts(prompt={0: prompt}, neg_prompt=negative_prompt).as_dict()
-        render_animation(root, ns_anim, ns_args, cond, uncond)
+
+        # Score every frame as Deforum makes it, and make it again if it shows a person. render.py
+        # calls generate() once per frame and feeds what it returns into the next one, so wrapping
+        # generate() is enough: a rejected attempt is never saved and never fed forward.
+        import helpers.render as render
+
+        scores = {}
+        generate = render.generate
+        # A run that doesn't continue another paints frame 0 from the prompt alone; it is never used.
+        unused_frame = None if previous_frame is not None else 0
+
+        # The seed that last got a frame through. A stretch where the subject keeps coming through as a
+        # person fails on the same seed frame after frame, so the seed that worked is kept for the
+        # frames after it rather than paying for the same retry each time.
+        working_seed = None
+
+        def checked_generate(gen_args, gen_root, frame_idx=0, **kwargs):
+            nonlocal working_seed
+            seed, strength = gen_args.seed, gen_args.strength
+            if frame_idx == unused_frame:
+                return generate(gen_args, gen_root, frame_idx, **kwargs)
+            first_seed = seed if working_seed is None else working_seed
+            gen_args.seed = first_seed
+            best = generate(gen_args, gen_root, frame_idx, **kwargs)
+            attempts = [self.person_score(best[-1])]
+            while min(attempts) > person_threshold and len(attempts) <= max_rerolls:
+                gen_args.seed = (first_seed + 7919 * len(attempts)) % 2**32
+                gen_args.strength = max(0.0, strength - RETRY_STRENGTH_STEP * (len(attempts) - 1))
+                again = generate(gen_args, gen_root, frame_idx, **kwargs)
+                attempts.append(self.person_score(again[-1]))
+                if attempts[-1] == min(attempts):
+                    best = again
+                    if attempts[-1] <= person_threshold:
+                        working_seed = gen_args.seed
+                print(f"Frame {frame_idx}: person scores {attempts}")
+            gen_args.seed, gen_args.strength = seed, strength
+            scores[f"{gen_args.timestring}_{frame_idx:05}.png"] = {
+                "score": round(min(attempts), 5),
+                "attempts": [round(a, 5) for a in attempts],
+                "flagged": min(attempts) > person_threshold,
+            }
+            return best
+
+        render.generate = checked_generate
+        try:
+            render_animation(root, ns_anim, ns_args, cond, uncond)
+        finally:
+            render.generate = generate
 
         frames = sorted(f for f in os.listdir(outdir) if f.startswith(ns_args.timestring) and f.endswith(".png"))
         if previous_frame is not None:
@@ -216,13 +299,37 @@ class Predictor(BasePredictor):
             "continued": previous_frame is not None,
             "args": {k: v for k, v in args.items() if is_json(v)}, "anim_args": {k: v for k, v in anim.items() if is_json(v)},
             "frames": len(frames),
+            "max_rerolls": max_rerolls, "person_threshold": person_threshold,
         }
         out = "/tmp/frames.zip"
         with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED) as z:
             for f in frames:
                 z.write(os.path.join(outdir, f), f)
             z.writestr("settings.json", json.dumps(used, indent=2))
+            z.writestr("scores.json", json.dumps({f: scores[f] for f in frames if f in scores}, indent=2))
         return Path(out)
+
+    def person_score(self, image):
+        """0..1: how sure the classifier is that a frame (a PIL image) shows a person. The same score as models/person-check/check.py, which this must stay in step with."""
+        import numpy as np
+        from PIL import Image
+
+        torch = self.torch
+        clip_model = self.clip_models["ViT-L/14"]
+        size = 448
+        pixels = np.asarray(image.convert("RGB").resize((size, size), Image.BICUBIC))
+        x = torch.from_numpy(pixels.copy()).to(self.device).permute(2, 0, 1).unsqueeze(0).float() / 255
+        full = torch.nn.functional.interpolate(x, size=224, mode="bicubic", antialias=True).clamp(0, 1)
+        centre = x[:, :, size // 4 : size // 4 + 224, size // 4 : size // 4 + 224]
+        mean = torch.tensor((0.48145466, 0.4578275, 0.40821073), device=self.device).view(1, 3, 1, 1)
+        std = torch.tensor((0.26862954, 0.26130258, 0.27577711), device=self.device).view(1, 3, 1, 1)
+        with torch.no_grad():
+            embedded = [
+                torch.nn.functional.normalize(clip_model.encode_image(((view - mean) / std).to(clip_model.dtype)).float(), dim=-1)
+                for view in (full, centre)
+            ]
+            coef = torch.tensor(PROBE["coef"], device=self.device)
+            return float(torch.sigmoid(torch.cat(embedded, dim=1) @ coef + PROBE["intercept"]))
 
 
 def load_model_from_config(config, ckpt):

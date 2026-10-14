@@ -79,7 +79,7 @@ per-take prompt alone wasn't a strong enough guarantee.
   corners. Worth checking whether a newer depth model is a straightforward
   swap.
 
-See `plans/backlog/frame-preview-approval-tool.md` for the planned
+See `plans/in-progress/dreams.md` for the planned
 per-scene review workflow these feed into.
 
 ## Secrets

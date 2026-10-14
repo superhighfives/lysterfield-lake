@@ -18,7 +18,7 @@ moderates and manages submissions.
 
 Today the pipeline is a local CLI that the artist runs by hand on one song's
 footage, with review at every step (see
-`plans/ready/frame-preview-approval-tool.md` for the review loop being built
+`plans/done/frame-preview-approval-tool.md` for the review loop being built
 now). Making it public turns it into a hosted, paid-per-use, unattended
 service, which changes almost every constraint:
 

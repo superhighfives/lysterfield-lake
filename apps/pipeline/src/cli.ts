@@ -1,16 +1,19 @@
 #!/usr/bin/env bun
 // Bun loads .env from the cwd automatically — no dotenv package needed.
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeClientAssets } from './client-manifest.ts'
 import { compose, composePreview } from './compose.ts'
 import { loadJob, videoPath, type Job } from './job.ts'
+import { retryFailedPredictions } from './replicate.ts'
 import { backgroundPlate } from './steps/background-plate.ts'
 import { stabilizeBackground } from './steps/background-stabilize.ts'
 import { depth } from './steps/depth.ts'
 import { createTake, dream, dreamSamples, loadTake, saveTake, TAKE_STATUSES, type TakeStatus } from './steps/dream.ts'
+import { dreamCheck, listDreamFrames, type DreamCheck } from './steps/dream-check.ts'
 import { deforumFrames } from './steps/dream-deforum.ts'
+import { DEFORUM_COST_PER_FRAME, dreamRepair, parseStretches, restoreFrames, type RepairAction } from './steps/dream-repair.ts'
 import { dreamDirections } from './steps/dream-directions.ts'
 import { init } from './steps/init.ts'
 import { matte } from './steps/matte.ts'
@@ -68,6 +71,8 @@ function outputFlag(defaultRelativePath: string): string {
 }
 
 const concurrency = Number(flags.concurrency ?? 4)
+// --retry true: a person asked to run a failed or cancelled Replicate prediction again. Never set by default.
+if (flags.retry === 'true') retryFailedPredictions()
 
 /** `--step-fps` if passed, else the job's own `stepFps` from job.json, else the step's built-in default. */
 function stepFpsFlag(job: Job): number | undefined {
@@ -180,7 +185,7 @@ switch (step) {
     // Re-running an existing take picks its settings back up from take.json; flags override.
     const saved = await loadTake(job, take)
     // The full song is the expensive stage: it needs the take's 15s clip approved first
-    // (plans/ready/frame-preview-approval-tool.md). Takes from before the approval loop have no status.
+    // (plans/done/frame-preview-approval-tool.md). Takes from before the approval loop have no status.
     if (saved?.status && saved.status !== 'clip-approved' && saved.status !== 'generated' && flags.force !== 'true') {
       throw new Error(`Take "${take}" is "${saved.status}"; the full dream run needs "clip-approved" (or --force true).`)
     }
@@ -324,6 +329,50 @@ switch (step) {
     break
   }
 
+  case 'dream-check': {
+    // Person check over a take's dream frames (local and free). --clip true checks a Deforum take's 15s clip instead of the full song.
+    const job = await loadJob(requireFlag('job'))
+    const take = requireFlag('take')
+    const dir = path.join(job.dir, '7-dreams', take, flags.clip === 'true' ? 'preview/dream' : '')
+    const { scores: _scores, ...summary } = await dreamCheck(path.join(dir, 'frames'), path.join(dir, 'check.json'))
+    console.log(JSON.stringify(summary, null, 2))
+    break
+  }
+
+  case 'dream-repair': {
+    // Replaces dream frames that show a person: --frames 1735,934-936 (dream frames, by job frame), or --flagged true for
+    // every stretch in check.json. --action rerender (default; a paid Deforum run per stretch, needs --confirm true), hold (free), or restore (free: undo, putting the originals back).
+    const job = await loadJob(requireFlag('job'))
+    const take = requireFlag('take')
+    const takeDir = path.join(job.dir, '7-dreams', take, flags.clip === 'true' ? 'preview/dream' : '')
+    const framesDir = path.join(takeDir, 'frames')
+    const action = (flags.action ?? 'rerender') as RepairAction
+    if (action !== 'rerender' && action !== 'hold' && action !== 'restore') throw new Error('--action must be rerender, hold or restore')
+    const stretches = flags.frames
+      ? parseStretches(flags.frames)
+      : flags.flagged === 'true'
+        ? (JSON.parse(await readFile(path.join(takeDir, 'check.json'), 'utf8')) as DreamCheck).stretches
+        : undefined
+    if (!stretches) throw new Error('Pass --frames <frame or range, comma-separated> or --flagged true (every stretch in check.json).')
+    if (action === 'restore') {
+      // Undo: each listed frame's original goes back (every frame in the given ranges that was replaced).
+      const replaced = new Set((await readdir(path.join(takeDir, 'replaced')).catch(() => [] as string[])).map((f) => Number(f.slice(0, 4))))
+      const frames = [...replaced].filter((f) => stretches.some((s) => f >= s.start && f <= s.end)).sort((a, b) => a - b)
+      if (frames.length === 0) throw new Error('None of those frames have been replaced.')
+      console.log(JSON.stringify({ restored: await restoreFrames({ takeDir, framesDir, frames }) }, null, 2))
+      break
+    }
+    if (action === 'rerender' && flags.confirm !== 'true') {
+      const dreamFrames = await listDreamFrames(framesDir)
+      const count = stretches.reduce((sum, s) => sum + dreamFrames.filter((f) => f.frame >= s.start && f.frame <= s.end).length, 0)
+      console.log(`Re-rendering ${count} dream frames in ${stretches.length} stretches: about $${(count * DEFORUM_COST_PER_FRAME).toFixed(2)} of GPU time before retries, plus a cold start per run. Pass --confirm true to go ahead.`)
+      break
+    }
+    const results = await dreamRepair(job, take, { takeDir, framesDir, stretches, action })
+    console.log(JSON.stringify(results, null, 2))
+    break
+  }
+
   case 'compose': {
     const job = await loadJob(requireFlag('job'))
     const take = requireFlag('take')
@@ -338,7 +387,7 @@ switch (step) {
 
   default:
     console.error(
-      `Usage: bun run src/cli.ts <init|words|matte|portrait|upscale|background-plate|background-stabilize|depth|outline|dream-directions|dream-take|dream-samples|dream-clip|take-status|dream|compose> --job <dir> [options]`
+      `Usage: bun run src/cli.ts <init|words|matte|portrait|upscale|background-plate|background-stabilize|depth|outline|dream-directions|dream-take|dream-samples|dream-clip|dream-check|dream-repair|take-status|dream|compose> --job <dir> [options]`
     )
     process.exit(1)
 }

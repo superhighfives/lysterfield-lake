@@ -92,7 +92,7 @@ export const MODELS = {
   /**
    * Dream takes the legacy way (`dream-deforum.ts`): Deforum 0.7.1 with the legacy render.py,
    * settings, negative prompt and colour reference — `models/deforum/`, private, A100 (its pinned
-   * PyTorch 1.12.1 predates the L40S/H100). See plans/ready/own-deforum-dream-model.md.
+   * PyTorch 1.12.1 predates the L40S/H100). See plans/done/own-deforum-dream-model.md.
    */
-  deforum: 'superhighfives/lysterfield-deforum:06f4753192bff10b1be840a545b510d290f5a1059f182aa638c7de60c9400000',
+  deforum: 'superhighfives/lysterfield-deforum:7c055bdf9d2c2290c4b4cd9cfdc8bc6fe209ce887f1b131d56eceba378c64c90',
 } as const satisfies Record<string, `${string}/${string}` | `${string}/${string}:${string}`>

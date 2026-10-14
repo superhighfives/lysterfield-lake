@@ -1,11 +1,25 @@
 ---
 title: Our own Deforum dream model, rebuilt from the legacy setup
-status: Ready
+status: Complete
 created: 2026-10-11
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 # Our own Deforum dream model, rebuilt from the legacy setup
+
+## Overview
+
+Shipped 2026-10-11: `superhighfives/lysterfield-deforum` (`models/deforum/`),
+the legacy Deforum 0.7.1 setup as a private Replicate model, and
+`dream-deforum.ts`: samples, the 15s clip and the full song as chained,
+resumable runs, all startable from `/admin`. The sections below are the
+record of how it was built.
+
+Closed 2026-10-12 with two tasks moved to
+[`dreams.md`](../in-progress/dreams.md): the person leak, and the first real
+clip and full song. The leak turned out not to be a fault in the rebuild:
+the legacy runs leaked too, and were repaired by deleting frames and
+interpolating (see that plan's Context).
 
 ## Goal
 

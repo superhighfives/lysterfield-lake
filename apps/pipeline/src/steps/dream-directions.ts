@@ -11,7 +11,7 @@ import { runModelText } from '../replicate.ts'
  * Replicate with the user's brief and a few of the job's sample source
  * frames, returning named directions each with a dream prompt and palette.
  * First stage of the preview/approval loop
- * (plans/ready/frame-preview-approval-tool.md).
+ * (plans/done/frame-preview-approval-tool.md).
  *
  * Replicate's Claude models take a single image and return plain text, so
  * the sample frames are stitched into one strip, and the reply is asked for

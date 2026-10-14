@@ -1,14 +1,15 @@
-import { spawn } from 'node:child_process'
 import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Plugin } from 'vite'
+import { createQueue } from './admin-queue.ts'
 
 /**
- * Dev-only API for the /admin page (plans/ready/frame-preview-approval-tool.md):
- * reads `apps/pipeline/.jobs`, serves job files read-only, and runs the
- * pipeline's dream preview-loop commands. `apply: 'serve'` means none of
+ * Dev-only API for the /admin page (plans/in-progress/dreams.md): reads
+ * `apps/pipeline/.jobs`, serves job files read-only, and runs the
+ * pipeline's dream commands (the preview loop, the person check and its
+ * repairs). `apply: 'serve'` means none of
  * this exists in a production build.
  */
 
@@ -26,12 +27,6 @@ const CONTENT_TYPES: Record<string, string> = {
   '.webm': 'video/webm',
   '.json': 'application/json',
 }
-
-type Run = { id: string; job: string; action: string; take: string; started: number; args: string[]; status: 'running' | 'succeeded' | 'failed'; log: string }
-const runs = new Map<string, Run>()
-/** Actions that spend money on Replicate: one at a time per job. The rest (creating a take, approving, notes) are instant and always allowed. */
-const PAID_ACTIONS = ['directions', 'samples', 'clip', 'full']
-const paidRun = (job: string) => Array.from(runs.values()).find((r) => r.job === job && r.status === 'running' && PAID_ACTIONS.includes(r.action))
 
 /** Pipeline env from its .env, applied over the dev server's own, so the shell's tokens never win. */
 function pipelineEnv(): NodeJS.ProcessEnv {
@@ -63,6 +58,56 @@ function listJobs() {
     .map((d) => d.name)
 }
 
+/** Where a take's frames, check.json and review.json live: the take folder for the full song, preview/dream for its 15s clip. */
+function checkDir(job: string, take: string, clip: boolean): string {
+  if (!/^[\w-]+$/.test(take) || take.startsWith('_')) throw new Error('bad take')
+  return path.join(jobDir(job), '7-dreams', take, clip ? 'preview/dream' : '')
+}
+
+type CheckFile = { threshold: number; frames: number; flagged: number; stretches: { start: number; end: number; frames: number; peak: number }[]; scores: Record<string, number> }
+type Review = { keep: number[] }
+
+function readReview(dir: string): Review {
+  const file = path.join(dir, 'review.json')
+  return existsSync(file) ? (readJson(file) as Review) : { keep: [] }
+}
+
+/** A take's person check, summarised for the list: null if it has frames but was never checked. Stretches the reviewer marked "keep" don't count. */
+function checkSummary(dir: string) {
+  if (!existsSync(path.join(dir, 'frames'))) return undefined
+  const file = path.join(dir, 'check.json')
+  if (!existsSync(file)) return null
+  const check = readJson(file) as CheckFile
+  const keep = new Set(readReview(dir).keep)
+  const open = check.stretches.filter((s) => !keep.has(s.start))
+  return { frames: check.frames, flagged: open.reduce((sum, s) => sum + s.frames, 0), stretches: open.length }
+}
+
+/** Everything the review needs for one take: its dream frames (each with the job frames holding it), scores, and flagged stretches. */
+function checkDetail(job: string, take: string, clip: boolean) {
+  const dir = checkDir(job, take, clip)
+  const framesDir = path.join(dir, 'frames')
+  if (!existsSync(framesDir)) throw new Error(`"${take}" has no dream frames yet`)
+  // A dream frame is held over several job frames as hard links to one file; list each once.
+  const seen = new Set<number>()
+  const frames: number[] = []
+  for (const name of readdirSync(framesDir).filter((f) => f.endsWith('.jpg')).sort()) {
+    const { ino } = statSync(path.join(framesDir, name))
+    if (seen.has(ino)) continue
+    seen.add(ino)
+    frames.push(Number(name.slice(0, 4)))
+  }
+  const file = path.join(dir, 'check.json')
+  const check = existsSync(file) ? (readJson(file) as CheckFile) : null
+  const replacedDir = path.join(dir, 'replaced')
+  return {
+    frames,
+    check,
+    keep: readReview(dir).keep,
+    replaced: existsSync(replacedDir) ? readdirSync(replacedDir).map((f) => Number(f.slice(0, 4))) : [],
+  }
+}
+
 function jobDetail(job: string) {
   const dir = jobDir(job)
   const dreams = path.join(dir, '7-dreams')
@@ -77,6 +122,7 @@ function jobDetail(job: string) {
             ...(readJson(path.join(take, 'take.json')) as object),
             samples: existsSync(samplesDir) ? readdirSync(samplesDir).filter((f) => f.endsWith('.jpg')).map((f) => Number(f.slice(0, 4))) : [],
             hasPreview: existsSync(path.join(take, 'preview', 'video.mov')),
+            clipCheck: checkSummary(path.join(take, 'preview', 'dream')),
             modified: statSync(path.join(take, 'take.json')).mtimeMs,
           }
         })
@@ -90,10 +136,21 @@ function jobDetail(job: string) {
         .reverse()
         .map((file) => ({ file, ...(readJson(path.join(directionsDir, file)) as object) }))
     : []
-  // The paid run in progress, if any, so a reloaded page can pick its progress back up.
-  const active = paidRun(job)
-  const running = active ? { id: active.id, take: active.take, action: active.action, started: active.started } : null
-  return { name: job, config: readJson(path.join(dir, 'job.json')), takes, directions, running }
+  // Every dream with a full song's frames, published ones included (those have no take.json), for the person check.
+  const presets = existsSync(DEFORUM_PRESETS) ? (readJson(DEFORUM_PRESETS) as Record<string, { title: string }>) : {}
+  const songs = existsSync(dreams)
+    ? readdirSync(dreams, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && !d.name.startsWith('_') && existsSync(path.join(dreams, d.name, 'frames')))
+        // A rejected take's frames are leftovers, not a dream anyone will publish.
+        .filter((d) => (takes.find((t) => t.id === d.name) as { status?: string } | undefined)?.status !== 'rejected')
+        .map((d) => ({
+          id: d.name,
+          title: presets[d.name]?.title ?? d.name,
+          published: !existsSync(path.join(dreams, d.name, 'take.json')),
+          check: checkSummary(path.join(dreams, d.name)) ?? null,
+        }))
+    : []
+  return { name: job, config: readJson(path.join(dir, 'job.json')), takes, songs, directions }
 }
 
 /** The pipeline command for an admin action. Each one is a stage of the loop; the pipeline enforces the approval order itself. */
@@ -135,6 +192,17 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
       // The whole song. Publishing to the client (which edits dreams.json) stays a separate, deliberate `compose`.
       if (!takeOk) throw new Error('bad take')
       return ['dream', ...base, '--take', take, '--skip-client', 'true']
+    case 'check':
+      // The person check: local and free.
+      if (!takeOk) throw new Error('bad take')
+      return ['dream-check', ...base, '--take', take, ...(body.clip ? ['--clip', 'true'] : [])]
+    case 'rerender':
+    case 'hold':
+    case 'restore':
+      // Replace dream frames that show a person: re-rendered on Replicate (paid), or the frame before held (free); or undo that (restore, free).
+      if (!takeOk) throw new Error('bad take')
+      if (!/^\d+(-\d+)?(,\d+(-\d+)?)*$/.test(String(body.frames))) throw new Error('frames: e.g. 1735,934-936')
+      return ['dream-repair', ...base, '--take', take, '--frames', String(body.frames), '--action', String(body.action), '--confirm', 'true', ...(body.clip ? ['--clip', 'true'] : [])]
     case 'status':
       if (!takeOk) throw new Error('bad take')
       return [
@@ -150,18 +218,9 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
   }
 }
 
-function startRun(job: string, body: Record<string, unknown>): Run {
-  const args = actionArgs(job, body)
-  const action = String(body.action)
-  if (PAID_ACTIONS.includes(action) && paidRun(job)) throw new Error('Something is already generating for this footage; wait for it to finish.')
-  const run: Run = { id: `${Date.now()}-${runs.size}`, job, action, take: String(body.take ?? ''), started: Date.now(), args, status: 'running', log: `$ ${args.join(' ')}\n` }
-  runs.set(run.id, run)
-  const child = spawn('bun', ['run', 'src/cli.ts', ...args], { cwd: PIPELINE_DIR, env: pipelineEnv() })
-  child.stdout.on('data', (d) => (run.log += d))
-  child.stderr.on('data', (d) => (run.log += d))
-  child.on('close', (code) => (run.status = code === 0 ? 'succeeded' : 'failed'))
-  return run
-}
+/** Every pipeline command the page starts goes through the queue (admin-queue.ts). Made on first use, so nothing touches .jobs until the admin API is called. */
+let queue: ReturnType<typeof createQueue> | undefined
+const tasks = () => (queue ??= createQueue({ dir: path.join(JOBS_DIR, '_queue'), cwd: PIPELINE_DIR, env: pipelineEnv }))
 
 async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   let data = ''
@@ -194,6 +253,10 @@ export default function adminPlugin(): Plugin {
     name: 'lysterfield-admin',
     apply: 'serve',
     configureServer(server) {
+      server.httpServer?.on('close', () => {
+        queue?.close()
+        queue = undefined
+      })
       server.middlewares.use('/__admin', async (req, res) => {
         try {
           const url = new URL(req.url ?? '/', 'http://localhost')
@@ -233,14 +296,39 @@ export default function adminPlugin(): Plugin {
           }
           if (parts[1] === 'jobs' && parts.length === 2) return send(res, 200, listJobs())
           if (parts[1] === 'jobs' && parts.length === 3 && req.method === 'GET') return send(res, 200, jobDetail(parts[2]))
+          if (parts[1] === 'jobs' && parts[3] === 'checks' && parts[4] && req.method === 'GET') {
+            return send(res, 200, checkDetail(parts[2], parts[4], url.searchParams.get('clip') === 'true'))
+          }
+          if (parts[1] === 'jobs' && parts[3] === 'checks' && parts[4] && req.method === 'POST') {
+            // The reviewer's "keep" decisions: flagged stretches (by first frame) that are fine as they are.
+            const body = await readBody(req)
+            const keep = body.keep
+            if (!Array.isArray(keep) || !keep.every((k) => Number.isInteger(k))) throw new Error('keep must be a list of frame numbers')
+            writeFileSync(path.join(checkDir(parts[2], parts[4], body.clip === true), 'review.json'), `${JSON.stringify({ keep }, null, 2)}\n`)
+            return send(res, 200, { keep })
+          }
           if (parts[1] === 'jobs' && parts[3] === 'actions' && req.method === 'POST') {
             jobDir(parts[2])
-            const run = startRun(parts[2], await readBody(req))
-            return send(res, 200, { runId: run.id })
+            const body = await readBody(req)
+            const task = tasks().add(parts[2], body, actionArgs(parts[2], body))
+            return send(res, 200, { runId: task.id })
           }
           if (parts[1] === 'runs' && parts[2]) {
-            const run = runs.get(parts[2])
-            return run ? send(res, 200, run) : send(res, 404, { error: 'no such run' })
+            const task = tasks().get(parts[2])
+            return task ? send(res, 200, task) : send(res, 404, { error: 'no such task' })
+          }
+          if (parts[1] === 'jobs' && parts[3] === 'tasks' && req.method === 'GET') return send(res, 200, tasks().list(parts[2]))
+          if (parts[1] === 'jobs' && parts[3] === 'tasks' && parts[4] === 'clear' && req.method === 'POST') {
+            tasks().clear(parts[2])
+            return send(res, 200, {})
+          }
+          if (parts[1] === 'tasks' && parts[3] === 'retry' && req.method === 'POST') {
+            const task = tasks().retry(parts[2])
+            return task ? send(res, 200, { runId: task.id }) : send(res, 400, { error: 'Only a failed or stopped task can be retried, and only once' })
+          }
+          if (parts[1] === 'tasks' && parts[3] === 'cancel' && req.method === 'POST') {
+            tasks().cancel(parts[2])
+            return send(res, 200, {})
           }
           return send(res, 404, { error: 'not found' })
         } catch (error) {

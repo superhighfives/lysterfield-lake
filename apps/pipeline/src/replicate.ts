@@ -72,8 +72,20 @@ export async function runModelToFile(
  * `statePath` the moment it starts, so if this process dies while Replicate
  * is still working, the next call picks the same prediction back up instead
  * of paying for a second one. A prediction that failed or was cancelled is
- * never rerun from here: that takes deleting `statePath`, a deliberate act.
+ * never rerun from here unless someone asked for exactly that
+ * (`retryFailedPredictions`, the CLI's `--retry true`); one that is still
+ * going or succeeded is always picked back up, never paid for twice.
  */
+let retryFailed = false
+/**
+ * Lets this process start a fresh prediction in place of a saved one that
+ * failed or was cancelled. Only for a retry a person asked for: never on by
+ * default, and never a loop (CLAUDE.md).
+ */
+export function retryFailedPredictions(): void {
+  retryFailed = true
+}
+
 export async function runModelToFileResumable(
   identifier: `${string}/${string}:${string}`,
   input: Record<string, unknown>,
@@ -89,13 +101,14 @@ export async function runModelToFileResumable(
       throw error
     }
   )
-  let prediction = saved
-    ? await replicate.predictions.get(saved.id)
-    : await replicate.predictions.create({ version: identifier.split(':')[1], input })
-  if (saved) console.log(`Picking up prediction ${prediction.id} (${prediction.status})`)
+  const existing = saved ? await replicate.predictions.get(saved.id) : undefined
+  const startAgain = existing && retryFailed && (existing.status === 'failed' || existing.status === 'canceled')
+  if (startAgain) console.log(`Prediction ${existing.id} ${existing.status}; starting a new one, as asked`)
+  let prediction = existing && !startAgain ? existing : await replicate.predictions.create({ version: identifier.split(':')[1], input })
+  if (prediction === existing) console.log(`Picking up prediction ${prediction.id} (${prediction.status})`)
   else await writeFile(statePath, `${JSON.stringify({ id: prediction.id })}\n`)
 
-  const again = `It was not run again; delete ${statePath} to start a new one.`
+  const again = 'It was not run again; retry it (--retry true) to start a new one.'
   // `wait` throws on a failed prediction; the status check below reports it with what to do next.
   // It can also throw on a transient problem while the prediction is still running: rethrow that,
   // since deleting `statePath` then would pay for a second prediction alongside the first.
@@ -111,7 +124,7 @@ export async function runModelToFileResumable(
   if (typeof output !== 'string') throw new Error(`Prediction ${prediction.id} returned no file. ${again}`)
   const response = await fetch(output)
   // Replicate keeps a prediction's output files for about an hour.
-  if (!response.ok) throw new Error(`Prediction ${prediction.id} finished, but its output is no longer available (${response.status}). ${again}`)
+  if (!response.ok) throw new Error(`Prediction ${prediction.id} finished, but its output is no longer available (${response.status}). It was not run again; delete ${statePath} to start a new one.`)
   await writeFile(outputPath, Buffer.from(await response.arrayBuffer()))
 }
 
