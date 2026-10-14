@@ -94,7 +94,7 @@ export function Tasks({ job, tasks, titles, onChanged }: {
               {task.log && task.status !== 'queued' && (
                 <details className="mt-1">
                   <summary className="cursor-pointer text-xs text-stone-500 dark:text-stone-400">Log</summary>
-                  <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap text-xs">{task.log}</pre>
+                  <pre className="mt-1 whitespace-pre-wrap text-xs">{task.log}</pre>
                 </details>
               )}
             </li>
