@@ -40,6 +40,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DEFORUM = os.path.join(HERE, "deforum")
 SETTINGS = os.path.join(HERE, "settings")
 COLOURS = "/tmp/colours"
+# Fetched into the image at build time (cog.yaml), so a run never depends on GitHub being up.
+EFFICIENTNET_HUB = "/opt/torch-hub/gen-efficientnet-pytorch"
+BAKED_MODELS = "/opt/deforum-models"
+os.environ["TORCH_HOME"] = "/opt/torch-home"
 os.environ["DEFORUM_COLOURS_DIR"] = COLOURS + "/"
 
 WEIGHTS = {
@@ -74,6 +78,10 @@ class Predictor(BasePredictor):
     def setup(self):
         os.chdir(DEFORUM)
         sys.path[:0] = [DEFORUM, os.path.join(DEFORUM, "src")]
+        for name in os.listdir(BAKED_MODELS):
+            os.makedirs("models", exist_ok=True)
+            if not os.path.exists(os.path.join("models", name)):
+                shutil.copy(os.path.join(BAKED_MODELS, name), os.path.join("models", name))
         for rel, url in WEIGHTS.items():
             if not os.path.exists(rel):
                 os.makedirs(os.path.dirname(rel), exist_ok=True)
@@ -81,6 +89,17 @@ class Predictor(BasePredictor):
 
         import torch
         from omegaconf import OmegaConf
+
+        # AdaBins asks torch.hub for its encoder by GitHub name on every new container; hand it the
+        # copy baked into the image instead (same pinned code, same weights).
+        hub_load = torch.hub.load
+
+        def local_hub_load(repo_or_dir, model, *args, **kwargs):
+            if repo_or_dir == "rwightman/gen-efficientnet-pytorch":
+                return hub_load(EFFICIENTNET_HUB, model, *args, source="local", **kwargs)
+            return hub_load(repo_or_dir, model, *args, **kwargs)
+
+        torch.hub.load = local_hub_load
 
         self.torch = torch
         self.device = torch.device("cuda")
