@@ -100,7 +100,18 @@ function checkDetail(job: string, take: string, clip: boolean) {
   const file = path.join(dir, 'check.json')
   const check = existsSync(file) ? (readJson(file) as CheckFile) : null
   const replacedDir = path.join(dir, 'replaced')
+  // Frames a finished re-render made (repairs/<first>-<last>/applied), so the review can say when one still shows a person.
+  const repairsDir = path.join(dir, 'repairs')
+  const rerendered = existsSync(repairsDir)
+    ? readdirSync(repairsDir)
+        .filter((d) => /^\d{4}-\d{4}$/.test(d) && existsSync(path.join(repairsDir, d, 'applied')))
+        .flatMap((d) => {
+          const [start, end] = d.split('-').map(Number)
+          return frames.filter((f) => f >= start && f <= end)
+        })
+    : []
   return {
+    rerendered,
     frames,
     check,
     keep: readReview(dir).keep,
@@ -202,7 +213,7 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
       // Replace dream frames that show a person: re-rendered on Replicate (paid), or the frame before held (free); or undo that (restore, free).
       if (!takeOk) throw new Error('bad take')
       if (!/^\d+(-\d+)?(,\d+(-\d+)?)*$/.test(String(body.frames))) throw new Error('frames: e.g. 1735,934-936')
-      return ['dream-repair', ...base, '--take', take, '--frames', String(body.frames), '--action', String(body.action), '--confirm', 'true', ...(body.clip ? ['--clip', 'true'] : [])]
+      return ['dream-repair', ...base, '--take', take, '--frames', String(body.frames), '--action', String(body.action), '--confirm', 'true', ...(body.clip ? ['--clip', 'true'] : []), ...(body.again === true ? ['--again', 'true'] : [])]
     case 'status':
       if (!takeOk) throw new Error('bad take')
       return [

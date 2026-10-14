@@ -14,7 +14,8 @@ import { loadTake, type TakeConfig } from './dream.ts'
  * filled gaps with a RIFE morph, which loses the stop-motion look where
  * every dream frame is its own picture. A replaced frame here is either a
  * real Deforum frame, re-rendered from the last good frame before the
- * stretch, or that last good frame held a little longer.
+ * stretch, or that last good frame held a little longer. A re-render is
+ * final and its originals are deleted; a hold can be undone.
  *
  * Works on any take whose frames folder follows the usual layout, including
  * the ten legacy dreams, whose frames sit at 10 per second of song: the
@@ -54,11 +55,17 @@ export async function repairConfig(job: Job, take: string): Promise<TakeConfig> 
   return { prompt: preset.prompt, seed: preset.seed, stepFps: job.stepFps ?? 6, method: 'deforum', preset: take, ...(preset.colour && { colour: preset.colour }) }
 }
 
-/** Swaps one dream frame's picture, keeping the original in `replacedDir` (the first one only: a second repair must not overwrite it). */
-async function replaceFrame(target: DreamFrame, framesDir: string, replacedDir: string, write: (file: string) => Promise<void>): Promise<void> {
+/**
+ * Swaps one dream frame's picture. A hold keeps the original in
+ * `replacedDir` (the first one only: a second repair must not overwrite it),
+ * so it can be undone. A re-render is final (user, 2026-10-13): the frame
+ * it replaces, and any original kept from an earlier hold, are deleted.
+ */
+async function replaceFrame(target: DreamFrame, framesDir: string, replacedDir: string, write: (file: string) => Promise<void>, keepOriginal: boolean): Promise<void> {
   const kept = path.join(replacedDir, path.basename(target.file))
-  if (await exists(kept)) await rm(target.file)
+  if (!keepOriginal || (await exists(kept))) await rm(target.file)
   else await rename(target.file, kept)
+  if (!keepOriginal) await rm(kept, { force: true })
   await write(target.file)
   for (const held of target.holds) {
     const heldPath = path.join(framesDir, `${name(held)}${path.extname(target.file)}`)
@@ -79,12 +86,23 @@ export interface RepairResult {
  * Repairs `stretches` of the take's frames in `framesDir`, in order. A
  * re-render is a real (GPU) Replicate run per stretch: skipped once applied,
  * and picked back up rather than started again if it was still going
- * (`deforumRun`). Originals are kept in `<takeDir>/replaced/`.
+ * (`deforumRun`). A held frame's original is kept in `<takeDir>/replaced/`;
+ * a re-rendered frame's is deleted.
  */
 export async function dreamRepair(
   job: Job,
   take: string,
-  opts: { takeDir: string; framesDir: string; stretches: RepairStretch[]; action: RepairAction }
+  opts: {
+    takeDir: string
+    framesDir: string
+    stretches: RepairStretch[]
+    action: RepairAction
+    /**
+     * Re-render a stretch that has been re-rendered before, when that result still shows a person.
+     * Without it a finished re-render is never run again (so retrying a task can't pay twice).
+     */
+    again?: boolean
+  }
 ): Promise<RepairResult[]> {
   const config = opts.action === 'rerender' ? await repairConfig(job, take) : undefined
   const checkPath = path.join(opts.takeDir, 'check.json')
@@ -103,13 +121,15 @@ export async function dreamRepair(
     const targets = dreamFrames.slice(from, to + 1)
 
     if (opts.action === 'hold') {
-      for (const target of targets) await replaceFrame(target, opts.framesDir, replacedDir, (file) => link(previous.file, file))
+      for (const target of targets) await replaceFrame(target, opts.framesDir, replacedDir, (file) => link(previous.file, file), true)
       await updateCheck(checkPath, targets.map((t) => ({ frame: t.frame })))
       results.push({ stretch, action: 'hold', frames: targets.length, stillFlagged: [] })
       continue
     }
 
     const outDir = path.join(opts.takeDir, 'repairs', `${name(stretch.start)}-${name(stretch.end)}`)
+    // Asked for again: the earlier result is replaced, so its run starts from scratch.
+    if (opts.again && (await exists(path.join(outDir, 'applied')))) await rm(outDir, { recursive: true, force: true })
     const applied = path.join(outDir, 'applied')
     const scoresPath = path.join(outDir, 'scores.json')
     if (!(await exists(applied))) {
@@ -125,7 +145,7 @@ export async function dreamRepair(
       })
       if (pngs.length !== targets.length) throw new Error(`Deforum returned ${pngs.length} frames for ${outDir}, expected ${targets.length}`)
       for (const [i, target] of targets.entries()) {
-        await replaceFrame(target, opts.framesDir, replacedDir, async (file) => void (await sharp(pngs[i]).jpeg({ quality: 90 }).toFile(file)))
+        await replaceFrame(target, opts.framesDir, replacedDir, async (file) => void (await sharp(pngs[i]).jpeg({ quality: 90 }).toFile(file)), false)
       }
       await writeFile(applied, '')
       for (const png of pngs) await rm(png)
@@ -166,9 +186,9 @@ async function updateCheck(checkPath: string, changes: { frame: number; score?: 
 }
 
 /**
- * Undoes a repair: puts each frame's original (kept in `replaced/`) back,
- * held over the same job frames as before. For when a re-render came out
- * worse, or a frame was flagged that was fine. Free and local; the frames
+ * Undoes a hold: puts each frame's original (kept in `replaced/`) back,
+ * held over the same job frames as before. A re-render is final and keeps
+ * no original, so there is nothing to put back after one. Free and local; the frames
  * are scored again so check.json stays right.
  */
 export async function restoreFrames(opts: { takeDir: string; framesDir: string; frames: number[] }): Promise<number[]> {
