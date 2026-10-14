@@ -142,7 +142,7 @@ function jobDetail(job: string) {
     ? readdirSync(dreams, { withFileTypes: true })
         .filter((d) => d.isDirectory() && !d.name.startsWith('_') && existsSync(path.join(dreams, d.name, 'frames')))
         // A rejected take's frames are leftovers, not a dream anyone will publish.
-        .filter((d) => takes.find((t) => t.id === d.name)?.status !== 'rejected')
+        .filter((d) => (takes.find((t) => t.id === d.name) as { status?: string } | undefined)?.status !== 'rejected')
         .map((d) => ({
           id: d.name,
           title: presets[d.name]?.title ?? d.name,

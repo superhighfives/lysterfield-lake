@@ -175,11 +175,20 @@ export function createQueue(opts: { dir: string; cwd: string; env: () => NodeJS.
       const task = tasks.get(id)
       if (!task || ended(task)) return
       if (task.status === 'running' && task.pid) {
-        try {
-          process.kill(-task.pid, 'SIGTERM')
-        } catch {
-          // Already gone.
+        // The whole process group: the shell, the pipeline, and anything it started (the person
+        // check's Python). SIGTERM first; anything still there a few seconds later is killed outright,
+        // since `bun run` doesn't always pass SIGTERM on and left checks running when it was the only
+        // signal sent.
+        const group = -task.pid
+        const signal = (name: NodeJS.Signals) => {
+          try {
+            process.kill(group, name)
+          } catch {
+            // Already gone.
+          }
         }
+        signal('SIGTERM')
+        setTimeout(() => signal('SIGKILL'), 3000).unref()
       }
       finish(task, 'cancelled')
       pump()
