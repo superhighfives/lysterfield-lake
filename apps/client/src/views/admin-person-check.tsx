@@ -198,7 +198,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
           {stretches.length > 1 && (
             <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
               <Paid label={`Re-render all ${flaggedFrames} flagged frames`} cost={dollars(flaggedFrames)} disabled={busy} onConfirm={() => repair('rerender', stretches)} />
-              <span className="text-stone-500 dark:text-stone-400">Each stretch is a separate run, one after another.</span>
+              <span className="text-stone-500 dark:text-stone-400">Each stretch is its own Replicate run, all side by side. One that still shows a person goes again with new seeds, up to ten rounds.</span>
             </div>
           )}
 
