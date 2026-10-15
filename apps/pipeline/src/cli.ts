@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeClientAssets } from './client-manifest.ts'
 import { compose, composePreview } from './compose.ts'
+import { gpuServerUrl } from './gpu-server.ts'
 import { loadJob, videoPath, type Job } from './job.ts'
 import { retryFailedPredictions } from './replicate.ts'
 import { backgroundPlate } from './steps/background-plate.ts'
@@ -74,6 +75,8 @@ const concurrency = Number(flags.concurrency ?? 4)
 // --on replicate: run on Replicate even when our own GPU server is set up (DEFORUM_URL; gpu-server.ts).
 if (flags.on === 'replicate') delete process.env.DEFORUM_URL
 else if (flags.on && flags.on !== 'pc') throw new Error('--on must be pc or replicate')
+// --on pc asks for the free GPU: never fall back to billing Replicate because DEFORUM_URL is missing.
+else if (flags.on === 'pc' && !gpuServerUrl()) throw new Error('--on pc needs DEFORUM_URL set in apps/pipeline/.env')
 // --retry true: a person asked to run a failed or cancelled Replicate prediction again. Never set by default.
 if (flags.retry === 'true') retryFailedPredictions()
 

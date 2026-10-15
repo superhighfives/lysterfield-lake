@@ -1,4 +1,5 @@
 import { writeFile } from 'node:fs/promises'
+import { z } from 'zod'
 
 /**
  * Runs the Deforum model on our own GPU machine instead of Replicate: the
@@ -15,6 +16,14 @@ import { writeFile } from 'node:fs/promises'
 export function gpuServerUrl(): string | undefined {
   return process.env.DEFORUM_URL?.replace(/\/+$/, '') || undefined
 }
+
+/** The fields we read from Cog's prediction reply; anything else is ignored. */
+const PredictionReply = z.object({
+  status: z.string().optional(),
+  output: z.unknown(),
+  error: z.string().nullish(),
+  detail: z.unknown(),
+})
 
 /** One run at a time from this process: the server takes one prediction at a time and refuses a second. */
 let turn: Promise<unknown> = Promise.resolve()
@@ -48,9 +57,18 @@ export function runOnGpuServer(baseUrl: string, input: Record<string, unknown>, 
         await new Promise((resolve) => setTimeout(resolve, 15_000))
         continue
       }
-      const result = (await response.json()) as { status?: string; output?: unknown; error?: string; detail?: unknown }
+      const text = await response.text()
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(text)
+      } catch {
+        throw new Error(`The GPU server answered ${response.status} with something that isn't JSON: ${text.slice(0, 300)}. It was not run again.`)
+      }
+      const reply = PredictionReply.safeParse(parsed)
+      if (!reply.success) throw new Error(`The GPU server answered ${response.status} with an unexpected reply: ${text.slice(0, 300)}. It was not run again.`)
+      const result = reply.data
       if (!response.ok || result.status !== 'succeeded') {
-        throw new Error(`The GPU server's run ${result.status ?? response.status}: ${result.error ?? JSON.stringify(result.detail ?? result).slice(0, 300)}. It was not run again.`)
+        throw new Error(`The GPU server's run ${result.status ?? response.status}: ${result.error ?? JSON.stringify(result.detail ?? parsed).slice(0, 300)}. It was not run again.`)
       }
       const output = Array.isArray(result.output) ? result.output[0] : result.output
       const match = typeof output === 'string' ? output.match(/^data:[^;]*;base64,(.*)$/s) : null
@@ -59,6 +77,7 @@ export function runOnGpuServer(baseUrl: string, input: Record<string, unknown>, 
       return
     }
   })
+  // The next run waits on this one whether it succeeds or fails; its error still reaches the caller through `run`.
   turn = run.catch(() => undefined)
   return run
 }
