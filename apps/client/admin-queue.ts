@@ -147,8 +147,9 @@ export function createQueue(opts: { dir: string; cwd: string; env: () => NodeJS.
         action,
         clip: body.clip === true,
         args,
-        // A Replicate job sent to our own GPU instead waits its turn on that one GPU.
-        lane: LANES[action] === 'replicate' && body.on === 'pc' ? 'pc' : (LANES[action] ?? 'instant'),
+        // A Replicate job sent to our own GPU instead waits its turn on that one GPU. Unsaid, the
+        // pipeline picks the GPU whenever DEFORUM_URL is set, so the lane does the same.
+        lane: LANES[action] === 'replicate' && (body.on ?? (opts.env().DEFORUM_URL ? 'pc' : 'replicate')) === 'pc' ? 'pc' : (LANES[action] ?? 'instant'),
         status: 'queued',
         created: Date.now(),
       }

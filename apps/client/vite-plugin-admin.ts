@@ -178,6 +178,7 @@ async function gpuStatus() {
     const { status } = (await response.json()) as { status?: string }
     return { configured: true, status: status ?? 'unknown' }
   } catch {
+    // Deliberate: a timeout, a bad URL, or a reply that isn't JSON all mean the same to the status dot.
     return { configured: true, status: 'offline' }
   }
 }
