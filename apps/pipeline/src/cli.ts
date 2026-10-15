@@ -71,6 +71,9 @@ function outputFlag(defaultRelativePath: string): string {
 }
 
 const concurrency = Number(flags.concurrency ?? 4)
+// --on replicate: run on Replicate even when our own GPU server is set up (DEFORUM_URL; gpu-server.ts).
+if (flags.on === 'replicate') delete process.env.DEFORUM_URL
+else if (flags.on && flags.on !== 'pc') throw new Error('--on must be pc or replicate')
 // --retry true: a person asked to run a failed or cancelled Replicate prediction again. Never set by default.
 if (flags.retry === 'true') retryFailedPredictions()
 

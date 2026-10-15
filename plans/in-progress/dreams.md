@@ -235,6 +235,45 @@ From phase 4f, for a new take and for the ten legacy dreams alike:
 The ten legacy dreams still need this: R2 holds them under datestamp ids,
 and `lush-and-light`'s one composite predates the stray-frame fixes.
 
+### Our own GPU (2026-10-14)
+
+Deforum can run on the RTX 4090 PC (`superuniverse`, Windows 11) instead of
+Replicate: free per frame, no cold starts, and at least as fast as the A100
+for this model. One GPU, so one run at a time.
+
+- **On the PC:** WSL2 (Ubuntu 24.04) with Docker and NVIDIA's container
+  toolkit, running the same image Replicate runs
+  (`r8.im/superhighfives/lysterfield-deforum`), which serves Cog's HTTP API
+  on port 5000. WSL's mirrored networking puts that port on the PC's
+  Tailscale address; a Windows firewall rule allows it from Tailscale
+  addresses (100.64.0.0/10) only. A startup task keeps WSL and the container
+  running after a reboot. SSH (Windows OpenSSH, key auth) is how it is
+  managed.
+- **On the Mac:** `DEFORUM_URL` in `apps/pipeline/.env` (never in the code,
+  per CLAUDE.md) sends Deforum runs there (`gpu-server.ts`); unset, they go
+  to Replicate as before, and `--on replicate` sends one command there
+  anyway. Runs from one process take turns, and one that finds the GPU busy
+  waits for it.
+- **The PC build** (`models/deforum/build-gpu-pc.sh`, built on the PC as
+  `lysterfield-deforum:gpu-pc`): the Replicate image with xformers, and
+  PyTorch 1.13.1 to match it. The Replicate image's PyTorch 1.12 does run on
+  the 4090, but without xformers a 1024x1024 frame with CLIP guidance needs
+  more than 24 GB, spills into system memory, and one frame took over 12
+  minutes. With xformers it uses about 7 GB.
+- **Weights** are downloaded once into `/opt/deforum-weights` on the PC and
+  mounted into the container (the model's own downloader left them
+  truncated there), so a new container doesn't fetch them again.
+- **Measured (2026-10-15):** six dream frames of the walk-away stretch
+  (seven renders, one retry) in 75 seconds, upload and download included:
+  about 10 seconds a render against the A100's ~21, with no cold start and
+  no charge. The frames match Replicate's for the same stretch, and the
+  same frame needed a retry on both.
+- **Open:** WSL doesn't yet start at boot (the startup task needs
+  registering from the PC's desktop with a password); the Mac reaches the
+  PC through Tailscale's relay rather than directly, which slows uploads; a
+  run lost to a dropped connection starts over; `/admin` doesn't choose per
+  task, and repairs take turns on the one GPU.
+
 ### Other methods (later)
 
 Deforum is the baseline. A candidate replaces it only if it keeps "the
