@@ -24,7 +24,9 @@ type Detail = {
 const COST_PER_FRAME = 0.03
 /** What a check or repair task is doing, for the row's status line. */
 const WORKING: Record<string, string> = { check: 'Checking every frame (about 6 minutes for a full song)…', rerender: 'Re-rendering on Replicate…', hold: 'Holding the frame before…', restore: 'Putting the originals back…' }
-const dollars = (frames: number) => `about $${Math.max(0.05, frames * COST_PER_FRAME).toFixed(2)} before retries`
+/** A re-render runs up to this many rounds (each with the model's own two retries) while a frame still shows a person: dream-repair.ts's MAX_REPAIR_ROUNDS. */
+const MAX_ROUNDS = 10
+const dollars = (frames: number) => `about $${Math.max(0.05, frames * COST_PER_FRAME).toFixed(2)}, up to $${(frames * COST_PER_FRAME * 3 * MAX_ROUNDS).toFixed(2)}`
 const plain = 'rounded border border-stone-300 dark:border-stone-700 px-2.5 py-1 text-sm hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-40'
 const primary = 'rounded bg-stone-900 dark:bg-stone-100 px-2.5 py-1 text-sm font-medium text-white dark:text-stone-900 disabled:opacity-40'
 
@@ -224,10 +226,10 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
                   {after !== undefined && <img src={frameUrl(after)} alt="" title={`Frame ${after}, after`} className="h-28 w-28 shrink-0 rounded object-cover opacity-60" />}
                 </div>
                 {inside.every((frame) => detail.rerendered.includes(frame)) && (
-                  <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">Re-rendered, and it still shows a person: the model&apos;s retries didn&apos;t get rid of it. Re-render again, or hold the frame before.</p>
+                  <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">Re-rendered, with up to ten rounds of new seeds, and it still shows a person. Hold the frame before, or try ten more rounds.</p>
                 )}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Paid label={(inside.every((frame) => detail.rerendered.includes(frame)) ? 'Re-render again' : 'Re-render') + (s.frames === 1 ? '' : ` ${s.frames} frames`)} cost={dollars(s.frames)} disabled={busy || from === 0} onConfirm={() => repair('rerender', [s])} />
+                  <Paid label={(inside.every((frame) => detail.rerendered.includes(frame)) ? 'Ten more rounds' : 'Re-render') + (s.frames === 1 ? '' : ` ${s.frames} frames`)} cost={dollars(s.frames)} disabled={busy || from === 0} onConfirm={() => repair('rerender', [s])} />
                   {s.frames <= 2 && (
                     <button type="button" disabled={busy || from === 0} onClick={() => repair('hold', [s])} className={plain} title="Free: the frame before is held a little longer">
                       Hold the frame before (free)

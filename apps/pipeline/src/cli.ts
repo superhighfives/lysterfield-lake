@@ -13,7 +13,7 @@ import { depth } from './steps/depth.ts'
 import { createTake, dream, dreamSamples, loadTake, saveTake, TAKE_STATUSES, type TakeStatus } from './steps/dream.ts'
 import { dreamCheck, listDreamFrames, type DreamCheck } from './steps/dream-check.ts'
 import { deforumFrames } from './steps/dream-deforum.ts'
-import { DEFORUM_COST_PER_FRAME, dreamRepair, parseStretches, restoreFrames, type RepairAction } from './steps/dream-repair.ts'
+import { DEFORUM_COST_PER_FRAME, MAX_REPAIR_ROUNDS, dreamRepair, parseStretches, restoreFrames, type RepairAction } from './steps/dream-repair.ts'
 import { dreamDirections } from './steps/dream-directions.ts'
 import { init } from './steps/init.ts'
 import { matte } from './steps/matte.ts'
@@ -365,7 +365,7 @@ switch (step) {
     if (action === 'rerender' && flags.confirm !== 'true') {
       const dreamFrames = await listDreamFrames(framesDir)
       const count = stretches.reduce((sum, s) => sum + dreamFrames.filter((f) => f.frame >= s.start && f.frame <= s.end).length, 0)
-      console.log(`Re-rendering ${count} dream frames in ${stretches.length} stretches: about $${(count * DEFORUM_COST_PER_FRAME).toFixed(2)} of GPU time before retries, plus a cold start per run. Pass --confirm true to go ahead.`)
+      console.log(`Re-rendering ${count} dream frames in ${stretches.length} stretches: about $${(count * DEFORUM_COST_PER_FRAME).toFixed(2)} of GPU time if each comes out clean first time, up to $${(count * DEFORUM_COST_PER_FRAME * 3 * MAX_REPAIR_ROUNDS).toFixed(2)} if every one needs all ${MAX_REPAIR_ROUNDS} rounds and retries. Pass --confirm true to go ahead.`)
       break
     }
     // --again <ms>: re-render stretches that were re-rendered before that time (their result still shows a person).

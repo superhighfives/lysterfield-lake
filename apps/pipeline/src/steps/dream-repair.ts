@@ -32,6 +32,15 @@ const PRESETS_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '..
  */
 export const REPAIR_CONCURRENCY = 10
 
+/**
+ * Rounds a re-render request runs for one stretch before giving up and
+ * leaving it flagged (user, 2026-10-14). A round is one Replicate run with
+ * the model's own two retries, so a stretch can cost up to 30 frames of GPU
+ * time per frame in it. A deliberate, capped exception to CLAUDE.md's
+ * no-retry-loops rule.
+ */
+export const MAX_REPAIR_ROUNDS = 10
+
 /** Rough cost of one Deforum frame on the A100 (~21s at ~$0.0014/s), for the estimate printed before a paid repair. */
 export const DEFORUM_COST_PER_FRAME = 0.03
 
@@ -89,8 +98,10 @@ export interface RepairResult {
   stretch: RepairStretch
   action: RepairAction
   frames: number
-  /** Re-rendered frames the model itself still scored as a person, after its own retries. */
+  /** Re-rendered frames the model itself still scored as a person, after its own retries and every round. */
   stillFlagged: number[]
+  /** Re-render rounds this request ran for the stretch (each with new seeds). */
+  rounds?: number
 }
 
 /**
@@ -159,36 +170,43 @@ export async function dreamRepair(
       round += 1
     }
     const scoresPath = path.join(outDir, 'scores.json')
-    if (!(await exists(applied))) {
-      await mkdir(outDir, { recursive: true })
-      await writeFile(roundPath, String(round))
-      const previousFrame = path.join(outDir, 'previous.png')
-      if (!(await exists(previousFrame))) await sharp(previous.file).png().toFile(previousFrame)
-      // A large prime step keeps each round's seeds clear of the model's own retry seeds (seed + 7919 n).
-      const seeded = { ...config!, seed: (config!.seed + 15485863 * round) % 2 ** 32 }
-      const pngs = await deforumRun(job, take, seeded, {
-        start: previous.frame,
-        dreamFrames: targets.length + 1,
-        jobFrames: [previous.frame, ...targets.map((t) => t.frame)],
-        outDir,
-        previousFrame,
-      })
-      if (pngs.length !== targets.length) throw new Error(`Deforum returned ${pngs.length} frames for ${outDir}, expected ${targets.length}`)
-      for (const [i, target] of targets.entries()) {
-        await replaceFrame(target, opts.framesDir, replacedDir, async (file) => void (await sharp(pngs[i]).jpeg({ quality: 90 }).toFile(file)), false)
+    for (let pass = 0; ; pass++) {
+      const renderedNow = !(await exists(applied))
+      if (renderedNow) {
+        await mkdir(outDir, { recursive: true })
+        await writeFile(roundPath, String(round))
+        const previousFrame = path.join(outDir, 'previous.png')
+        if (!(await exists(previousFrame))) await sharp(previous.file).png().toFile(previousFrame)
+        // A large prime step keeps each round's seeds clear of the model's own retry seeds (seed + 7919 n).
+        const seeded = { ...config!, seed: (config!.seed + 15485863 * round) % 2 ** 32 }
+        const pngs = await deforumRun(job, take, seeded, {
+          start: previous.frame,
+          dreamFrames: targets.length + 1,
+          jobFrames: [previous.frame, ...targets.map((t) => t.frame)],
+          outDir,
+          previousFrame,
+        })
+        if (pngs.length !== targets.length) throw new Error(`Deforum returned ${pngs.length} frames for ${outDir}, expected ${targets.length}`)
+        for (const [i, target] of targets.entries()) {
+          await replaceFrame(target, opts.framesDir, replacedDir, async (file) => void (await sharp(pngs[i]).jpeg({ quality: 90 }).toFile(file)), false)
+        }
+        await writeFile(applied, '')
+        for (const png of pngs) await rm(png)
+        for (const video of ['init.mp4', 'mask.mp4']) await rm(path.join(outDir, video), { force: true })
       }
-      await writeFile(applied, '')
-      for (const png of pngs) await rm(png)
-      for (const video of ['init.mp4', 'mask.mp4']) await rm(path.join(outDir, video), { force: true })
-    }
-    // The model's own verdict on each new frame (models/deforum/predict.py), in frame order.
-    const scores = (await exists(scoresPath)) ? (Object.values(JSON.parse(await readFile(scoresPath, 'utf8'))) as { score: number; flagged: boolean }[]) : []
-    await updatingCheck(() => updateCheck(checkPath, targets.flatMap((t, i) => (scores[i] ? [{ frame: t.frame, score: scores[i].score }] : []))))
-    return {
-      stretch,
-      action: 'rerender',
-      frames: targets.length,
-      stillFlagged: targets.filter((_, i) => scores[i]?.flagged).map((t) => t.frame),
+      // The model's own verdict on each new frame (models/deforum/predict.py), in frame order.
+      const scores = (await exists(scoresPath)) ? (Object.values(JSON.parse(await readFile(scoresPath, 'utf8'))) as { score: number; flagged: boolean }[]) : []
+      await updatingCheck(() => updateCheck(checkPath, targets.flatMap((t, i) => (scores[i] ? [{ frame: t.frame, score: scores[i].score }] : []))))
+      const stillFlagged = targets.filter((_, i) => scores[i]?.flagged).map((t) => t.frame)
+      // Still a person after the model's own retries: go again with new seeds, up to MAX_REPAIR_ROUNDS
+      // rounds per request (user, 2026-10-14). Only for a round rendered just now, so retrying a task
+      // that already finished never starts paying again.
+      if (stillFlagged.length === 0 || !renderedNow || pass + 1 >= MAX_REPAIR_ROUNDS) {
+        return { stretch, action: 'rerender', frames: targets.length, stillFlagged, rounds: pass + 1 }
+      }
+      console.log(`Stretch ${stretch.start}-${stretch.end} still shows a person after round ${round}; trying new seeds`)
+      await rm(outDir, { recursive: true, force: true })
+      round += 1
     }
   }
 
