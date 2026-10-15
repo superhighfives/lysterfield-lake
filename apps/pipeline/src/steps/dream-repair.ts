@@ -150,7 +150,9 @@ export async function dreamRepair(
     // Which attempt at this stretch this is (`round`, 0 the first time). Deforum from the same frame
     // with the same seed paints the same picture again, so every further round uses new seeds.
     const roundPath = path.join(outDir, 'round')
-    let round = (await exists(roundPath)) ? Number(await readFile(roundPath, 'utf8')) : 0
+    const saved = (await exists(roundPath)) ? Number(await readFile(roundPath, 'utf8')) : 0
+    if (!Number.isInteger(saved) || saved < 0) throw new Error(`${roundPath} isn't a round number; fix or delete it before re-rendering this stretch.`)
+    let round = saved
     // Asked for again: an earlier result (from before the request) is replaced, so its run starts from scratch.
     if (opts.again !== undefined && (await exists(applied)) && (await stat(applied)).mtimeMs < opts.again) {
       await rm(outDir, { recursive: true, force: true })
@@ -231,7 +233,9 @@ export async function dreamRepair(
   // Every run is seen through before reporting a failure: the others were already paid for.
   const failed = settled.filter((r) => r.status === 'rejected')
   if (failed.length > 0) {
-    throw new Error(`${failed.length} of ${sorted.length} stretches failed (the rest were re-rendered): ${failed.map((r) => String(r.reason?.message ?? r.reason).split('\n')[0]).join('; ')}`)
+    // A failure stops the rest of its chain, so those stretches were never run.
+    const skipped = sorted.length - settled.length
+    throw new Error(`${failed.length} of ${sorted.length} stretches failed${skipped > 0 ? `, ${skipped} after them were skipped` : ''} (the rest were re-rendered): ${failed.map((r) => String(r.reason?.message ?? r.reason).split('\n')[0]).join('; ')}`)
   }
   return settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])).sort((a, b) => a.stretch.start - b.stretch.start)
 }
