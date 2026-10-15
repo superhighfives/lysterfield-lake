@@ -85,6 +85,8 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
   /** Bumped after every change, so replaced frames aren't shown from the browser's cache. */
   const [version, setVersion] = useState(0)
   const [cursor, setCursor] = useState(0)
+  /** "Check again" asks once before starting: a full song's check ties up this machine's GPU for 6 minutes or more. */
+  const [confirmingCheck, setConfirmingCheck] = useState(false)
 
   const dir = `7-dreams/${take}/${clip ? 'preview/dream/' : ''}`
   const frameUrl = (frame: number) => `${jobFile(job, `${dir}frames/${pad(frame)}.jpg`)}?v=${version}`
@@ -162,9 +164,29 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${status.tone}`}>{status.label}</span>
         {working && <span className="text-xs text-stone-500 dark:text-stone-400">{working}</span>}
         <span className="ml-auto flex gap-2">
-          <button type="button" disabled={busy} onClick={() => act({ action: 'check' })} className={plain}>
-            {summary ? 'Check again' : 'Check for people (free)'}
-          </button>
+          {confirmingCheck ? (
+            <span className="flex items-center gap-2 text-sm">
+              <span className="text-stone-600 dark:text-stone-400">{clip ? 'Checks every frame of the clip, under a minute.' : 'Checks every frame, 6 minutes or more.'}</span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setConfirmingCheck(false)
+                  act({ action: 'check' })
+                }}
+                className={plain}
+              >
+                Run the check
+              </button>
+              <button type="button" onClick={() => setConfirmingCheck(false)} className={plain}>
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button type="button" disabled={busy} onClick={() => setConfirmingCheck(true)} className={plain}>
+              {summary ? 'Check again' : 'Check for people (free)'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setOpen(!open)}
