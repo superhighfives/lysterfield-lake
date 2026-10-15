@@ -63,10 +63,14 @@ export async function repairConfig(job: Job, take: string): Promise<TakeConfig> 
  */
 async function replaceFrame(target: DreamFrame, framesDir: string, replacedDir: string, write: (file: string) => Promise<void>, keepOriginal: boolean): Promise<void> {
   const kept = path.join(replacedDir, path.basename(target.file))
-  if (!keepOriginal || (await exists(kept))) await rm(target.file)
-  else await rename(target.file, kept)
+  // Made beside the frames first and renamed over the old one, so a write that fails leaves the old frame in place.
+  const incoming = path.join(replacedDir, '..', 'incoming', path.basename(target.file))
+  await mkdir(path.dirname(incoming), { recursive: true })
+  await rm(incoming, { force: true })
+  await write(incoming)
+  if (keepOriginal && !(await exists(kept))) await rename(target.file, kept)
+  await rename(incoming, target.file)
   if (!keepOriginal) await rm(kept, { force: true })
-  await write(target.file)
   for (const held of target.holds) {
     const heldPath = path.join(framesDir, `${name(held)}${path.extname(target.file)}`)
     await rm(heldPath)
@@ -98,10 +102,11 @@ export async function dreamRepair(
     stretches: RepairStretch[]
     action: RepairAction
     /**
-     * Re-render a stretch that has been re-rendered before, when that result still shows a person.
-     * Without it a finished re-render is never run again (so retrying a task can't pay twice).
+     * Re-render a stretch that has been re-rendered before, when that result still shows a person:
+     * the time (ms) the request was made. Only a re-render finished before then is redone, so a
+     * retried task, which passes the same time, skips one it already finished rather than paying twice.
      */
-    again?: boolean
+    again?: number
   }
 ): Promise<RepairResult[]> {
   const config = opts.action === 'rerender' ? await repairConfig(job, take) : undefined
@@ -128,9 +133,9 @@ export async function dreamRepair(
     }
 
     const outDir = path.join(opts.takeDir, 'repairs', `${name(stretch.start)}-${name(stretch.end)}`)
-    // Asked for again: the earlier result is replaced, so its run starts from scratch.
-    if (opts.again && (await exists(path.join(outDir, 'applied')))) await rm(outDir, { recursive: true, force: true })
     const applied = path.join(outDir, 'applied')
+    // Asked for again: an earlier result (from before the request) is replaced, so its run starts from scratch.
+    if (opts.again !== undefined && (await exists(applied)) && (await stat(applied)).mtimeMs < opts.again) await rm(outDir, { recursive: true, force: true })
     const scoresPath = path.join(outDir, 'scores.json')
     if (!(await exists(applied))) {
       await mkdir(outDir, { recursive: true })

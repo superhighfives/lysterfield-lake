@@ -368,8 +368,10 @@ switch (step) {
       console.log(`Re-rendering ${count} dream frames in ${stretches.length} stretches: about $${(count * DEFORUM_COST_PER_FRAME).toFixed(2)} of GPU time before retries, plus a cold start per run. Pass --confirm true to go ahead.`)
       break
     }
-    // --again true: re-render stretches that were re-rendered before (their result still shows a person).
-    const results = await dreamRepair(job, take, { takeDir, framesDir, stretches, action, again: flags.again === 'true' })
+    // --again <ms>: re-render stretches that were re-rendered before that time (their result still shows a person).
+    const again = flags.again === undefined ? undefined : Number(flags.again)
+    if (again !== undefined && !Number.isFinite(again)) throw new Error('--again takes the time the re-render was asked for, in ms (e.g. Date.now()).')
+    const results = await dreamRepair(job, take, { takeDir, framesDir, stretches, action, again })
     console.log(JSON.stringify(results, null, 2))
     break
   }

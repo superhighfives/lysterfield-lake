@@ -213,7 +213,7 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
       // Replace dream frames that show a person: re-rendered on Replicate (paid), or the frame before held (free); or undo that (restore, free).
       if (!takeOk) throw new Error('bad take')
       if (!/^\d+(-\d+)?(,\d+(-\d+)?)*$/.test(String(body.frames))) throw new Error('frames: e.g. 1735,934-936')
-      return ['dream-repair', ...base, '--take', take, '--frames', String(body.frames), '--action', String(body.action), '--confirm', 'true', ...(body.clip ? ['--clip', 'true'] : []), ...(body.again === true ? ['--again', 'true'] : [])]
+      return ['dream-repair', ...base, '--take', take, '--frames', String(body.frames), '--action', String(body.action), '--confirm', 'true', ...(body.clip ? ['--clip', 'true'] : []), ...(body.again === true ? ['--again', String(Date.now())] : [])]
     case 'status':
       if (!takeOk) throw new Error('bad take')
       return [
