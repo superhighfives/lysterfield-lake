@@ -5,6 +5,7 @@ import { promisify } from 'node:util'
 import sharp from 'sharp'
 import { exists, framesDir, listFrames, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
+import { gpuServerUrl, runOnGpuServer } from '../gpu-server.ts'
 import { readFileAsInput, runModelToFileResumable } from '../replicate.ts'
 import { COLOURS_DIR } from '../resources.ts'
 import type { DreamSamplesResult, TakeConfig } from './dream.ts'
@@ -123,27 +124,26 @@ export async function deforumRun(job: Job, take: string, config: TakeConfig, run
   await concat('mask.txt', '4-matte/frames', 'png', ['-vf', 'scale=1024:1024'], maskPath)
 
   const zipPath = path.join(outDir, 'frames.zip')
-  await runModelToFileResumable(
-    MODELS.deforum,
-    {
-      init_video: await readFileAsInput(initPath),
-      mask_video: await readFileAsInput(maskPath),
-      prompt: config.prompt,
-      negative_prompt: config.negativePrompt ?? '',
-      // A colour reference matches every frame's palette to it (legacy "Specific"/"Random"); without
-      // one, colours follow the footage itself (legacy "Video Input", as watercolour did).
-      ...(config.colour
-        ? { colour_image: await readFileAsInput(colourPath(job, take, config.colour)), colour_mode: 'Specific' }
-        : { colour_mode: 'Video Input' }),
-      preset: config.preset ?? 'lush-and-light',
-      extract_nth_frame: 1,
-      max_frames: jobFrames.length,
-      seed: config.seed,
-      ...(run.previousFrame && { previous_frame: await readFileAsInput(run.previousFrame) }),
-    },
-    zipPath,
-    path.join(outDir, 'prediction.json')
-  )
+  const input = {
+    init_video: await readFileAsInput(initPath),
+    mask_video: await readFileAsInput(maskPath),
+    prompt: config.prompt,
+    negative_prompt: config.negativePrompt ?? '',
+    // A colour reference matches every frame's palette to it (legacy "Specific"/"Random"); without
+    // one, colours follow the footage itself (legacy "Video Input", as watercolour did).
+    ...(config.colour
+      ? { colour_image: await readFileAsInput(colourPath(job, take, config.colour)), colour_mode: 'Specific' }
+      : { colour_mode: 'Video Input' }),
+    preset: config.preset ?? 'lush-and-light',
+    extract_nth_frame: 1,
+    max_frames: jobFrames.length,
+    seed: config.seed,
+    ...(run.previousFrame && { previous_frame: await readFileAsInput(run.previousFrame) }),
+  }
+  // Our own GPU when one is set up (gpu-server.ts), else Replicate.
+  const server = gpuServerUrl()
+  if (server) await runOnGpuServer(server, input, zipPath)
+  else await runModelToFileResumable(MODELS.deforum, input, zipPath, path.join(outDir, 'prediction.json'))
   await execFileAsync('unzip', ['-o', '-q', zipPath, '-d', outDir])
   await rm(zipPath)
   const frames = await pngs()
