@@ -551,14 +551,16 @@ export default function Admin() {
     return () => clearInterval(timer)
   }, [loadTasks])
 
-  /** Queues a generation for a take. Its card follows it from the task list. */
-  const generate = async (take: string, action: Action) => {
+  /** Queues a generation for a take, resolving whether it was queued. Its card follows it from the task list. */
+  const generate = async (take: string, action: Action): Promise<boolean> => {
     setError('')
     try {
       await api(`/__admin/api/jobs/${job}/actions`, { action, take, on: effectiveRunOn })
       await loadTasks()
+      return true
     } catch (e) {
       fail(e)
+      return false
     }
   }
 
@@ -594,14 +596,12 @@ export default function Admin() {
         return false
       }
 
-      await generate(take.name, 'samples')
-      return true
+      return await generate(take.name, 'samples')
     } catch (e) {
       fail(e)
       return false
     }
   }
-
 
   const takes = detail?.takes.filter((t) => t.status) ?? []
   const samples = detail?.config.samples ?? []
