@@ -134,14 +134,24 @@ export async function dreamRepair(
 
     const outDir = path.join(opts.takeDir, 'repairs', `${name(stretch.start)}-${name(stretch.end)}`)
     const applied = path.join(outDir, 'applied')
+    // Which attempt at this stretch this is (`round`, 0 the first time). Deforum from the same frame
+    // with the same seed paints the same picture again, so every further round uses new seeds.
+    const roundPath = path.join(outDir, 'round')
+    let round = (await exists(roundPath)) ? Number(await readFile(roundPath, 'utf8')) : 0
     // Asked for again: an earlier result (from before the request) is replaced, so its run starts from scratch.
-    if (opts.again !== undefined && (await exists(applied)) && (await stat(applied)).mtimeMs < opts.again) await rm(outDir, { recursive: true, force: true })
+    if (opts.again !== undefined && (await exists(applied)) && (await stat(applied)).mtimeMs < opts.again) {
+      await rm(outDir, { recursive: true, force: true })
+      round += 1
+    }
     const scoresPath = path.join(outDir, 'scores.json')
     if (!(await exists(applied))) {
       await mkdir(outDir, { recursive: true })
+      await writeFile(roundPath, String(round))
       const previousFrame = path.join(outDir, 'previous.png')
       if (!(await exists(previousFrame))) await sharp(previous.file).png().toFile(previousFrame)
-      const pngs = await deforumRun(job, take, config!, {
+      // A large prime step keeps each round's seeds clear of the model's own retry seeds (seed + 7919 n).
+      const seeded = { ...config!, seed: (config!.seed + 15485863 * round) % 2 ** 32 }
+      const pngs = await deforumRun(job, take, seeded, {
         start: previous.frame,
         dreamFrames: targets.length + 1,
         jobFrames: [previous.frame, ...targets.map((t) => t.frame)],
