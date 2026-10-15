@@ -13,7 +13,10 @@ type Detail = {
   frames: number[]
   check: { threshold: number; stretches: Stretch[]; scores: Record<string, number> } | null
   keep: number[]
+  /** Frames a hold replaced; their originals can be put back. */
   replaced: number[]
+  /** Frames a re-render made. A re-render is final, so these have no original to go back to. */
+  rerendered: number[]
 }
 
 /** Rough Replicate cost of re-rendering one dream frame (A100, ~21s), before rerolls: a frame still scored as a person is re-rendered up to twice more. */
@@ -129,7 +132,8 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
 
   const range = (s: { start: number; end: number }) => (s.start === s.end ? String(s.start) : `${s.start}-${s.end}`)
   const repair = (action: 'rerender' | 'hold' | 'restore', stretches: { start: number; end: number }[]) =>
-    act({ action, frames: stretches.map(range).join(',') })
+    // A stretch re-rendered before is only re-rendered again when asked for explicitly, which these buttons are.
+    act({ action, frames: stretches.map(range).join(','), again: action === 'rerender' })
   const setKeep = async (keep: number[]) => {
     setError('')
     try {
@@ -209,15 +213,18 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
                   {inside.length > shown.length && <div className="flex h-28 w-20 shrink-0 items-center justify-center text-xs text-stone-500 dark:text-stone-400">+{inside.length - shown.length} more</div>}
                   {after !== undefined && <img src={frameUrl(after)} alt="" title={`Frame ${after}, after`} className="h-28 w-28 shrink-0 rounded object-cover opacity-60" />}
                 </div>
+                {inside.every((frame) => detail.rerendered.includes(frame)) && (
+                  <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">Re-rendered, and it still shows a person: the model&apos;s retries didn&apos;t get rid of it. Re-render again, or hold the frame before.</p>
+                )}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Paid label={s.frames === 1 ? 'Re-render' : `Re-render ${s.frames} frames`} cost={dollars(s.frames)} disabled={busy || from === 0} onConfirm={() => repair('rerender', [s])} />
+                  <Paid label={(inside.every((frame) => detail.rerendered.includes(frame)) ? 'Re-render again' : 'Re-render') + (s.frames === 1 ? '' : ` ${s.frames} frames`)} cost={dollars(s.frames)} disabled={busy || from === 0} onConfirm={() => repair('rerender', [s])} />
                   {s.frames <= 2 && (
                     <button type="button" disabled={busy || from === 0} onClick={() => repair('hold', [s])} className={plain} title="Free: the frame before is held a little longer">
                       Hold the frame before (free)
                     </button>
                   )}
                   {inside.some((frame) => detail.replaced.includes(frame)) && (
-                    <button type="button" disabled={busy} onClick={() => repair('restore', [s])} className={plain} title="Free: undoes the repair, putting the frames that were here before back">
+                    <button type="button" disabled={busy} onClick={() => repair('restore', [s])} className={plain} title="Free: undoes the hold, putting the frames that were here before back">
                       Put the original back
                     </button>
                   )}

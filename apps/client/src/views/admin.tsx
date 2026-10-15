@@ -606,7 +606,7 @@ export default function Admin() {
             <h2 className="mb-1 font-serif text-2xl">People check</h2>
             <p className="mb-3 text-sm text-stone-600 dark:text-stone-400">
               Every dream with a full song, published ones included. The check is free and runs on this machine. It flags a literal person, hands, or a cut-out of the subject; a shape that only looks like a person is the
-              intended look and is left alone. A flagged frame is re-rendered from the frame before it, or that frame is held; the original is always kept.
+              intended look and is left alone. A flagged frame is re-rendered from the frame before it, which replaces it for good, or that frame is held, which can be undone.
             </p>
             <div className="rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4">
               {detail!.songs.map((song) => (
