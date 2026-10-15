@@ -27,8 +27,8 @@ It replaces four plans:
 legacy Deforum 0.7.1 setup (`models/deforum/`). `/admin` runs a take through
 describe a look → 5 samples → 15s clip → full song, each stage gated on the
 one before in `take.json`. Clips and full songs are chains of 48-frame runs
-that pick up where they stopped. A full song is ~2,580 dream frames, ~15h of
-GPU, roughly $75. Details: `done/own-deforum-dream-model.md`,
+that pick up where they stopped. A full song is ~2,580 dream frames, ~7h of
+GPU, roughly $36. Details: `done/own-deforum-dream-model.md`,
 `done/frame-preview-approval-tool.md`.
 
 **The problem.** Takes keep showing a person: `neon-dream`'s "after the cut"
@@ -86,11 +86,11 @@ after one frame.
 | Stage | What runs | Cost | Gate |
 | --- | --- | --- | --- |
 | 1. Look | New dream form in `/admin` | free | landscape-only prompt check |
-| 2. Samples | 5 warm-up runs | ~$1.75 | user approves |
-| 3. Clip | 15s chain + composite | ~$5 | **person check**, then user approves |
-| 4. Full song | ~54 chained runs | ~$75 | confirm dialog |
+| 2. Samples | 5 warm-up runs | ~$1 | user approves |
+| 3. Clip | 15s chain + composite | ~$3 | **person check**, then user approves |
+| 4. Full song | ~54 chained runs | ~$36 | confirm dialog |
 | 5. Check | Score every dream frame for a person | free | none |
-| 6. Repair | Re-render flagged stretches with Deforum | ~$0.03 a frame | user approves flagged stretches and the cost |
+| 6. Repair | Re-render flagged stretches with Deforum | ~$0.015 a frame | user approves flagged stretches and the cost |
 | 7. Publish | `compose`, `deploy-dreams`, client deploy | free | user's go-ahead for R2 |
 
 Stages 1-4 exist. Stages 5 and 6 are new and are what makes this
@@ -147,7 +147,7 @@ a real Deforum frame.
   kept and flagged. The run's zip gains `scores.json` (score, attempts and
   flag per frame). This is the 2023 "delete and rebuild", done at the moment
   the frame is made. It is bounded GPU time inside one run, not a new
-  Replicate call: ~21s a reroll, so a 10% leak rate adds ~10% to a take.
+  Replicate call: ~10s a reroll, so a 10% leak rate adds ~10% to a take.
 - **Afterwards: `dream-repair --job J --take T`** re-renders each approved
   stretch as a short Deforum run that continues from the last good frame
   before it (`previous_frame`, as a chain does), with the take's own
@@ -268,9 +268,9 @@ for this model. One GPU, so one run at a time.
   truncated there), so a new container doesn't fetch them again.
 - **Measured (2026-10-15):** six dream frames of the walk-away stretch
   (seven renders, one retry) in 75 seconds, upload and download included:
-  about 10 seconds a render against the A100's ~21, with no cold start and
-  no charge. The frames match Replicate's for the same stretch, and the
-  same frame needed a retry on both.
+  about 10 seconds a render, the same as the A100 with xformers (~21
+  without), with no cold start and no charge. The frames match Replicate's
+  for the same stretch, and the same frame needed a retry on both.
 - **Open:** WSL doesn't yet start at boot (the startup task needs
   registering from the PC's desktop with a password); the Mac reaches the
   PC through Tailscale's relay rather than directly, which slows uploads; a

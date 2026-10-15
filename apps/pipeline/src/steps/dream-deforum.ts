@@ -38,9 +38,9 @@ export const DEFORUM_NTH_FRAME = 2
 /** Dream frames in each sample's warm-up run (~1s): enough for the loop to settle into the subject's shape. */
 const SAMPLE_WARMUP_FRAMES = 12
 /**
- * Dream frames per Replicate run in a chain. At ~21s a frame on an A100 that
- * is about 17 minutes: the most a failed run can waste, and how often a long
- * take saves its progress.
+ * Dream frames per Replicate run in a chain. At ~10s a frame on an A100 with
+ * xformers that is about 8 minutes: the most a failed run can waste, and how
+ * often a long take saves its progress.
  */
 const CHUNK_DREAM_FRAMES = 48
 
