@@ -64,7 +64,10 @@ export function Tasks({ job, tasks, titles, onChanged }: {
       </div>
       <ul className="max-h-[200px] overflow-y-auto rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 text-sm">
         {[...going, ...finished.reverse()].map((task) => {
-          const progress = task.log.match(/(Dream frames: |Scored |Re-rendered )(\d+) of (\d+)(?![\s\S]*(?:Dream frames: |Scored |Re-rendered )\d)/)
+          // A repair runs several Deforum runs side by side, each logging its own frame count, so once a stretch is done its count wins.
+          const progress =
+            task.log.match(/(Re-rendered )(\d+) of (\d+)(?![\s\S]*Re-rendered \d)/) ??
+            task.log.match(/(Dream frames: |Scored |Re-rendered )(\d+) of (\d+)(?![\s\S]*(?:Dream frames: |Scored |Re-rendered )\d)/)
           return (
             <li key={task.id} className="border-t border-stone-200 dark:border-stone-800 py-2 first:border-t-0">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
