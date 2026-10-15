@@ -5,6 +5,7 @@ import formulaireCss from 'formulaire-ui/styles.css?raw'
 import ThemeToggle from '../components/theme-toggle.tsx'
 import { useStore } from '../store.ts'
 import { active, api, jobFile, pad, reason, runAction, type Task } from './admin-api.ts'
+import { priced, RunOnContext, RunOnSwitch, useRunOn, type GpuStatus, type RunOn } from './admin-run-on.tsx'
 import { Tasks } from './admin-tasks.tsx'
 import { PersonCheck, type CheckSummary } from './admin-person-check.tsx'
 
@@ -103,6 +104,7 @@ function Steps() {
 function FullSongButton({ take, disabled, onConfirm }: { take: string; disabled?: boolean; onConfirm: () => void }) {
   const [open, setOpen] = useState(false)
   const [checked, setChecked] = useState(false)
+  const runOn = useRunOn()
   const [cost, time] = COST.full.split(', ')
   return (
     <AlertDialog.Root
@@ -120,7 +122,9 @@ function FullSongButton({ take, disabled, onConfirm }: { take: string; disabled?
         <AlertDialog.Popup className="fixed left-1/2 top-1/2 z-50 w-[min(30rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white dark:bg-stone-900 p-6 font-sans text-stone-900 dark:text-stone-100 shadow-xl [color-scheme:light] dark:[color-scheme:dark] [touch-action:auto]">
           <AlertDialog.Title className="font-serif text-2xl">Generate the full song for {take}?</AlertDialog.Title>
           <AlertDialog.Description className="mt-2 text-sm text-stone-600 dark:text-stone-400">
-            This renders the whole song on Replicate: {cost}, over {time}. It can be stopped and started again without paying twice for finished work, but the money for what has already rendered is spent.
+            {runOn === 'pc'
+              ? 'This renders the whole song on the 4090 PC: free, and roughly 7 to 8 hours, about half the time Replicate takes. It can be stopped and started again without redoing finished work.'
+              : `This renders the whole song on Replicate: ${cost}, over ${time}. It can be stopped and started again without paying twice for finished work, but the money for what has already rendered is spent.`}
           </AlertDialog.Description>
           <label className="mt-4 flex cursor-pointer items-start gap-2 rounded bg-amber-50 dark:bg-amber-950/40 p-3 text-sm">
             <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="mt-0.5" />
@@ -137,7 +141,7 @@ function FullSongButton({ take, disabled, onConfirm }: { take: string; disabled?
               }}
               className="rounded bg-stone-900 dark:bg-stone-100 px-3 py-1.5 text-sm font-medium text-white dark:text-stone-900 disabled:opacity-40"
             >
-              Spend {cost} and start
+              {runOn === 'pc' ? 'Start on the 4090' : `Spend ${cost} and start`}
             </button>
           </div>
         </AlertDialog.Popup>
@@ -166,6 +170,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
   onCreate: (take: NewTake) => void
   onUploaded: () => Promise<void>
 }) {
+  const runOn = useRunOn()
   const [preset, setPreset] = useState('')
   const [prompt, setPrompt] = useState('')
   const [colour, setColour] = useState<string | null>(null)
@@ -280,7 +285,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
           </GridForm.Row>
         </GridForm.Section>
         <GridForm.Actions>
-          <span className="text-sm text-stone-600 dark:text-stone-400">{`Runs on Replicate: ${SAMPLES_COST}.`}</span>
+          <span className="text-sm text-stone-600 dark:text-stone-400">{runOn === 'pc' ? 'Runs on the 4090 PC: free.' : `Runs on Replicate: ${SAMPLES_COST}.`}</span>
           <GridForm.Button type="submit" variant="primary" disabled={!ready}>
             Generate 5 samples
           </GridForm.Button>
@@ -302,6 +307,7 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
   onUpdate: (take: string, change: { status?: Take['status']; notes?: string }) => void
   onChanged: () => void
 }) {
+  const runOn = useRunOn()
   // The take's latest generation task: shown while it waits or runs, and afterwards only if it failed.
   const latest = tasks.filter((t) => t.take === take.id && t.action in COST).at(-1)
   const mine = latest && (active(latest) || latest.status === 'failed') ? { ...latest, failed: latest.status === 'failed' } : null
@@ -397,7 +403,7 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
         )}
         {take.status === 'proposed' && take.samples.length < samples.length && !working && (
           <button type="button" disabled={generating} onClick={() => onGenerate(take.id, 'samples')} className={primary}>
-            {take.samples.length > 0 || mine?.failed ? 'Generate the missing samples' : `Generate 5 samples (${isDeforum ? COST.samples : 'about $0.15'})`}
+            {take.samples.length > 0 || mine?.failed ? 'Generate the missing samples' : `Generate 5 samples (${isDeforum ? priced(runOn, COST.samples) : 'about $0.15'})`}
           </button>
         )}
         {take.status === 'samples-approved' && !working && (
@@ -410,7 +416,7 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
             )}
             {isDeforum && !take.hasPreview && (
               <button type="button" disabled={generating} onClick={() => onGenerate(take.id, 'clip')} className={primary}>
-                Render the 15-second clip ({COST.clip})
+                Render the 15-second clip ({priced(runOn, COST.clip)})
               </button>
             )}
             {reject}
@@ -459,6 +465,32 @@ export default function Admin() {
   /** This footage's tasks (admin-queue.ts): everything waiting or running, and the most recent finished ones. */
   const [tasks, setTasks] = useState<Task[]>([])
   const [error, setError] = useState('')
+  const [gpu, setGpu] = useState<GpuStatus | null>(null)
+  /** Where Deforum jobs run, remembered on this machine. The PC when it's set up, unless chosen otherwise. */
+  const [runOn, setRunOn] = useState<RunOn>(() => {
+    try {
+      return localStorage.getItem('admin-run-on') === 'replicate' ? 'replicate' : 'pc'
+    } catch {
+      return 'pc'
+    }
+  })
+  const chooseRunOn = (value: RunOn) => {
+    setRunOn(value)
+    try {
+      localStorage.setItem('admin-run-on', value)
+    } catch {
+      // Storage blocked: the choice still holds for this visit.
+    }
+  }
+
+  /** Without a GPU server set up, everything runs on Replicate whatever was chosen. */
+  const effectiveRunOn: RunOn = gpu?.configured ? runOn : 'replicate'
+  useEffect(() => {
+    const load = () => api<GpuStatus>('/__admin/api/gpu').then(setGpu, () => setGpu(null))
+    load()
+    const timer = setInterval(load, 15000)
+    return () => clearInterval(timer)
+  }, [])
   /** Tasks seen waiting or running, so the page reloads the footage's details once when each ends. */
   const unfinished = useRef(new Set<string>())
 
@@ -507,7 +539,7 @@ export default function Admin() {
   const generate = async (take: string, action: Action) => {
     setError('')
     try {
-      await api(`/__admin/api/jobs/${job}/actions`, { action, take })
+      await api(`/__admin/api/jobs/${job}/actions`, { action, take, on: effectiveRunOn })
       await loadTasks()
     } catch (e) {
       fail(e)
@@ -557,6 +589,7 @@ export default function Admin() {
 
   return (
     // The player's global styles lock the page (overflow hidden, touch-action none), so this view scrolls itself.
+    <RunOnContext.Provider value={effectiveRunOn}>
     <div className="fixed inset-0 overflow-y-auto bg-stone-100 dark:bg-stone-950 font-sans text-stone-900 dark:text-stone-100 [color-scheme:light] dark:[color-scheme:dark] [touch-action:auto]">
       <style>{FORMULAIRE_CSS}</style>
       <div className="mx-auto max-w-5xl px-6 py-10">
@@ -564,6 +597,7 @@ export default function Admin() {
           <h1 className="font-serif text-4xl">Dreams</h1>
           <p className="text-sm text-stone-600 dark:text-stone-400">Make and review new looks for the dream panel.</p>
           <div className="ml-auto flex items-center gap-4">
+            <RunOnSwitch value={effectiveRunOn} gpu={gpu} onChange={chooseRunOn} />
             {jobs.length > 1 && (
               <label className="text-sm text-stone-600 dark:text-stone-400">
                 Footage{' '}
@@ -629,5 +663,6 @@ export default function Admin() {
         </footer>
       </div>
     </div>
+    </RunOnContext.Provider>
   )
 }

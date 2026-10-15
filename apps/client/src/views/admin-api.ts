@@ -2,7 +2,7 @@
 
 export type TaskStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 /** A pipeline command the page started: see admin-queue.ts. `log` is the end of its output. */
-export type Task = { id: string; job: string; take: string; action: string; clip: boolean; status: TaskStatus; created: number; started?: number; ended?: number; retriedBy?: string; log: string }
+export type Task = { id: string; job: string; take: string; action: string; clip: boolean; args: string[]; lane: string; status: TaskStatus; created: number; started?: number; ended?: number; retriedBy?: string; log: string }
 export type RunState = Task
 
 export const active = (task: Task) => task.status === 'queued' || task.status === 'running'

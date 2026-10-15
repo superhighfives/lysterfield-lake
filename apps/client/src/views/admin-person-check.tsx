@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CaretDown } from '@phosphor-icons/react'
 import { active, api, jobFile, pad, reason, type Task } from './admin-api.ts'
+import { useRunOn } from './admin-run-on.tsx'
 
 // The person check and its repairs (plans/in-progress/dreams.md). Panel 7
 // must never show a person, and Deforum draws one into a few percent of
@@ -58,7 +59,7 @@ function Paid({ label, cost, disabled, onConfirm }: { label: string; cost: strin
         }}
         className="rounded bg-amber-700 px-2.5 py-1 text-sm font-medium text-white disabled:opacity-40"
       >
-        Spend {cost}
+        {cost.startsWith('free') ? 'Start' : `Spend ${cost}`}
       </button>
       <button type="button" onClick={() => setAsking(false)} className={plain}>
         Cancel
@@ -78,6 +79,9 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
   tasks: Task[]
   onChanged: () => void
 }) {
+  const runOn = useRunOn()
+  /** A re-render's cost where it runs: free on the 4090 PC. */
+  const cost = (frames: number) => (runOn === 'pc' ? 'free on the 4090' : dollars(frames))
   // `/admin#check-<take>` opens that take's review straight away.
   const [open, setOpen] = useState(() => location.hash === `#check-${take}${clip ? '-clip' : ''}`)
   const [detail, setDetail] = useState<Detail | null>(null)
@@ -118,7 +122,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
   const act = async (body: Record<string, unknown>) => {
     setError('')
     try {
-      await api(`/__admin/api/jobs/${job}/actions`, { ...body, take, clip })
+      await api(`/__admin/api/jobs/${job}/actions`, { ...body, take, clip, on: runOn })
       onChanged()
     } catch (e) {
       setError((e as Error).message)
@@ -219,8 +223,8 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
 
           {stretches.length > 1 && (
             <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-              <Paid label={`Re-render all ${flaggedFrames} flagged frames`} cost={dollars(flaggedFrames)} disabled={busy} onConfirm={() => repair('rerender', stretches)} />
-              <span className="text-stone-500 dark:text-stone-400">Each stretch is its own Replicate run, all side by side. One that still shows a person goes again with new seeds, up to ten rounds.</span>
+              <Paid label={`Re-render all ${flaggedFrames} flagged frames`} cost={cost(flaggedFrames)} disabled={busy} onConfirm={() => repair('rerender', stretches)} />
+              <span className="text-stone-500 dark:text-stone-400">{runOn === 'pc' ? 'They take turns on the 4090.' : 'Each stretch is its own Replicate run, all side by side.'} One that still shows a person goes again with new seeds, up to ten rounds.</span>
             </div>
           )}
 
@@ -251,7 +255,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
                   <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">Re-rendered, with up to ten rounds of new seeds, and it still shows a person. Hold the frame before, or try ten more rounds.</p>
                 )}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Paid label={(inside.every((frame) => detail.rerendered.includes(frame)) ? 'Ten more rounds' : 'Re-render') + (s.frames === 1 ? '' : ` ${s.frames} frames`)} cost={dollars(s.frames)} disabled={busy || from === 0} onConfirm={() => repair('rerender', [s])} />
+                  <Paid label={(inside.every((frame) => detail.rerendered.includes(frame)) ? 'Ten more rounds' : 'Re-render') + (s.frames === 1 ? '' : ` ${s.frames} frames`)} cost={cost(s.frames)} disabled={busy || from === 0} onConfirm={() => repair('rerender', [s])} />
                   {s.frames <= 2 && (
                     <button type="button" disabled={busy || from === 0} onClick={() => repair('hold', [s])} className={plain} title="Free: the frame before is held a little longer">
                       Hold the frame before (free)
@@ -301,7 +305,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Paid label="Re-render this frame" cost={dollars(1)} disabled={busy || cursor === 0} onConfirm={() => repair('rerender', [{ start: current, end: current }])} />
+                    <Paid label="Re-render this frame" cost={cost(1)} disabled={busy || cursor === 0} onConfirm={() => repair('rerender', [{ start: current, end: current }])} />
                     <button type="button" disabled={busy || cursor === 0} onClick={() => repair('hold', [{ start: current, end: current }])} className={plain}>
                       Hold the frame before (free)
                     </button>

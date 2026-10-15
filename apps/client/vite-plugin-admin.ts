@@ -164,6 +164,24 @@ function jobDetail(job: string) {
   return { name: job, config: readJson(path.join(dir, 'job.json')), takes, songs, directions }
 }
 
+/** Where a Deforum job runs: our own GPU (the 4090 PC, DEFORUM_URL in the pipeline's .env) or Replicate. Unsaid, the pipeline decides. */
+function runOn(body: Record<string, unknown>): string[] {
+  return body.on === 'pc' || body.on === 'replicate' ? ['--on', body.on] : []
+}
+
+/** Our own GPU server, if one is set up: its address and whether it's up (Cog's health check). */
+async function gpuStatus() {
+  const url = pipelineEnv().DEFORUM_URL?.replace(/\/+$/, '')
+  if (!url) return { configured: false }
+  try {
+    const response = await fetch(`${url}/health-check`, { signal: AbortSignal.timeout(4000) })
+    const { status } = (await response.json()) as { status?: string }
+    return { configured: true, status: status ?? 'unknown' }
+  } catch {
+    return { configured: true, status: 'offline' }
+  }
+}
+
 /** The pipeline command for an admin action. Each one is a stage of the loop; the pipeline enforces the approval order itself. */
 function actionArgs(job: string, body: Record<string, unknown>): string[] {
   const take = String(body.take ?? '')
@@ -195,14 +213,14 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
       return ['dream-take', ...base, '--take', take, '--prompt', String(body.prompt)]
     case 'samples':
       if (!takeOk) throw new Error('bad take')
-      return ['dream-samples', ...base, '--take', take]
+      return ['dream-samples', ...base, '--take', take, ...runOn(body)]
     case 'clip':
       if (!takeOk) throw new Error('bad take')
-      return ['dream-clip', ...base, '--take', take]
+      return ['dream-clip', ...base, '--take', take, ...runOn(body)]
     case 'full':
       // The whole song. Publishing to the client (which edits dreams.json) stays a separate, deliberate `compose`.
       if (!takeOk) throw new Error('bad take')
-      return ['dream', ...base, '--take', take, '--skip-client', 'true']
+      return ['dream', ...base, '--take', take, '--skip-client', 'true', ...runOn(body)]
     case 'check':
       // The person check: local and free.
       if (!takeOk) throw new Error('bad take')
@@ -213,7 +231,7 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
       // Replace dream frames that show a person: re-rendered on Replicate (paid), or the frame before held (free); or undo that (restore, free).
       if (!takeOk) throw new Error('bad take')
       if (!/^\d+(-\d+)?(,\d+(-\d+)?)*$/.test(String(body.frames))) throw new Error('frames: e.g. 1735,934-936')
-      return ['dream-repair', ...base, '--take', take, '--frames', String(body.frames), '--action', String(body.action), '--confirm', 'true', ...(body.clip ? ['--clip', 'true'] : []), ...(body.again === true ? ['--again', String(Date.now())] : [])]
+      return ['dream-repair', ...base, '--take', take, '--frames', String(body.frames), '--action', String(body.action), '--confirm', 'true', ...(body.clip ? ['--clip', 'true'] : []), ...(body.again === true ? ['--again', String(Date.now())] : []), ...runOn(body)]
     case 'status':
       if (!takeOk) throw new Error('bad take')
       return [
@@ -292,6 +310,7 @@ export default function adminPlugin(): Plugin {
               colours: existsSync(COLOURS_DIR) ? readdirSync(COLOURS_DIR).filter((f) => /\.(png|jpe?g)$/i.test(f)).sort() : [],
             })
           }
+          if (parts[1] === 'gpu' && req.method === 'GET') return send(res, 200, await gpuStatus())
           if (parts[1] === 'colours' && req.method === 'POST') {
             // A new colour reference: { name, data } with data as base64.
             const body = await readBody(req)
