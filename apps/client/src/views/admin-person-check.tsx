@@ -165,10 +165,10 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
             aria-expanded={open}
             aria-label={open ? `Close ${title}'s review` : `Review ${title}`}
             title={open ? 'Close' : 'Review'}
-            className="flex items-center gap-1.5 rounded p-1.5 text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
+            className="relative rounded p-1.5 text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
           >
-            {/* Flagged frames waiting to be looked at. Always takes its space, so the buttons line up row to row. */}
-            <span className={`h-2 w-2 rounded-full ${(summary?.flagged ?? 0) > 0 ? 'bg-orange-500' : 'invisible'}`} />
+            {/* Flagged frames waiting to be looked at. */}
+            {(summary?.flagged ?? 0) > 0 && <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-orange-500" />}
             <CaretDown size={18} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
           </button>
         </span>
