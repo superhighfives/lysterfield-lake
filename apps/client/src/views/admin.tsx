@@ -36,8 +36,8 @@ type Preset = { title: string; prompt: string; colour: string | null; seed: numb
 type DeforumOptions = { presets: Record<string, Preset>; colours: string[] }
 type NewTake = { name: string; prompt: string; colour: string | null; preset: string; negative: string; seed?: number }
 
-// Rough Replicate cost and time for each paid stage of a Deforum take (A100, ~21s a dream frame).
-const COST: Record<Action, string> = { samples: 'about $2, 8 minutes', clip: 'about $6, 70 minutes', full: 'about $75, 15 hours' }
+// Rough Replicate cost and time for each paid stage of a Deforum take (A100 with xformers, ~10s a dream frame), before retries.
+const COST: Record<Action, string> = { samples: 'about $1, 5 minutes', clip: 'about $3, 35 minutes', full: 'about $36, 7 hours' }
 const WORKING: Record<string, string> = { samples: 'Generating samples…', clip: 'Rendering the 15-second clip…', full: 'Generating the full song…' }
 const SAMPLES_COST = COST.samples
 /** "Start from" choice with nothing filled in. The model's default settings (Lush and Light's) still apply underneath. */

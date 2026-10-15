@@ -254,12 +254,15 @@ for this model. One GPU, so one run at a time.
   to Replicate as before, and `--on replicate` sends one command there
   anyway. Runs from one process take turns, and one that finds the GPU busy
   waits for it.
-- **The PC build** (`models/deforum/build-gpu-pc.sh`, built on the PC as
-  `lysterfield-deforum:gpu-pc`): the Replicate image with xformers, and
-  PyTorch 1.13.1 to match it. The Replicate image's PyTorch 1.12 does run on
-  the 4090, but without xformers a 1024x1024 frame with CLIP guidance needs
-  more than 24 GB, spills into system memory, and one frame took over 12
-  minutes. With xformers it uses about 7 GB.
+- **One build for both** (`models/deforum/cog.yaml`): the Deforum image
+  now includes xformers, with PyTorch 1.13.1 to match it. Without xformers a
+  1024x1024 frame with CLIP guidance needs more than the 4090's 24 GB,
+  spills into system memory, and one frame took over 12 minutes; with it,
+  about 7 GB. It made the A100 faster too: on Replicate the same six frames
+  rendered in 58 seconds, about 10 seconds a render against 22 before
+  (2026-10-15), so a Replicate frame costs less than half what it did. The
+  frames look the same. On the PC it is built with `cog build -t
+  lysterfield-deforum:gpu-pc`, or pulled from Replicate.
 - **Weights** are downloaded once into `/opt/deforum-weights` on the PC and
   mounted into the container (the model's own downloader left them
   truncated there), so a new container doesn't fetch them again.

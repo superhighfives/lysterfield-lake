@@ -41,8 +41,8 @@ export const REPAIR_CONCURRENCY = 10
  */
 export const MAX_REPAIR_ROUNDS = 10
 
-/** Rough cost of one Deforum frame on the A100 (~21s at ~$0.0014/s), for the estimate printed before a paid repair. */
-export const DEFORUM_COST_PER_FRAME = 0.03
+/** Rough cost of one Deforum frame on the A100 (~10s with xformers at ~$0.0014/s), for the estimate printed before a paid repair. */
+export const DEFORUM_COST_PER_FRAME = 0.015
 
 export interface RepairStretch {
   /** First and last dream frame to replace, by job frame number. */
