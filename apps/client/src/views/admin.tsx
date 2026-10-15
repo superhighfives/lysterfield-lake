@@ -167,7 +167,8 @@ function Elapsed({ since }: { since: number }) {
 function NewDream({ options, existing, onCreate, onUploaded }: {
   options: DeforumOptions
   existing: string[]
-  onCreate: (take: NewTake) => void
+  /** Resolves true once the dream is made and its samples are queued. */
+  onCreate: (take: NewTake) => Promise<boolean>
   onUploaded: () => Promise<void>
 }) {
   const runOn = useRunOn()
@@ -177,6 +178,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
   const [name, setName] = useState('')
   const [negative, setNegative] = useState('')
   const [uploadError, setUploadError] = useState('')
+  const [creating, setCreating] = useState(false)
 
   const startFrom = useCallback(
     (id: string) => {
@@ -224,7 +226,21 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
 
   const id = name.replace(/^-+|-+$/g, '')
   const taken = existing.includes(id)
-  const ready = prompt.trim() !== '' && id !== '' && !taken && preset !== ''
+  const ready = prompt.trim() !== '' && id !== '' && !taken && preset !== '' && !creating
+  const submit = async () => {
+    if (!ready) return
+    setCreating(true)
+    const made = await onCreate({ name: id, prompt, colour, preset: preset === BLANK ? '' : preset, negative: negative.trim(), seed: options.presets[preset]?.seed })
+    setCreating(false)
+    // Once the dream exists and its samples are queued, start the next one fresh: its name is now
+    // taken, and the form otherwise sits there saying so.
+    if (made) {
+      setName('')
+      setNegative('')
+      setPreset('')
+    }
+  }
+
   const swatch = (selected: boolean) => `h-14 w-14 overflow-hidden rounded ${selected ? 'ring-2 ring-stone-900 dark:ring-stone-100 ring-offset-2 dark:ring-offset-stone-950' : 'opacity-80 hover:opacity-100'}`
 
   return (
@@ -245,7 +261,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
         ))}
       </div>
 
-      <GridForm.Root density="comfortable" onFormSubmit={() => ready && onCreate({ name: id, prompt, colour, preset: preset === BLANK ? '' : preset, negative: negative.trim(), seed: options.presets[preset]?.seed })}>
+      <GridForm.Root density="comfortable" onFormSubmit={submit}>
         <GridForm.Section legend="The look">
           <GridForm.Row>
             <GridForm.Field name="prompt" label="Prompt" description="Describe a landscape only, never a person. The shape of the person in the footage becomes part of the scene.">
@@ -287,7 +303,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
         <GridForm.Actions>
           <span className="text-sm text-stone-600 dark:text-stone-400">{runOn === 'pc' ? 'Runs on the 4090 PC: free.' : `Runs on Replicate: ${SAMPLES_COST}.`}</span>
           <GridForm.Button type="submit" variant="primary" disabled={!ready}>
-            Generate 5 samples
+            {creating ? 'Starting…' : 'Generate 5 samples'}
           </GridForm.Button>
         </GridForm.Actions>
       </GridForm.Root>
@@ -568,17 +584,24 @@ export default function Admin() {
     }
   }
 
-  const create = async (take: NewTake) => {
+  const create = async (take: NewTake): Promise<boolean> => {
     setError('')
     try {
       const made = await runAction(job, { action: 'take', method: 'deforum', take: take.name, prompt: take.prompt, colour: take.colour, preset: take.preset, negative: take.negative || undefined, seed: take.seed })
       await reload()
-      if (made.status === 'failed') return setError(reason(made.log))
+      if (made.status === 'failed') {
+        setError(reason(made.log))
+        return false
+      }
+
       await generate(take.name, 'samples')
+      return true
     } catch (e) {
       fail(e)
+      return false
     }
   }
+
 
   const takes = detail?.takes.filter((t) => t.status) ?? []
   const samples = detail?.config.samples ?? []
