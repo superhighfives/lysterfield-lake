@@ -64,7 +64,7 @@ export function Tasks({ job, tasks, titles, onChanged }: {
       </div>
       <ul className="max-h-[200px] overflow-y-auto rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 text-sm">
         {[...going, ...finished.reverse()].map((task) => {
-          const progress = task.log.match(/(?:Dream frames: |Scored )(\d+) of (\d+)(?![\s\S]*(?:Dream frames: |Scored )\d)/)
+          const progress = task.log.match(/(Dream frames: |Scored |Re-rendered )(\d+) of (\d+)(?![\s\S]*(?:Dream frames: |Scored |Re-rendered )\d)/)
           return (
             <li key={task.id} className="border-t border-stone-200 dark:border-stone-800 py-2 first:border-t-0">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -76,7 +76,7 @@ export function Tasks({ job, tasks, titles, onChanged }: {
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TONES[task.status]}`}>{STATUS[task.status]}</span>
                 <span className="text-xs tabular-nums text-stone-500 dark:text-stone-400">
                   {task.status === 'queued' && `waiting ${duration(Date.now() - task.created)}`}
-                  {task.status === 'running' && `${duration(Date.now() - (task.started ?? task.created))}${progress ? `, ${progress[1]} of ${progress[2]} frames` : ''}`}
+                  {task.status === 'running' && `${duration(Date.now() - (task.started ?? task.created))}${progress ? `, ${progress[2]} of ${progress[3]} ${progress[1] === 'Re-rendered ' ? 'stretches' : 'frames'}` : ''}`}
                   {!active(task) && task.started && task.ended && `took ${duration(task.ended - task.started)}`}
                 </span>
                 {(task.status === 'failed' || task.status === 'cancelled') && !task.retriedBy && (

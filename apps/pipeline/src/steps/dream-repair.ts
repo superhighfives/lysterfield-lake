@@ -25,6 +25,13 @@ import { loadTake, type TakeConfig } from './dream.ts'
 
 const PRESETS_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'models', 'deforum', 'settings', 'presets.json')
 
+/**
+ * Re-render runs going at once for one repair. Each is its own Replicate
+ * prediction, so more at once means more machines booting (each ~2.5
+ * minutes, billed on a private model) for less waiting.
+ */
+export const REPAIR_CONCURRENCY = 10
+
 /** Rough cost of one Deforum frame on the A100 (~21s at ~$0.0014/s), for the estimate printed before a paid repair. */
 export const DEFORUM_COST_PER_FRAME = 0.03
 
@@ -113,11 +120,18 @@ export async function dreamRepair(
   const checkPath = path.join(opts.takeDir, 'check.json')
   const replacedDir = path.join(opts.takeDir, 'replaced')
   await mkdir(replacedDir, { recursive: true })
-  const results: RepairResult[] = []
+  // check.json is read, changed and written per stretch; with stretches finishing side by side, one at a time.
+  let checkQueue = Promise.resolve()
+  const updatingCheck = (update: () => Promise<void>) => (checkQueue = checkQueue.then(update, update))
 
-  for (const stretch of [...opts.stretches].sort((a, b) => a.start - b.start)) {
-    // Read again for every stretch: a hold changes which frames share a picture.
-    const dreamFrames = await listDreamFrames(opts.framesDir)
+  /**
+   * `snapshot`: the take's dream frames as they were before any re-render started. Re-renders running
+   * side by side would otherwise list the folder while another is swapping a file in it. A re-render
+   * keeps every frame's name and holds, so the snapshot stays true; a hold doesn't, so holds read the
+   * folder afresh each time.
+   */
+  const repairOne = async (stretch: RepairStretch, snapshot?: DreamFrame[]): Promise<RepairResult> => {
+    const dreamFrames = snapshot ?? (await listDreamFrames(opts.framesDir))
     const from = dreamFrames.findIndex((f) => f.frame === stretch.start)
     const to = dreamFrames.findIndex((f) => f.frame === stretch.end)
     if (from === -1 || to < from) throw new Error(`Frames ${stretch.start}-${stretch.end} aren't dream frames in ${opts.framesDir} (a dream frame is named by the first job frame it appears at).`)
@@ -127,9 +141,8 @@ export async function dreamRepair(
 
     if (opts.action === 'hold') {
       for (const target of targets) await replaceFrame(target, opts.framesDir, replacedDir, (file) => link(previous.file, file), true)
-      await updateCheck(checkPath, targets.map((t) => ({ frame: t.frame })))
-      results.push({ stretch, action: 'hold', frames: targets.length, stillFlagged: [] })
-      continue
+      await updatingCheck(() => updateCheck(checkPath, targets.map((t) => ({ frame: t.frame }))))
+      return { stretch, action: 'hold', frames: targets.length, stillFlagged: [] }
     }
 
     const outDir = path.join(opts.takeDir, 'repairs', `${name(stretch.start)}-${name(stretch.end)}`)
@@ -168,15 +181,59 @@ export async function dreamRepair(
     }
     // The model's own verdict on each new frame (models/deforum/predict.py), in frame order.
     const scores = (await exists(scoresPath)) ? (Object.values(JSON.parse(await readFile(scoresPath, 'utf8'))) as { score: number; flagged: boolean }[]) : []
-    await updateCheck(checkPath, targets.flatMap((t, i) => (scores[i] ? [{ frame: t.frame, score: scores[i].score }] : [])))
-    results.push({
+    await updatingCheck(() => updateCheck(checkPath, targets.flatMap((t, i) => (scores[i] ? [{ frame: t.frame, score: scores[i].score }] : []))))
+    return {
       stretch,
       action: 'rerender',
       frames: targets.length,
       stillFlagged: targets.filter((_, i) => scores[i]?.flagged).map((t) => t.frame),
-    })
+    }
   }
-  return results
+
+  const sorted = [...opts.stretches].sort((a, b) => a.start - b.start)
+  // Holds are free and instant: one after another.
+  if (opts.action !== 'rerender') {
+    const results: RepairResult[] = []
+    for (const stretch of sorted) results.push(await repairOne(stretch))
+    return results
+  }
+
+  // Re-renders run side by side, each its own Replicate run. A stretch continues from the good frame
+  // just before it, so one whose frame before is inside the stretch ahead of it has to wait for that
+  // one: those are chained, and the chains run in parallel.
+  const snapshot = await listDreamFrames(opts.framesDir)
+  const dreamFrames = snapshot.map((f) => f.frame)
+  const chains: RepairStretch[][] = []
+  for (const stretch of sorted) {
+    const before = dreamFrames[dreamFrames.indexOf(stretch.start) - 1]
+    const last = chains.at(-1)?.at(-1)
+    if (last && before !== undefined && before >= last.start && before <= last.end) chains.at(-1)!.push(stretch)
+    else chains.push([stretch])
+  }
+  const settled: PromiseSettledResult<RepairResult>[] = []
+  let next = 0
+  const worker = async () => {
+    while (next < chains.length) {
+      const chain = chains[next++]
+      for (const stretch of chain) {
+        const result = await repairOne(stretch, snapshot).then(
+          (value): PromiseSettledResult<RepairResult> => ({ status: 'fulfilled', value }),
+          (reason): PromiseSettledResult<RepairResult> => ({ status: 'rejected', reason })
+        )
+        settled.push(result)
+        console.log(`Re-rendered ${settled.length} of ${sorted.length} stretches`)
+        // The rest of a chain continues from this stretch, so it can't go on after a failure.
+        if (result.status === 'rejected') break
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(REPAIR_CONCURRENCY, chains.length) }, worker))
+  // Every run is seen through before reporting a failure: the others were already paid for.
+  const failed = settled.filter((r) => r.status === 'rejected')
+  if (failed.length > 0) {
+    throw new Error(`${failed.length} of ${sorted.length} stretches failed (the rest were re-rendered): ${failed.map((r) => String(r.reason?.message ?? r.reason).split('\n')[0]).join('; ')}`)
+  }
+  return settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])).sort((a, b) => a.stretch.start - b.stretch.start)
 }
 
 /**
