@@ -49,6 +49,12 @@ per-frame API calls for a single scene. Never add retry loops, "just try it
 again" fallbacks, or code paths that call a Replicate model without an
 idempotency check (skip-if-output-exists) guarding it first.
 
+One deliberate, capped exception (user, 2026-10-14): a dream repair
+re-renders a stretch that still shows a person with new seeds, up to
+`MAX_REPAIR_ROUNDS` (10) rounds per request, and the Deforum model retries a
+failing frame twice within a run. Don't raise those caps or add others like
+them without asking.
+
 ## The client's 7-panel output order is load-bearing, not a convention
 
 `apps/client/src/materials/video-material.tsx` and `apps/client/src/views/main.tsx`
