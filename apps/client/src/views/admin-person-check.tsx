@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { CaretDown } from '@phosphor-icons/react'
 import { active, api, jobFile, pad, reason, type Task } from './admin-api.ts'
 
 // The person check and its repairs (plans/in-progress/dreams.md). Panel 7
@@ -158,8 +159,15 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
           <button type="button" disabled={busy} onClick={() => act({ action: 'check' })} className={plain}>
             {summary ? 'Check again' : 'Check for people (free)'}
           </button>
-          <button type="button" onClick={() => setOpen(!open)} className={plain}>
-            {open ? 'Close' : 'Review'}
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            aria-label={open ? `Close ${title}'s review` : `Review ${title}`}
+            title={open ? 'Close' : 'Review'}
+            className="rounded p-1.5 text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
+          >
+            <CaretDown size={18} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
           </button>
         </span>
       </div>
