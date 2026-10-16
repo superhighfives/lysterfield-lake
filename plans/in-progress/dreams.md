@@ -261,13 +261,13 @@ for this model. One GPU, so one run at a time.
   about 7 GB. It made the A100 faster too: on Replicate the same six frames
   rendered in 58 seconds, about 10 seconds a render against 22 before
   (2026-10-15), so a Replicate frame costs less than half what it did. The
-  frames look the same.
+  frames look the same. On the PC it is built with `cog build -t
+  lysterfield-deforum:gpu-pc`, or pulled from Replicate.
 - **L40S over A100 (2026-10-16):** the same six frames on an L40S rendered
   in 48 seconds against the A100's 58, at $0.000975 a second against
   $0.0014: about $0.008 a frame against $0.014, and a quicker boot. Frames
   look the same. The model's hardware is set to L40S in its settings on
-  Replicate. On the PC it is built with `cog build -t
-  lysterfield-deforum:gpu-pc`, or pulled from Replicate.
+  Replicate.
 - **Weights** are downloaded once into `/opt/deforum-weights` on the PC and
   mounted into the container (the model's own downloader left them
   truncated there), so a new container doesn't fetch them again.
