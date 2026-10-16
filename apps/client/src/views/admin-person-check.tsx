@@ -58,10 +58,31 @@ function groupStretches(frames: number[], dreamFrames: number[]): { start: numbe
 
 /** A button that asks once more before spending money. */
 function Paid({ label, cost, disabled, onConfirm }: { label: string; cost: string; disabled?: boolean; onConfirm: () => void }) {
-  const [asking, setAsking] = useState(false)
-  if (!asking) {
+  const [step, setStep] = useState<'idle' | 'asking' | 'starting'>('idle')
+  // After Start, say so until the job shows up as queued (the button turns disabled) rather than
+  // springing back to its first state while the task list catches up. Gives up after a few seconds.
+  useEffect(() => {
+    if (step !== 'starting') return
+    if (disabled) {
+      setStep('idle')
+      return
+    }
+
+    const timer = setTimeout(() => setStep('idle'), 6000)
+    return () => clearTimeout(timer)
+  }, [step, disabled])
+
+  if (step === 'starting') {
     return (
-      <button type="button" disabled={disabled} onClick={() => setAsking(true)} className={primary}>
+      <button type="button" disabled className={primary}>
+        Starting…
+      </button>
+    )
+  }
+
+  if (step === 'idle') {
+    return (
+      <button type="button" disabled={disabled} onClick={() => setStep('asking')} className={primary}>
         {label} ({cost})
       </button>
     )
@@ -73,14 +94,14 @@ function Paid({ label, cost, disabled, onConfirm }: { label: string; cost: strin
         type="button"
         disabled={disabled}
         onClick={() => {
-          setAsking(false)
+          setStep('starting')
           onConfirm()
         }}
         className="rounded bg-amber-700 px-2.5 py-1 text-sm font-medium text-white disabled:opacity-40"
       >
         {cost.startsWith('free') ? 'Start' : `Spend ${cost}`}
       </button>
-      <button type="button" onClick={() => setAsking(false)} className={plain}>
+      <button type="button" onClick={() => setStep('idle')} className={plain}>
         Cancel
       </button>
     </span>
