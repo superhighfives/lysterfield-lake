@@ -27,7 +27,7 @@ type Detail = {
 /** Rough Replicate cost of re-rendering one dream frame (A100 with xformers, ~10s), before rerolls: a frame still scored as a person is re-rendered up to twice more. */
 const COST_PER_FRAME = 0.015
 /** What a check or repair task is doing, for the row's status line. */
-const WORKING: Record<string, string> = { check: 'Checking every frame (about 6 minutes for a full song)…', rerender: 'Re-rendering on Replicate…', hold: 'Holding the frame before…', restore: 'Putting the originals back…' }
+const WORKING: Record<string, string> = { check: 'Checking every frame (about 6 minutes for a full song)…', rerender: 'Re-rendering…', hold: 'Holding the frame before…', restore: 'Putting the originals back…' }
 /** A re-render runs up to this many rounds (each with the model's own two retries) while a frame still shows a person: dream-repair.ts's MAX_REPAIR_ROUNDS. */
 const MAX_ROUNDS = 10
 const dollars = (frames: number) => `about $${Math.max(0.05, frames * COST_PER_FRAME).toFixed(2)}, up to $${(frames * COST_PER_FRAME * 3 * MAX_ROUNDS).toFixed(2)}`
@@ -146,7 +146,13 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
   // rather than from this component, so it survives a page reload and shows work queued elsewhere.
   const mine = tasks.filter((t) => t.take === take && t.clip === clip && t.action in WORKING)
   const going = mine.find(active)
-  const working = going ? (going.status === 'queued' ? 'Queued' : WORKING[going.action]) : ''
+  const working = going
+    ? going.status === 'queued'
+      ? 'Queued'
+      : going.action === 'rerender'
+        ? `Re-rendering on ${going.lane === 'pc' ? 'the 4090' : 'Replicate'}…`
+        : WORKING[going.action]
+    : ''
   /**
    * Frames already queued or running for a repair of this dream. More repairs can be queued behind them
    * (the queue runs one task per dream at a time, in order); only these frames can't be asked for twice.
