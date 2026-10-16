@@ -237,7 +237,8 @@ switch (step) {
 
   case 'dream-take': {
     // Creates a take at "proposed", from a direction (--directions <file> --index <n>) or a bare --prompt.
-    // Deforum takes (the legacy dreams' method): --method deforum [--colour <ref in resources/colours>] [--preset <legacy dream>] [--negative <prompt>].
+    // Deforum takes (the legacy dreams' method): --method deforum [--colour <ref in resources/colours>] [--preset <legacy dream>] [--negative <prompt>]
+    // [--style <image in resources/colours>] [--style-strength <0-1.5, default 0.6>].
     const job = await loadJob(requireFlag('job'))
     const take = requireFlag('take')
     let prompt = flags.prompt
@@ -261,6 +262,8 @@ switch (step) {
       method,
       colour: flags.colour,
       preset: flags.preset,
+      style: flags.style,
+      styleStrength: flags['style-strength'] ? Number(flags['style-strength']) : undefined,
       negativePrompt: flags.negative,
       seed: flags.seed ? Number(flags.seed) : undefined,
       stepFps: flags['step-fps'] ? Number(flags['step-fps']) : undefined,

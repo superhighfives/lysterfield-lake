@@ -28,6 +28,8 @@ type Take = {
   clipCheck?: CheckSummary | null
   method?: 'flux-kontext' | 'deforum'
   colour?: string
+  style?: string
+  styleStrength?: number
   preset?: string
 }
 type Action = 'samples' | 'clip' | 'full'
@@ -35,7 +37,7 @@ type Song = { id: string; title: string; published: boolean; check: CheckSummary
 type JobDetail = { name: string; config: { samples?: { frame: number; label: string }[] }; takes: Take[]; songs: Song[] }
 type Preset = { title: string; prompt: string; colour: string | null; seed: number }
 type DeforumOptions = { presets: Record<string, Preset>; colours: string[] }
-type NewTake = { name: string; prompt: string; colour: string | null; preset: string; negative: string; seed?: number }
+type NewTake = { name: string; prompt: string; colour: string | null; style: string | null; styleStrength: number; preset: string; negative: string; seed?: number }
 
 // Rough Replicate cost and time for each paid stage of a Deforum take (L40S with xformers, ~8s a dream frame), before retries.
 const COST: Record<Action, string> = { samples: 'about $0.50, 4 minutes', clip: 'about $1.50, 26 minutes', full: 'about $20, 6 hours' }
@@ -175,6 +177,9 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
   const [preset, setPreset] = useState('')
   const [prompt, setPrompt] = useState('')
   const [colour, setColour] = useState<string | null>(null)
+  /** Style reference (IP-Adapter): its look and imagery, not just its colours. None by default. */
+  const [style, setStyle] = useState<string | null>(null)
+  const [styleStrength, setStyleStrength] = useState(0.6)
   const [name, setName] = useState('')
   const [negative, setNegative] = useState('')
   const [uploadError, setUploadError] = useState('')
@@ -230,13 +235,15 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
   const submit = async () => {
     if (!ready) return
     setCreating(true)
-    const made = await onCreate({ name: id, prompt, colour, preset: preset === BLANK ? '' : preset, negative: negative.trim(), seed: options.presets[preset]?.seed })
+    const made = await onCreate({ name: id, prompt, colour, style, styleStrength, preset: preset === BLANK ? '' : preset, negative: negative.trim(), seed: options.presets[preset]?.seed })
     setCreating(false)
     // Once the dream exists and its samples are queued, start the next one fresh: its name is now
     // taken, and the form otherwise sits there saying so.
     if (made) {
       setName('')
       setNegative('')
+      setStyle(null)
+      setStyleStrength(0.6)
       setPreset('')
     }
   }
@@ -287,6 +294,31 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
                 </label>
               </div>
               <p className="gf-description">{uploadError ? <span className="text-red-700 dark:text-red-300">{uploadError}</span> : 'Every frame is colour-matched to the image you pick.'}</p>
+            </div>
+          </GridForm.Row>
+          <GridForm.Row>
+            <div className="gf-field" style={{ cursor: 'default' }}>
+              <span className="gf-label">Style</span>
+              <div className="gf-control flex flex-wrap gap-2 py-1">
+                <button type="button" onClick={() => setStyle(null)} className={`${swatch(style === null)} border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-[10px] leading-tight`}>
+                  none
+                </button>
+                {options.colours.map((c) => (
+                  <button key={c} type="button" title={c} onClick={() => setStyle(c)} className={swatch(style === c)}>
+                    <img src={colourUrl(c)} alt={c} className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+              {style && (
+                <label className="mt-1 flex items-center gap-3 text-sm">
+                  Strength
+                  <input type="range" min={0.1} max={1.5} step={0.1} value={styleStrength} onChange={(e) => setStyleStrength(Number(e.target.value))} className="w-48" />
+                  <span className="tabular-nums">{styleStrength.toFixed(1)}</span>
+                </label>
+              )}
+              <p className="gf-description">
+                Optional. Every frame borrows the picked image&apos;s look and imagery, not just its colours. Around 0.6 keeps the footage&apos;s landscape; 1.0 and up lets the image take over. Use + your own above to add an image.
+              </p>
             </div>
           </GridForm.Row>
         </GridForm.Section>
@@ -365,6 +397,7 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
         <span className="ml-auto flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
           {take.preset && presets[take.preset] ? `Started from ${presets[take.preset].title}` : null}
           {take.colour && <img src={colourUrl(take.colour)} alt="" title={`Colours: ${take.colour}`} className="h-6 w-6 rounded object-cover" />}
+          {take.style && <img src={colourUrl(take.style)} alt="" title={`Style: ${take.style}, strength ${take.styleStrength ?? 0.6}`} className="h-6 w-6 rounded object-cover ring-1 ring-stone-400" />}
         </span>
       </header>
       <p className="mb-3 max-w-3xl text-sm text-stone-700 dark:text-stone-300">{take.prompt}</p>
@@ -589,7 +622,7 @@ export default function Admin() {
   const create = async (take: NewTake): Promise<boolean> => {
     setError('')
     try {
-      const made = await runAction(job, { action: 'take', method: 'deforum', take: take.name, prompt: take.prompt, colour: take.colour, preset: take.preset, negative: take.negative || undefined, seed: take.seed })
+      const made = await runAction(job, { action: 'take', method: 'deforum', take: take.name, prompt: take.prompt, colour: take.colour, style: take.style ?? undefined, styleStrength: take.style ? take.styleStrength : undefined, preset: take.preset, negative: take.negative || undefined, seed: take.seed })
       await reload()
       if (made.status === 'failed') {
         setError(reason(made.log))
