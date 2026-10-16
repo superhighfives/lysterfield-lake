@@ -17,9 +17,11 @@ export function gpuServerUrl(): string | undefined {
   return process.env.DEFORUM_URL?.replace(/\/+$/, '') || undefined
 }
 
-/** The fields we read from Cog's prediction reply; anything else is ignored. */
-// Every key optional: a successful reply has no `detail` or `error`, a refused one no `output`.
-// (In zod 4 a bare `z.unknown()` key is required, which rejected every successful run.)
+/**
+ * The fields we read from Cog's prediction reply; anything else is ignored.
+ * Every key optional: a successful reply has no `detail` or `error`, a refused one no `output`.
+ * (In zod 4 a bare `z.unknown()` key is required, which rejected every successful run.)
+ */
 const PredictionReply = z.object({
   status: z.string().optional(),
   output: z.unknown().optional(),
@@ -69,7 +71,7 @@ export function runOnGpuServer(baseUrl: string, input: Record<string, unknown>, 
       }
       const reply = PredictionReply.safeParse(parsed)
       if (!reply.success) throw new Error(`The GPU server answered ${response.status} with an unexpected reply: ${text.slice(0, 300)}. It was not run again.`)
-      if (reply.data.metrics?.predict_time) console.log(`The GPU server rendered for ${reply.data.metrics.predict_time.toFixed(1)}s`)
+      if (reply.data.metrics?.predict_time != null) console.log(`The GPU server rendered for ${reply.data.metrics.predict_time.toFixed(1)}s`)
       const result = reply.data
       if (!response.ok || result.status !== 'succeeded') {
         throw new Error(`The GPU server's run ${result.status ?? response.status}: ${result.error ?? JSON.stringify(result.detail ?? parsed).slice(0, 300)}. It was not run again.`)
