@@ -282,6 +282,22 @@ for this model. One GPU, so one run at a time.
   run lost to a dropped connection starts over; `/admin` doesn't choose per
   task, and repairs take turns on the one GPU.
 
+### Style reference (IP-Adapter, 2026-10-16)
+
+The colour reference only matches each frame's palette. A style reference
+carries over an image's look and imagery too: IP-Adapter's SD 1.5 weights,
+ported onto Deforum 0.7.1's ldm UNet (`models/deforum/ip_adapter.py`). Its
+image tokens are added beside the prompt in all 16 cross-attention layers,
+mapped in diffusers' order and checked by shape. Without a style image the
+model renders exactly as before.
+
+Tested on the 4090 with the walk-away frames and a timber-pagoda reference:
+at strength 0.6 the reference's world (timber roofs, autumn trees, its sky)
+grows out of the footage and the lake and the subject's shape still lead;
+at 1.0 the reference takes over. No person at either strength. The form has
+a Style picker (the same image library as Colours) with a strength slider,
+default 0.6.
+
 ### Other methods (later)
 
 Deforum is the baseline. A candidate replaces it only if it keeps "the

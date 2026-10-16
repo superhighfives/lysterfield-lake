@@ -134,6 +134,8 @@ export async function deforumRun(job: Job, take: string, config: TakeConfig, run
     ...(config.colour
       ? { colour_image: await readFileAsInput(colourPath(job, take, config.colour)), colour_mode: 'Specific' }
       : { colour_mode: 'Video Input' }),
+    // A style reference steers every frame towards its look and imagery (IP-Adapter, models/deforum/ip_adapter.py).
+    ...(config.style && { style_image: await readFileAsInput(colourPath(job, take, config.style)), style_strength: config.styleStrength ?? 0.6 }),
     preset: config.preset ?? 'lush-and-light',
     extract_nth_frame: 1,
     max_frames: jobFrames.length,

@@ -50,6 +50,10 @@ export interface TakeConfig {
   colour?: string
   /** Deforum: which legacy dream's settings to start from (models/deforum/settings/). */
   preset?: string
+  /** Deforum: style reference (IP-Adapter), an image in `resources/colours/` (or inside the take folder): every frame is steered towards its look and imagery, not just its colours. */
+  style?: string
+  /** Deforum: how strongly the style reference steers each frame, 0 to 1.5 (default 0.6). */
+  styleStrength?: number
   /** Deforum: extra negative prompt, added to the legacy dreams' own (no people, faces, bodies...), which always applies. */
   negativePrompt?: string
 }
@@ -88,6 +92,8 @@ export async function createTake(
     method?: TakeConfig['method']
     colour?: string
     preset?: string
+    style?: string
+    styleStrength?: number
     negativePrompt?: string
   }
 ): Promise<TakeConfig> {
@@ -103,6 +109,8 @@ export async function createTake(
     method: init.method,
     colour: init.colour,
     preset: init.preset,
+    style: init.style,
+    styleStrength: init.styleStrength,
     negativePrompt: init.negativePrompt,
   })
 }

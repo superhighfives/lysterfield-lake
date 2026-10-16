@@ -50,6 +50,10 @@ WEIGHTS = {
     "diffusion_models_cache/Protogen_V2.2.ckpt": "https://huggingface.co/darkstorm2150/Protogen_v2.2_Official_Release/resolve/main/Protogen_V2.2.ckpt",
     "models/dpt_large-midas-2f21e586.pt": "https://huggingface.co/deforum/MiDaS/resolve/main/dpt_large-midas-2f21e586.pt",
     "models/AdaBins_nyu.pt": "https://huggingface.co/deforum/AdaBins/resolve/main/AdaBins_nyu.pt",
+    # IP-Adapter (style reference): its SD 1.5 weights and the CLIP ViT-H/14 image encoder they were trained with.
+    "models/ip-adapter/ip-adapter_sd15.safetensors": "https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter_sd15.safetensors",
+    "models/ip-adapter/image_encoder/config.json": "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/config.json",
+    "models/ip-adapter/image_encoder/model.safetensors": "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors",
 }
 
 with open(os.path.join(SETTINGS, "negative-prompt.txt")) as f:
@@ -77,7 +81,8 @@ NOT_FROM_PRESET = {
 class Predictor(BasePredictor):
     def setup(self):
         os.chdir(DEFORUM)
-        sys.path[:0] = [DEFORUM, os.path.join(DEFORUM, "src")]
+        # Deforum's own code, and this folder (ip_adapter.py): setup runs from inside deforum/.
+        sys.path[:0] = [DEFORUM, os.path.join(DEFORUM, "src"), HERE]
         for name in os.listdir(BAKED_MODELS):
             os.makedirs("models", exist_ok=True)
             if not os.path.exists(os.path.join("models", name)):
@@ -113,6 +118,17 @@ class Predictor(BasePredictor):
 
         self.clip_models = {"ViT-L/14": clip.load("ViT-L/14", jit=False)[0].eval().requires_grad_(False).to(self.device)}
 
+        # IP-Adapter, for a style reference (ip_adapter.py): the image encoder, and the extra key/value
+        # layers added to the UNet's cross-attention, which do nothing until a run has a style image.
+        import ip_adapter
+        from safetensors.torch import load_file
+        from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
+
+        self.ip_adapter = ip_adapter
+        self.style_encoder = CLIPVisionModelWithProjection.from_pretrained("models/ip-adapter/image_encoder").to(self.device, dtype=torch.float16).eval()
+        self.style_processor = CLIPImageProcessor()
+        self.style_proj = ip_adapter.install(self.model.model.diffusion_model, load_file("models/ip-adapter/ip-adapter_sd15.safetensors"), self.device)
+
     def predict(
         self,
         init_video: Path = Input(description="Panel 2 (painted portrait) as a video: the shape the dream grows from"),
@@ -138,6 +154,8 @@ class Predictor(BasePredictor):
             description="Continue an earlier run: its last rendered frame. The init and mask videos must start on that frame's source frame; it is not rendered again or returned",
             default=None,
         ),
+        style_image: Optional[Path] = Input(description="Style reference: every frame is steered towards its look and imagery (IP-Adapter), not just its colours", default=None),
+        style_strength: float = Input(description="How strongly the style reference steers each frame (IP-Adapter's scale). 0 ignores it", default=0.6, ge=0, le=1.5),
         max_rerolls: int = Input(description="Times a frame that shows a person is rendered again (new seed, then repainting more) before the best attempt is kept and flagged. 0 only scores", default=2, ge=0, le=4),
         person_threshold: float = Input(description="Person score above which a frame is rendered again", default=0.35, ge=0, le=1),
     ) -> Path:
@@ -283,6 +301,14 @@ class Predictor(BasePredictor):
             }
             return best
 
+        # The style reference, if any: its image tokens are read by every cross-attention layer this run.
+        if style_image is not None and style_strength > 0:
+            from PIL import Image
+
+            tokens, uncond_tokens = self.ip_adapter.encode(Image.open(str(style_image)), self.style_encoder, self.style_processor, self.style_proj, self.device)
+            self.ip_adapter.state.update(tokens=tokens, uncond_tokens=uncond_tokens, scale=style_strength)
+        else:
+            self.ip_adapter.state.update(tokens=None, uncond_tokens=None, scale=0.0)
         render.generate = checked_generate
         try:
             render_animation(root, ns_anim, ns_args, cond, uncond)
@@ -300,6 +326,7 @@ class Predictor(BasePredictor):
             "args": {k: v for k, v in args.items() if is_json(v)}, "anim_args": {k: v for k, v in anim.items() if is_json(v)},
             "frames": len(frames),
             "max_rerolls": max_rerolls, "person_threshold": person_threshold,
+            "style_image": style_image is not None, "style_strength": style_strength if style_image is not None else 0,
         }
         out = "/tmp/frames.zip"
         with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED) as z:
