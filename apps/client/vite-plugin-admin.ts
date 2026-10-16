@@ -72,15 +72,50 @@ function readReview(dir: string): Review {
   return existsSync(file) ? (readJson(file) as Review) : { keep: [] }
 }
 
-/** A take's person check, summarised for the list: null if it has frames but was never checked. Stretches the reviewer marked "keep" don't count. */
+/** Frames a finished re-render made (repairs/<first>-<last>/applied), as ranges. */
+function rerenderedRanges(dir: string): [number, number][] {
+  const repairsDir = path.join(dir, 'repairs')
+  if (!existsSync(repairsDir)) return []
+  return readdirSync(repairsDir)
+    .filter((d) => /^\d{4}-\d{4}$/.test(d) && existsSync(path.join(repairsDir, d, 'applied')))
+    .map((d) => d.split('-').map(Number) as [number, number])
+}
+
+/**
+ * The published dreams' 2023 RIFE morphs still to replace (morphs.json, from scripts/legacy-morphs.ts):
+ * every morph frame not yet re-rendered or held. Those frames were interpolated between real frames
+ * in 2023, which loses the stop-motion look, so all of them get replaced, person or not.
+ */
+function outstandingMorphs(dir: string): number[] {
+  const file = path.join(dir, 'morphs.json')
+  if (!existsSync(file)) return []
+  const done = rerenderedRanges(dir)
+  const replacedDir = path.join(dir, 'replaced')
+  const held = new Set(existsSync(replacedDir) ? readdirSync(replacedDir).map((f) => Number(f.slice(0, 4))) : [])
+  return (readJson(file) as { frames: number[] }).frames.filter((f) => !held.has(f) && !done.some(([a, b]) => f >= a && f <= b))
+}
+
+/**
+ * A take's person check, summarised for the list: null if it has frames but was never checked.
+ * People and 2023 morphs are counted apart: a flagged frame that is also a morph counts as a morph,
+ * since it gets replaced either way. Stretches the reviewer marked "keep" don't count.
+ */
 function checkSummary(dir: string) {
   if (!existsSync(path.join(dir, 'frames'))) return undefined
+  const morphs = outstandingMorphs(dir)
   const file = path.join(dir, 'check.json')
-  if (!existsSync(file)) return null
+  if (!existsSync(file)) return morphs.length > 0 ? { frames: 0, flagged: 0, stretches: 0, morphs: morphs.length, checked: false } : null
   const check = readJson(file) as CheckFile
   const keep = new Set(readReview(dir).keep)
+  const morphSet = new Set(morphs)
   const open = check.stretches.filter((s) => !keep.has(s.start))
-  return { frames: check.frames, flagged: open.reduce((sum, s) => sum + s.frames, 0), stretches: open.length }
+  // Frames flagged as a person that aren't morphs (a flagged morph is replaced with the morphs anyway), and the
+  // stretches they're in. A stretch can hold both; the review marks each frame.
+  const people = Object.entries(check.scores)
+    .map(([frame, score]) => ({ frame: Number(frame), score }))
+    .filter(({ frame, score }) => score > check.threshold && !morphSet.has(frame) && open.some((s) => frame >= s.start && frame <= s.end))
+  const peopleStretches = open.filter((s) => people.some(({ frame }) => frame >= s.start && frame <= s.end))
+  return { frames: check.frames, flagged: people.length, stretches: peopleStretches.length, morphs: morphs.length, checked: true }
 }
 
 /** Everything the review needs for one take: its dream frames (each with the job frames holding it), scores, and flagged stretches. */
@@ -101,16 +136,11 @@ function checkDetail(job: string, take: string, clip: boolean) {
   const check = existsSync(file) ? (readJson(file) as CheckFile) : null
   const replacedDir = path.join(dir, 'replaced')
   // Frames a finished re-render made (repairs/<first>-<last>/applied), so the review can say when one still shows a person.
-  const repairsDir = path.join(dir, 'repairs')
-  const rerendered = existsSync(repairsDir)
-    ? readdirSync(repairsDir)
-        .filter((d) => /^\d{4}-\d{4}$/.test(d) && existsSync(path.join(repairsDir, d, 'applied')))
-        .flatMap((d) => {
-          const [start, end] = d.split('-').map(Number)
-          return frames.filter((f) => f >= start && f <= end)
-        })
-    : []
+  const rerendered = rerenderedRanges(dir).flatMap(([start, end]) => frames.filter((f) => f >= start && f <= end))
+  // Only morphs that are still dream frames of their own (a hold folds a frame into the one before).
+  const own = new Set(frames)
   return {
+    morphs: outstandingMorphs(dir).filter((f) => own.has(f)),
     rerendered,
     frames,
     check,
