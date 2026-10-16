@@ -155,7 +155,9 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
     .filter((t) => t.take === take && t.clip === clip && active(t) && (t.action === 'rerender' || t.action === 'hold' || t.action === 'restore'))
     .flatMap((t) => (t.args[t.args.indexOf('--frames') + 1] ?? '').split(',').filter(Boolean).map((part) => part.split('-').map(Number)))
     .map(([start, end = start]) => ({ start, end }))
-  const pending = (stretches: { start: number; end: number }[]) => stretches.some((a) => pendingRanges.some((b) => a.start <= b.end && b.start <= a.end))
+  /** A generation of this take (samples, clip or full song) rewrites its frames, so a repair waits for it rather than being spent on frames about to be replaced. */
+  const generating = tasks.some((t) => t.take === take && active(t) && !(t.action in WORKING))
+  const pending = (stretches: { start: number; end: number }[]) => generating || stretches.some((a) => pendingRanges.some((b) => a.start <= b.end && b.start <= a.end))
   /** A check reads every frame, so it waits until nothing is queued for this dream. */
   const busy = tasks.some((t) => t.take === take && active(t))
   const lastEnded = mine.filter((t) => !active(t)).at(-1)
