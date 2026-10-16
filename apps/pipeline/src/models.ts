@@ -91,8 +91,9 @@ export const MODELS = {
   directions: 'anthropic/claude-opus-4.7',
   /**
    * Dream takes the legacy way (`dream-deforum.ts`): Deforum 0.7.1 with the legacy render.py,
-   * settings, negative prompt and colour reference — `models/deforum/`, private, A100 (its pinned
-   * PyTorch 1.12.1 predates the L40S/H100). See plans/done/own-deforum-dream-model.md.
+   * settings, negative prompt and colour reference — `models/deforum/`, private, A100, with
+   * xformers (about 10s a render, half the time without it). The same build runs on the 4090 PC
+   * (gpu-server.ts). See plans/done/own-deforum-dream-model.md.
    */
-  deforum: 'superhighfives/lysterfield-deforum:7c055bdf9d2c2290c4b4cd9cfdc8bc6fe209ce887f1b131d56eceba378c64c90',
+  deforum: 'superhighfives/lysterfield-deforum:e90752d0ea851c1324ae2b44a744645ba2bb1e4ee06801d076b0da63dedf04d1',
 } as const satisfies Record<string, `${string}/${string}` | `${string}/${string}:${string}`>
