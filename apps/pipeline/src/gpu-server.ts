@@ -25,7 +25,7 @@ const PredictionReply = z.object({
   output: z.unknown().optional(),
   error: z.string().nullish(),
   detail: z.unknown().optional(),
-  metrics: z.object({ predict_time: z.number().optional() }).partial().optional(),
+  metrics: z.object({ predict_time: z.number().nullish() }).nullish(),
 })
 
 /** One run at a time from this process: the server takes one prediction at a time and refuses a second. */
