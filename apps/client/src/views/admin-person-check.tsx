@@ -177,7 +177,12 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
   // A flagged stretch that is all 2023 morph gets replaced with the morphs, so it's listed there, not as a person.
   const isMorph = (frame: number) => detail?.morphs.includes(frame) ?? false
   const inStretch = (st: { start: number; end: number }) => detail?.frames.filter((f) => f >= st.start && f <= st.end) ?? []
-  const stretches = detail?.check?.stretches.filter((st) => !detail.keep.includes(st.start) && !inStretch(st).every(isMorph)) ?? []
+  const isAllMorph = (st: { start: number; end: number }) => {
+    const frames = inStretch(st)
+    return frames.length > 0 && frames.every(isMorph)
+  }
+
+  const stretches = detail?.check?.stretches.filter((st) => !detail.keep.includes(st.start) && !isAllMorph(st)) ?? []
   const kept = detail?.check?.stretches.filter((st) => detail.keep.includes(st.start)) ?? []
   const flaggedFrames = stretches.reduce((sum, st) => sum + st.frames, 0)
   const morphStretches = detail ? groupStretches(detail.morphs, detail.frames) : []

@@ -34,12 +34,24 @@ map.forEach((legacyFrame, n) => {
 
 const runs = readdirSync(dreaming).filter((d) => /^\d{14}$/.test(d))
 const seedOf = (file: string) => (JSON.parse(readFileSync(file, 'utf8')) as { seed?: number }).seed
-const runBySeed = new Map(runs.map((d) => [seedOf(path.join(dreaming, d, `${d}_settings.txt`)), d]))
+const runBySeed = new Map<number, string>()
+for (const d of runs) {
+  const seed = seedOf(path.join(dreaming, d, `${d}_settings.txt`))
+  if (seed === undefined) continue
+  const other = runBySeed.get(seed)
+  if (other) throw new Error(`Legacy runs ${other} and ${d} share seed ${seed}`)
+  runBySeed.set(seed, d)
+}
 
 for (const id of readdirSync(path.join(jobDir, '7-dreams'))) {
   const settings = path.join(jobDir, '7-dreams', id, 'original', 'deforum-settings.txt')
   if (!existsSync(settings)) continue
-  const run = runBySeed.get(seedOf(settings))
+  const seed = seedOf(settings)
+  if (seed === undefined) {
+    console.log(`${id}: no seed in its deforum settings`)
+    continue
+  }
+  const run = runBySeed.get(seed)
   if (!run) {
     console.log(`${id}: no legacy run with its seed`)
     continue
