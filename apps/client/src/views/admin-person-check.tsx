@@ -58,10 +58,31 @@ function groupStretches(frames: number[], dreamFrames: number[]): { start: numbe
 
 /** A button that asks once more before spending money. */
 function Paid({ label, cost, disabled, onConfirm }: { label: string; cost: string; disabled?: boolean; onConfirm: () => void }) {
-  const [asking, setAsking] = useState(false)
-  if (!asking) {
+  const [step, setStep] = useState<'idle' | 'asking' | 'starting'>('idle')
+  // After Start, say so until the job shows up as queued (the button turns disabled) rather than
+  // springing back to its first state while the task list catches up. Gives up after a few seconds.
+  useEffect(() => {
+    if (step !== 'starting') return
+    if (disabled) {
+      setStep('idle')
+      return
+    }
+
+    const timer = setTimeout(() => setStep('idle'), 6000)
+    return () => clearTimeout(timer)
+  }, [step, disabled])
+
+  if (step === 'starting') {
     return (
-      <button type="button" disabled={disabled} onClick={() => setAsking(true)} className={primary}>
+      <button type="button" disabled className={primary}>
+        Starting…
+      </button>
+    )
+  }
+
+  if (step === 'idle') {
+    return (
+      <button type="button" disabled={disabled} onClick={() => setStep('asking')} className={primary}>
         {label} ({cost})
       </button>
     )
@@ -73,14 +94,14 @@ function Paid({ label, cost, disabled, onConfirm }: { label: string; cost: strin
         type="button"
         disabled={disabled}
         onClick={() => {
-          setAsking(false)
+          setStep('starting')
           onConfirm()
         }}
         className="rounded bg-amber-700 px-2.5 py-1 text-sm font-medium text-white disabled:opacity-40"
       >
         {cost.startsWith('free') ? 'Start' : `Spend ${cost}`}
       </button>
-      <button type="button" onClick={() => setAsking(false)} className={plain}>
+      <button type="button" onClick={() => setStep('idle')} className={plain}>
         Cancel
       </button>
     </span>
@@ -126,7 +147,18 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
   const mine = tasks.filter((t) => t.take === take && t.clip === clip && t.action in WORKING)
   const going = mine.find(active)
   const working = going ? (going.status === 'queued' ? 'Queued' : WORKING[going.action]) : ''
-  /** Anything waiting or running for this dream, a generation included: one task per dream at a time. */
+  /**
+   * Frames already queued or running for a repair of this dream. More repairs can be queued behind them
+   * (the queue runs one task per dream at a time, in order); only these frames can't be asked for twice.
+   */
+  const pendingRanges = tasks
+    .filter((t) => t.take === take && t.clip === clip && active(t) && (t.action === 'rerender' || t.action === 'hold' || t.action === 'restore'))
+    .flatMap((t) => (t.args[t.args.indexOf('--frames') + 1] ?? '').split(',').filter(Boolean).map((part) => part.split('-').map(Number)))
+    .map(([start, end = start]) => ({ start, end }))
+  /** A generation of this take (samples, clip or full song) rewrites its frames, so a repair waits for it rather than being spent on frames about to be replaced. */
+  const generating = tasks.some((t) => t.take === take && active(t) && !(t.action in WORKING))
+  const pending = (stretches: { start: number; end: number }[]) => generating || stretches.some((a) => pendingRanges.some((b) => a.start <= b.end && b.start <= a.end))
+  /** A check reads every frame, so it waits until nothing is queued for this dream. */
   const busy = tasks.some((t) => t.take === take && active(t))
   const lastEnded = mine.filter((t) => !active(t)).at(-1)
   // When one of them ends: show the new frames and counts, or why it failed.
@@ -219,14 +251,14 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
                 <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">Re-rendered, with up to ten rounds of new seeds, and it still shows a person. Hold the frame before, or try ten more rounds.</p>
               )}
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Paid label={(inside.every((frame) => detail.rerendered.includes(frame)) ? 'Ten more rounds' : 'Re-render') + (s.frames === 1 ? '' : ` ${s.frames} frames`)} cost={cost(s.frames)} disabled={busy || from === 0} onConfirm={() => repair('rerender', [s])} />
+                <Paid label={(inside.every((frame) => detail.rerendered.includes(frame)) ? 'Ten more rounds' : 'Re-render') + (s.frames === 1 ? '' : ` ${s.frames} frames`)} cost={cost(s.frames)} disabled={pending([s]) || from === 0} onConfirm={() => repair('rerender', [s])} />
                 {kind === 'person' && s.frames <= 2 && (
-                  <button type="button" disabled={busy || from === 0} onClick={() => repair('hold', [s])} className={plain} title="Free: the frame before is held a little longer">
+                  <button type="button" disabled={pending([s]) || from === 0} onClick={() => repair('hold', [s])} className={plain} title="Free: the frame before is held a little longer">
                     Hold the frame before (free)
                   </button>
                 )}
                 {kind === 'person' && inside.some((frame) => detail.replaced.includes(frame)) && (
-                  <button type="button" disabled={busy} onClick={() => repair('restore', [s])} className={plain} title="Free: undoes the hold, putting the frames that were here before back">
+                  <button type="button" disabled={pending([s])} onClick={() => repair('restore', [s])} className={plain} title="Free: undoes the hold, putting the frames that were here before back">
                     Put the original back
                   </button>
                 )}
@@ -308,7 +340,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
 
           {stretches.length > 1 && (
             <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-              <Paid label={`Re-render the ${stretches.length} stretches that show a person (${flaggedFrames} frames)`} cost={cost(flaggedFrames)} disabled={busy} onConfirm={() => repair('rerender', stretches)} />
+              <Paid label={`Re-render the ${stretches.length} stretches that show a person (${flaggedFrames} frames)`} cost={cost(flaggedFrames)} disabled={pending(stretches)} onConfirm={() => repair('rerender', stretches)} />
               <span className="text-stone-500 dark:text-stone-400">{runOn === 'pc' ? 'They take turns on the 4090.' : 'Each stretch is its own Replicate run, all side by side.'} One that still shows a person goes again with new seeds, up to ten rounds.</span>
             </div>
           )}
@@ -324,7 +356,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
                 In 2023 these were interpolated between the real frames either side (RIFE), which loses the stop-motion look. Re-rendering makes each a real Deforum frame; any that still shows a person goes again with new seeds, up to ten rounds.
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Paid label={`Re-render all ${detail.morphs.length} morph frames`} cost={cost(detail.morphs.length)} disabled={busy} onConfirm={() => repair('rerender', morphStretches)} />
+                <Paid label={`Re-render all ${detail.morphs.length} morph frames`} cost={cost(detail.morphs.length)} disabled={pending(morphStretches)} onConfirm={() => repair('rerender', morphStretches)} />
                 <button type="button" onClick={() => setShowMorphs(!showMorphs)} className={plain}>
                   {showMorphs ? 'Hide them' : 'Show them'}
                 </button>
@@ -364,12 +396,12 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Paid label="Re-render this frame" cost={cost(1)} disabled={busy || cursor === 0} onConfirm={() => repair('rerender', [{ start: current, end: current }])} />
-                    <button type="button" disabled={busy || cursor === 0} onClick={() => repair('hold', [{ start: current, end: current }])} className={plain}>
+                    <Paid label="Re-render this frame" cost={cost(1)} disabled={pending([{ start: current, end: current }]) || cursor === 0} onConfirm={() => repair('rerender', [{ start: current, end: current }])} />
+                    <button type="button" disabled={pending([{ start: current, end: current }]) || cursor === 0} onClick={() => repair('hold', [{ start: current, end: current }])} className={plain}>
                       Hold the frame before (free)
                     </button>
                     {detail.replaced.includes(current) && (
-                      <button type="button" disabled={busy} onClick={() => repair('restore', [{ start: current, end: current }])} className={plain}>
+                      <button type="button" disabled={pending([{ start: current, end: current }])} onClick={() => repair('restore', [{ start: current, end: current }])} className={plain}>
                         Put the original back (free)
                       </button>
                     )}
