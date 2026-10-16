@@ -322,6 +322,11 @@ Existing dreams:
       explicit list of source frames)
 - [x] First repair: `lush-and-light` frame 1735 (see Results)
 - [ ] Repair the Ghibli landscape dream's 8 frames
+- [x] Tell people and 2023 morphs apart (`scripts/legacy-morphs.ts` writes
+      each published dream's `morphs.json`: legacy frames filled in after the
+      run, found by file date and mapped to job frames as the import did, and
+      checked against the pixels). /admin counts them separately and has a
+      button to re-render a dream's morphs
 - [ ] Repair the other nine, with the user's go-ahead on cost
 
 Fewer leaks:

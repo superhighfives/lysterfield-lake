@@ -8,13 +8,16 @@ import { useRunOn } from './admin-run-on.tsx'
 // frames. The pipeline's dream-check finds those frames; this is where they
 // are looked at and replaced, instead of going through every frame by hand.
 
-export type CheckSummary = { frames: number; flagged: number; stretches: number }
+/** `flagged`/`stretches` count people only; `morphs` is the published dreams' 2023 RIFE morphs still to replace. `checked` false: morphs are known but the person check hasn't run. */
+export type CheckSummary = { frames: number; flagged: number; stretches: number; morphs?: number; checked?: boolean }
 type Stretch = { start: number; end: number; frames: number; peak: number }
 type Detail = {
   /** Dream frames, by the job frame each first appears at. */
   frames: number[]
   check: { threshold: number; stretches: Stretch[]; scores: Record<string, number> } | null
   keep: number[]
+  /** 2023 RIFE morphs still to replace (published dreams only): interpolated in 2023, so they lose the stop-motion look. */
+  morphs: number[]
   /** Frames a hold replaced; their originals can be put back. */
   replaced: number[]
   /** Frames a re-render made. A re-render is final, so these have no original to go back to. */
@@ -32,9 +35,25 @@ const plain = 'rounded border border-stone-300 dark:border-stone-700 px-2.5 py-1
 const primary = 'rounded bg-stone-900 dark:bg-stone-100 px-2.5 py-1 text-sm font-medium text-white dark:text-stone-900 disabled:opacity-40'
 
 export function checkLabel(check: CheckSummary | null): { label: string; tone: string } {
-  if (!check) return { label: 'Not checked for people', tone: 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300' }
+  if (!check || check.checked === false) return { label: 'Not checked for people', tone: 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300' }
   if (check.flagged === 0) return { label: `No person found in ${check.frames} frames`, tone: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-200' }
-  return { label: `${check.flagged} of ${check.frames} frames flagged, in ${check.stretches} ${check.stretches === 1 ? 'stretch' : 'stretches'}`, tone: 'bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200' }
+  return { label: `${check.flagged} ${check.flagged === 1 ? 'frame shows' : 'frames show'} a person, in ${check.stretches} ${check.stretches === 1 ? 'stretch' : 'stretches'}`, tone: 'bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200' }
+}
+
+/** Groups frames into runs of neighbouring dream frames, as repair stretches. */
+function groupStretches(frames: number[], dreamFrames: number[]): { start: number; end: number; frames: number }[] {
+  const index = new Map(dreamFrames.map((f, i) => [f, i]))
+  const sorted = frames.filter((f) => index.has(f)).sort((a, b) => a - b)
+  const out: { start: number; end: number; frames: number }[] = []
+  for (const f of sorted) {
+    const last = out.at(-1)
+    if (last && index.get(f) === index.get(last.end)! + 1) {
+      last.end = f
+      last.frames++
+    } else out.push({ start: f, end: f, frames: 1 })
+  }
+
+  return out
 }
 
 /** A button that asks once more before spending money. */
@@ -155,17 +174,78 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
   }
 
   const status = checkLabel(summary)
-  const stretches = detail?.check?.stretches.filter((s) => !detail.keep.includes(s.start)) ?? []
-  const kept = detail?.check?.stretches.filter((s) => detail.keep.includes(s.start)) ?? []
-  const flaggedFrames = stretches.reduce((sum, s) => sum + s.frames, 0)
+  // A flagged stretch that is all 2023 morph gets replaced with the morphs, so it's listed there, not as a person.
+  const isMorph = (frame: number) => detail?.morphs.includes(frame) ?? false
+  const inStretch = (st: { start: number; end: number }) => detail?.frames.filter((f) => f >= st.start && f <= st.end) ?? []
+  const stretches = detail?.check?.stretches.filter((st) => !detail.keep.includes(st.start) && !inStretch(st).every(isMorph)) ?? []
+  const kept = detail?.check?.stretches.filter((st) => detail.keep.includes(st.start)) ?? []
+  const flaggedFrames = stretches.reduce((sum, st) => sum + st.frames, 0)
+  const morphStretches = detail ? groupStretches(detail.morphs, detail.frames) : []
+  const [showMorphs, setShowMorphs] = useState(false)
   const score = (frame: number) => detail?.check?.scores[pad(frame)]
   const current = detail?.frames[Math.min(cursor, (detail?.frames.length ?? 1) - 1)]
+
+  const renderStretch = (s: { start: number; end: number; frames: number }, kind: 'person' | 'morph') => {
+    if (!detail) return null
+          const from = detail.frames.indexOf(s.start)
+          const to = detail.frames.indexOf(s.end)
+          const inside = detail.frames.slice(from, to + 1)
+          const shown = inside.slice(0, 6)
+          const before = detail.frames[from - 1]
+          const after = detail.frames[to + 1]
+          return (
+            <div key={s.start} className="mb-3 rounded border border-stone-200 dark:border-stone-800 p-2">
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">{kind === 'morph' ? '2023 morph' : inside.some(isMorph) ? 'Person, with 2023 morphs (blue)' : 'Person'}</p>
+              <div className="flex gap-1 overflow-x-auto">
+                {before !== undefined && <img src={frameUrl(before)} alt="" title={`Frame ${before}, before`} className="h-28 w-28 shrink-0 rounded object-cover opacity-60" />}
+                {shown.map((frame) => (
+                  <div key={frame} className="relative shrink-0">
+                    <img src={frameUrl(frame)} alt="" className={`h-28 w-28 rounded object-cover ring-2 ${isMorph(frame) ? 'ring-sky-500' : 'ring-amber-500'}`} title={isMorph(frame) ? '2023 morph' : 'Flagged as a person'} />
+                    <img src={sourceUrl(frame)} alt="" title="The footage at this moment" className="absolute bottom-1 right-1 w-9 rounded border border-white" />
+                    <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">
+                      {frame}{score(frame) !== undefined ? ` · ${score(frame)!.toFixed(2)}` : ''}{isMorph(frame) ? ' · morph' : ''}
+                    </span>
+                  </div>
+                ))}
+                {inside.length > shown.length && <div className="flex h-28 w-20 shrink-0 items-center justify-center text-xs text-stone-500 dark:text-stone-400">+{inside.length - shown.length} more</div>}
+                {after !== undefined && <img src={frameUrl(after)} alt="" title={`Frame ${after}, after`} className="h-28 w-28 shrink-0 rounded object-cover opacity-60" />}
+              </div>
+              {inside.every((frame) => detail.rerendered.includes(frame)) && (
+                <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">Re-rendered, with up to ten rounds of new seeds, and it still shows a person. Hold the frame before, or try ten more rounds.</p>
+              )}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Paid label={(inside.every((frame) => detail.rerendered.includes(frame)) ? 'Ten more rounds' : 'Re-render') + (s.frames === 1 ? '' : ` ${s.frames} frames`)} cost={cost(s.frames)} disabled={busy || from === 0} onConfirm={() => repair('rerender', [s])} />
+                {kind === 'person' && s.frames <= 2 && (
+                  <button type="button" disabled={busy || from === 0} onClick={() => repair('hold', [s])} className={plain} title="Free: the frame before is held a little longer">
+                    Hold the frame before (free)
+                  </button>
+                )}
+                {kind === 'person' && inside.some((frame) => detail.replaced.includes(frame)) && (
+                  <button type="button" disabled={busy} onClick={() => repair('restore', [s])} className={plain} title="Free: undoes the hold, putting the frames that were here before back">
+                    Put the original back
+                  </button>
+                )}
+                {kind === 'person' && (
+                  <button type="button" onClick={() => setKeep([...detail.keep, s.start])} className={plain}>
+                    Keep, it&apos;s fine
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+
+  }
 
   return (
     <div className="border-t border-stone-200 dark:border-stone-800 py-3 first:border-t-0">
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-medium">{title}</span>
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${status.tone}`}>{status.label}</span>
+        {(summary?.morphs ?? 0) > 0 && (
+          <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-medium text-sky-900 dark:bg-sky-900/40 dark:text-sky-200" title="Frames interpolated between real frames in 2023 (RIFE), to be re-rendered as real Deforum frames">
+            {summary!.morphs} 2023 {summary!.morphs === 1 ? 'morph' : 'morphs'} to replace
+          </span>
+        )}
         {working && <span className="text-xs text-stone-500 dark:text-stone-400">{working}</span>}
         <span className="ml-auto flex gap-2">
           {confirmingCheck ? (
@@ -200,7 +280,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
             className="relative rounded p-1.5 text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
           >
             {/* Flagged frames waiting to be looked at. */}
-            {(summary?.flagged ?? 0) > 0 && <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-orange-500" />}
+            {((summary?.flagged ?? 0) > 0 || (summary?.morphs ?? 0) > 0) && <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-orange-500" />}
             <CaretDown size={18} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
           </button>
         </span>
@@ -219,60 +299,34 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
       {open && detail && (
         <div className="mt-3">
           {!detail.check && <p className="text-sm text-stone-600 dark:text-stone-400">Not checked yet. You can still go through the frames below and replace any by hand.</p>}
-          {detail.check && stretches.length === 0 && <p className="text-sm text-stone-600 dark:text-stone-400">Nothing flagged. {detail.replaced.length > 0 ? `${detail.replaced.length} frames have been replaced; the originals are in the take's replaced folder.` : ''}</p>}
+          {detail.check && stretches.length === 0 && <p className="text-sm text-stone-600 dark:text-stone-400">No person flagged. {detail.replaced.length > 0 ? `${detail.replaced.length} frames have been replaced; the originals are in the take's replaced folder.` : ''}</p>}
 
           {stretches.length > 1 && (
             <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-              <Paid label={`Re-render all ${flaggedFrames} flagged frames`} cost={cost(flaggedFrames)} disabled={busy} onConfirm={() => repair('rerender', stretches)} />
+              <Paid label={`Re-render the ${stretches.length} stretches that show a person (${flaggedFrames} frames)`} cost={cost(flaggedFrames)} disabled={busy} onConfirm={() => repair('rerender', stretches)} />
               <span className="text-stone-500 dark:text-stone-400">{runOn === 'pc' ? 'They take turns on the 4090.' : 'Each stretch is its own Replicate run, all side by side.'} One that still shows a person goes again with new seeds, up to ten rounds.</span>
             </div>
           )}
 
-          {stretches.map((s) => {
-            const from = detail.frames.indexOf(s.start)
-            const to = detail.frames.indexOf(s.end)
-            const inside = detail.frames.slice(from, to + 1)
-            const shown = inside.slice(0, 6)
-            const before = detail.frames[from - 1]
-            const after = detail.frames[to + 1]
-            return (
-              <div key={s.start} className="mb-3 rounded border border-stone-200 dark:border-stone-800 p-2">
-                <div className="flex gap-1 overflow-x-auto">
-                  {before !== undefined && <img src={frameUrl(before)} alt="" title={`Frame ${before}, before`} className="h-28 w-28 shrink-0 rounded object-cover opacity-60" />}
-                  {shown.map((frame) => (
-                    <div key={frame} className="relative shrink-0">
-                      <img src={frameUrl(frame)} alt="" className="h-28 w-28 rounded object-cover ring-2 ring-amber-500" />
-                      <img src={sourceUrl(frame)} alt="" title="The footage at this moment" className="absolute bottom-1 right-1 w-9 rounded border border-white" />
-                      <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">
-                        {frame} · {(score(frame) ?? 0).toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
-                  {inside.length > shown.length && <div className="flex h-28 w-20 shrink-0 items-center justify-center text-xs text-stone-500 dark:text-stone-400">+{inside.length - shown.length} more</div>}
-                  {after !== undefined && <img src={frameUrl(after)} alt="" title={`Frame ${after}, after`} className="h-28 w-28 shrink-0 rounded object-cover opacity-60" />}
-                </div>
-                {inside.every((frame) => detail.rerendered.includes(frame)) && (
-                  <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">Re-rendered, with up to ten rounds of new seeds, and it still shows a person. Hold the frame before, or try ten more rounds.</p>
-                )}
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Paid label={(inside.every((frame) => detail.rerendered.includes(frame)) ? 'Ten more rounds' : 'Re-render') + (s.frames === 1 ? '' : ` ${s.frames} frames`)} cost={cost(s.frames)} disabled={busy || from === 0} onConfirm={() => repair('rerender', [s])} />
-                  {s.frames <= 2 && (
-                    <button type="button" disabled={busy || from === 0} onClick={() => repair('hold', [s])} className={plain} title="Free: the frame before is held a little longer">
-                      Hold the frame before (free)
-                    </button>
-                  )}
-                  {inside.some((frame) => detail.replaced.includes(frame)) && (
-                    <button type="button" disabled={busy} onClick={() => repair('restore', [s])} className={plain} title="Free: undoes the hold, putting the frames that were here before back">
-                      Put the original back
-                    </button>
-                  )}
-                  <button type="button" onClick={() => setKeep([...detail.keep, s.start])} className={plain}>
-                    Keep, it&apos;s fine
-                  </button>
-                </div>
+          {stretches.map((s) => renderStretch(s, 'person'))}
+
+          {morphStretches.length > 0 && (
+            <div className="mb-3 mt-5 rounded border border-sky-200 p-3 dark:border-sky-900">
+              <p className="text-sm font-medium">
+                2023 morphs: {detail.morphs.length} {detail.morphs.length === 1 ? 'frame' : 'frames'} in {morphStretches.length} {morphStretches.length === 1 ? 'stretch' : 'stretches'}
+              </p>
+              <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
+                In 2023 these were interpolated between the real frames either side (RIFE), which loses the stop-motion look. Re-rendering makes each a real Deforum frame; any that still shows a person goes again with new seeds, up to ten rounds.
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Paid label={`Re-render all ${detail.morphs.length} morph frames`} cost={cost(detail.morphs.length)} disabled={busy} onConfirm={() => repair('rerender', morphStretches)} />
+                <button type="button" onClick={() => setShowMorphs(!showMorphs)} className={plain}>
+                  {showMorphs ? 'Hide them' : 'Show them'}
+                </button>
               </div>
-            )
-          })}
+              {showMorphs && <div className="mt-3">{morphStretches.map((s) => renderStretch(s, 'morph'))}</div>}
+            </div>
+          )}
 
           {kept.length > 0 && (
             <p className="mb-3 text-sm text-stone-600 dark:text-stone-400">
