@@ -27,8 +27,8 @@ It replaces four plans:
 legacy Deforum 0.7.1 setup (`models/deforum/`). `/admin` runs a take through
 describe a look → 5 samples → 15s clip → full song, each stage gated on the
 one before in `take.json`. Clips and full songs are chains of 48-frame runs
-that pick up where they stopped. A full song is ~2,580 dream frames, ~7h of
-GPU, roughly $36. Details: `done/own-deforum-dream-model.md`,
+that pick up where they stopped. A full song is ~2,580 dream frames, ~6h of
+GPU, roughly $20. Details: `done/own-deforum-dream-model.md`,
 `done/frame-preview-approval-tool.md`.
 
 **The problem.** Takes keep showing a person: `neon-dream`'s "after the cut"
@@ -86,11 +86,11 @@ after one frame.
 | Stage | What runs | Cost | Gate |
 | --- | --- | --- | --- |
 | 1. Look | New dream form in `/admin` | free | landscape-only prompt check |
-| 2. Samples | 5 warm-up runs | ~$1 | user approves |
-| 3. Clip | 15s chain + composite | ~$3 | **person check**, then user approves |
-| 4. Full song | ~54 chained runs | ~$36 | confirm dialog |
+| 2. Samples | 5 warm-up runs | ~$0.50 | user approves |
+| 3. Clip | 15s chain + composite | ~$1.50 | **person check**, then user approves |
+| 4. Full song | ~54 chained runs | ~$20 | confirm dialog |
 | 5. Check | Score every dream frame for a person | free | none |
-| 6. Repair | Re-render flagged stretches with Deforum | ~$0.015 a frame | user approves flagged stretches and the cost |
+| 6. Repair | Re-render flagged stretches with Deforum | ~$0.008 a frame | user approves flagged stretches and the cost |
 | 7. Publish | `compose`, `deploy-dreams`, client deploy | free | user's go-ahead for R2 |
 
 Stages 1-4 exist. Stages 5 and 6 are new and are what makes this
@@ -365,6 +365,5 @@ Other methods:
 - Do old shared links with datestamp ids matter? If so, add an old-id →
   new-id lookup in `use-history-sync.ts`.
 - Keep the 2023 originals anywhere besides the HDD's `output/final/`?
-- GPU tier for the Deforum model: A100 vs L40S.
 - Where to run ComfyUI workflows for the other methods: a runner on
   Replicate, our own Cog image, or a rented GPU?
