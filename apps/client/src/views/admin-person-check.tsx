@@ -24,8 +24,8 @@ type Detail = {
   rerendered: number[]
 }
 
-/** Rough Replicate cost of re-rendering one dream frame (A100 with xformers, ~10s), before rerolls: a frame still scored as a person is re-rendered up to twice more. */
-const COST_PER_FRAME = 0.015
+/** Rough Replicate cost of re-rendering one dream frame (L40S with xformers, ~8s at ~$0.000975/s), before rerolls: a frame still scored as a person is re-rendered up to twice more. */
+const COST_PER_FRAME = 0.008
 /** What a check or repair task is doing, for the row's status line. */
 const WORKING: Record<string, string> = { check: 'Checking every frame (about 6 minutes for a full song)…', rerender: 'Re-rendering…', hold: 'Holding the frame before…', restore: 'Putting the originals back…' }
 /** A re-render runs up to this many rounds (each with the model's own two retries) while a frame still shows a person: dream-repair.ts's MAX_REPAIR_ROUNDS. */
