@@ -91,8 +91,8 @@ export const MODELS = {
   directions: 'anthropic/claude-opus-4.7',
   /**
    * Dream takes the legacy way (`dream-deforum.ts`): Deforum 0.7.1 with the legacy render.py,
-   * settings, negative prompt and colour reference — `models/deforum/`, private, A100, with
-   * xformers (about 10s a render, half the time without it). The same build runs on the 4090 PC
+   * settings, negative prompt and colour reference — `models/deforum/`, private, L40S (about 8s a render with
+   * xformers, and about 40% cheaper per frame than the A100's 10s; 2026-10-16). The same build runs on the 4090 PC
    * (gpu-server.ts). See plans/done/own-deforum-dream-model.md.
    */
   deforum: 'superhighfives/lysterfield-deforum:e90752d0ea851c1324ae2b44a744645ba2bb1e4ee06801d076b0da63dedf04d1',

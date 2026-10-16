@@ -37,8 +37,8 @@ type Preset = { title: string; prompt: string; colour: string | null; seed: numb
 type DeforumOptions = { presets: Record<string, Preset>; colours: string[] }
 type NewTake = { name: string; prompt: string; colour: string | null; preset: string; negative: string; seed?: number }
 
-// Rough Replicate cost and time for each paid stage of a Deforum take (A100 with xformers, ~10s a dream frame), before retries.
-const COST: Record<Action, string> = { samples: 'about $1, 5 minutes', clip: 'about $3, 35 minutes', full: 'about $36, 7 hours' }
+// Rough Replicate cost and time for each paid stage of a Deforum take (L40S with xformers, ~8s a dream frame), before retries.
+const COST: Record<Action, string> = { samples: 'about $0.50, 4 minutes', clip: 'about $1.50, 26 minutes', full: 'about $20, 6 hours' }
 const WORKING: Record<string, string> = { samples: 'Generating samples…', clip: 'Rendering the 15-second clip…', full: 'Generating the full song…' }
 const SAMPLES_COST = COST.samples
 /** "Start from" choice with nothing filled in. The model's default settings (Lush and Light's) still apply underneath. */
@@ -123,7 +123,7 @@ function FullSongButton({ take, disabled, onConfirm }: { take: string; disabled?
           <AlertDialog.Title className="font-serif text-2xl">Generate the full song for {take}?</AlertDialog.Title>
           <AlertDialog.Description className="mt-2 text-sm text-stone-600 dark:text-stone-400">
             {runOn === 'pc'
-              ? 'This renders the whole song on the 4090 PC: free, and roughly 7 to 8 hours, about half the time Replicate takes. It can be stopped and started again without redoing finished work.'
+              ? 'This renders the whole song on the 4090 PC: free, and roughly 7 to 8 hours, a little slower than Replicate. It can be stopped and started again without redoing finished work.'
               : `This renders the whole song on Replicate: ${cost}, over ${time}. It can be stopped and started again without paying twice for finished work, but the money for what has already rendered is spent.`}
           </AlertDialog.Description>
           <label className="mt-4 flex cursor-pointer items-start gap-2 rounded bg-amber-50 dark:bg-amber-950/40 p-3 text-sm">
