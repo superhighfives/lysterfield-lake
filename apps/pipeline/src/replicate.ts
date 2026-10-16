@@ -86,14 +86,25 @@ export function retryFailedPredictions(): void {
   retryFailed = true
 }
 
-/** Whether a finished prediction's output file can still be downloaded. */
-async function outputAvailable(output: unknown): Promise<boolean> {
+/**
+ * Whether a finished prediction's output is definitely gone. Only a definite answer counts: a null
+ * output (what Replicate shows once it has deleted an output, about an hour on) or a 404, 410 or 403
+ * from the file host. Anything uncertain (a network error, a 5xx, a 429) throws instead, so nothing
+ * starts a new paid prediction on a guess (CLAUDE.md). An output that isn't a URL isn't "expired":
+ * it's left for the caller to report as no file.
+ */
+async function outputExpired(output: unknown): Promise<boolean> {
   const url = Array.isArray(output) ? output[0] : output
+  if (url === null || url === undefined) return true
   if (typeof url !== 'string') return false
   // Ask for a single byte rather than HEAD, which a file host may not answer.
-  const response = await fetch(url, { headers: { Range: 'bytes=0-0' } }).catch(() => undefined)
-  await response?.body?.cancel()
-  return response?.ok ?? false
+  const response = await fetch(url, { headers: { Range: 'bytes=0-0' } }).catch((error: Error) => {
+    throw new Error(`Couldn't check whether an earlier prediction's output is still there (${error.message}). Nothing was run; run it again.`)
+  })
+  await response.body?.cancel()
+  if (response.ok) return false
+  if ([403, 404, 410].includes(response.status)) return true
+  throw new Error(`Couldn't check whether an earlier prediction's output is still there (the file host answered ${response.status}). Nothing was run; run it again.`)
 }
 
 export async function runModelToFileResumable(
@@ -114,7 +125,7 @@ export async function runModelToFileResumable(
   const existing = saved ? await replicate.predictions.get(saved.id) : undefined
   // A prediction that finished long ago whose output Replicate no longer keeps (it keeps outputs for
   // about an hour): picking it up can only fail, so it counts as failed for a retry.
-  const expired = existing?.status === 'succeeded' && !(await outputAvailable(existing.output))
+  const expired = existing?.status === 'succeeded' && (await outputExpired(existing.output))
   const startAgain = existing && retryFailed && (existing.status === 'failed' || existing.status === 'canceled' || expired)
   if (startAgain) console.log(`Prediction ${existing.id} ${expired ? 'finished, but its output has expired' : existing.status}; starting a new one, as asked`)
   if (existing && expired && !startAgain) {
