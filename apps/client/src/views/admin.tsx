@@ -123,7 +123,7 @@ function FullSongButton({ take, disabled, onConfirm }: { take: string; disabled?
           <AlertDialog.Title className="font-serif text-2xl">Generate the full song for {take}?</AlertDialog.Title>
           <AlertDialog.Description className="mt-2 text-sm text-stone-600 dark:text-stone-400">
             {runOn === 'pc'
-              ? 'This renders the whole song on the 4090 PC: free, and roughly 5 hours, a little quicker than Replicate. It can be stopped and started again without redoing finished work.'
+              ? 'This renders the whole song on the 4090 PC: free, and roughly 7 to 8 hours, a little slower than Replicate. It can be stopped and started again without redoing finished work.'
               : `This renders the whole song on Replicate: ${cost}, over ${time}. It can be stopped and started again without paying twice for finished work, but the money for what has already rendered is spent.`}
           </AlertDialog.Description>
           <label className="mt-4 flex cursor-pointer items-start gap-2 rounded bg-amber-50 dark:bg-amber-950/40 p-3 text-sm">
