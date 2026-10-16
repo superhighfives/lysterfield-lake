@@ -615,8 +615,9 @@ export default function Admin() {
     <RunOnContext.Provider value={effectiveRunOn}>
     <div className="fixed inset-0 overflow-y-auto bg-stone-100 dark:bg-stone-950 font-sans text-stone-900 dark:text-stone-100 [color-scheme:light] dark:[color-scheme:dark] [touch-action:auto]">
       <style>{FORMULAIRE_CSS}</style>
-      <div className="mx-auto max-w-5xl px-6 py-10">
-        <header className="mb-6 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+      <div className="mx-auto max-w-5xl px-6 pb-10 pt-7">
+        {/* Stays at the top while the page scrolls, so the 4090/Replicate switch is always to hand. */}
+        <header className="sticky top-0 z-30 -mx-6 mb-6 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-transparent bg-stone-100/90 px-6 py-3 backdrop-blur dark:bg-stone-950/90">
           <h1 className="font-serif text-4xl">Dreams</h1>
           <p className="text-sm text-stone-600 dark:text-stone-400">Make and review new looks for the dream panel.</p>
           <div className="ml-auto flex items-center gap-4">
