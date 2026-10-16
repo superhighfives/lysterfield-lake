@@ -16,13 +16,14 @@ import path from 'node:path'
  * only ever hand work back to a consumer running here.
  *
  * Several tasks run at once, within limits:
- * - a lane's capacity: Replicate runs a few at a time; the person check
- *   uses this machine's GPU, so one at a time;
+ * - a lane's capacity: Replicate runs a few at a time; our own GPU (the
+ *   4090 PC, `--on pc`) and the person check (this machine's GPU) one at a
+ *   time;
  * - one task per dream at a time, since they read and write the same
  *   frames, `replaced/` and `check.json`.
  */
 
-export type Lane = 'replicate' | 'local' | 'quick' | 'instant'
+export type Lane = 'replicate' | 'pc' | 'local' | 'quick' | 'instant'
 export type TaskStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 export interface Task {
   id: string
@@ -43,7 +44,7 @@ export interface Task {
 }
 
 /** How many tasks a lane runs at once. `instant` tasks (creating a take, approvals, notes) take milliseconds and never wait. */
-const CAPACITY: Record<Lane, number> = { replicate: 3, local: 1, quick: Infinity, instant: Infinity }
+const CAPACITY: Record<Lane, number> = { replicate: 3, pc: 1, local: 1, quick: Infinity, instant: Infinity }
 const LANES: Record<string, Lane> = { directions: 'replicate', samples: 'replicate', clip: 'replicate', full: 'replicate', rerender: 'replicate', check: 'local', hold: 'quick', restore: 'local' }
 /** Finished tasks kept on disk; older ones are swept when the queue loads. */
 const KEEP_FINISHED = 100
@@ -146,7 +147,9 @@ export function createQueue(opts: { dir: string; cwd: string; env: () => NodeJS.
         action,
         clip: body.clip === true,
         args,
-        lane: LANES[action] ?? 'instant',
+        // A Replicate job sent to our own GPU instead waits its turn on that one GPU. Unsaid, the
+        // pipeline picks the GPU whenever DEFORUM_URL is set, so the lane does the same.
+        lane: LANES[action] === 'replicate' && (body.on ?? (opts.env().DEFORUM_URL ? 'pc' : 'replicate')) === 'pc' ? 'pc' : (LANES[action] ?? 'instant'),
         status: 'queued',
         created: Date.now(),
       }

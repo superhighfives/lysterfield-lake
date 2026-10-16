@@ -53,7 +53,7 @@ export function Tasks({ job, tasks, titles, onChanged }: {
       <div className="mb-2 flex items-baseline gap-3">
         <h2 className="font-serif text-2xl">Tasks</h2>
         <p className="text-sm text-stone-600 dark:text-stone-400">
-          {going.length === 0 ? 'Nothing running.' : `${going.filter((t) => t.status === 'running').length} running, ${going.filter((t) => t.status === 'queued').length} waiting.`} Up to three Replicate runs and one check at a time, and
+          {going.length === 0 ? 'Nothing running.' : `${going.filter((t) => t.status === 'running').length} running, ${going.filter((t) => t.status === 'queued').length} waiting.`} Up to three Replicate runs, one job on the 4090 and one check at a time, and
           one task per dream.
         </p>
         {finished.length > 0 && (
@@ -75,6 +75,7 @@ export function Tasks({ job, tasks, titles, onChanged }: {
                 <span className="text-stone-600 dark:text-stone-400">
                   {titles[task.take] ?? task.take}
                   {task.clip ? ', clip' : ''}
+                  {task.lane === 'pc' ? ', on the 4090' : task.lane === 'replicate' ? ', on Replicate' : ''}
                 </span>
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TONES[task.status]}`}>{STATUS[task.status]}</span>
                 <span className="text-xs tabular-nums text-stone-500 dark:text-stone-400">
