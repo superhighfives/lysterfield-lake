@@ -74,7 +74,7 @@ function Lightbox({ items, index, onIndex }: { items: LightboxItem[]; index: num
           }}
           className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 font-sans text-stone-100 outline-none"
         >
-          {item && (
+          {item && index !== null && (
             <>
               <Dialog.Close title="Close" className="block cursor-zoom-out rounded outline-none focus-visible:ring-2 focus-visible:ring-stone-300">
                 {item.video ? (
@@ -87,7 +87,7 @@ function Lightbox({ items, index, onIndex }: { items: LightboxItem[]; index: num
                 <Dialog.Title>{item.label}</Dialog.Title>
                 {items.length > 1 && (
                   <span className="tabular-nums text-stone-400">
-                    {index! + 1} of {items.length} · ← →
+                    {index + 1} of {items.length} · ← →
                   </span>
                 )}
               </div>
