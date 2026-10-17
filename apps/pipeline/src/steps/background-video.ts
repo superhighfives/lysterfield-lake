@@ -98,7 +98,9 @@ export async function backgroundVideo(
       throw new Error(`${portraitFramesDir} isn't numbered 0001 onwards with no gaps (found ${frame} at position ${i + 1})`)
     }
   })
-  const cuts = [...(job.cuts ?? [])].sort((a, b) => a - b)
+  const cuts = [...new Set(job.cuts ?? [])].sort((a, b) => a - b)
+  const badCuts = cuts.filter((c) => !Number.isInteger(c) || c <= 1 || c > frames.length)
+  if (badCuts.length > 0) throw new Error(`job.json cuts must be whole frame numbers from 2 to ${frames.length}, got ${badCuts.join(', ')}`)
   const plan = await loadOrCreatePlan(planPath, frames.length, job.fps, cuts, !opts.planOnly)
 
   const done = new Set(((await exists(chunksDir)) ? await readdir(chunksDir) : []).filter((f) => /^c\d+\.mp4$/.test(f)).map((f) => f.slice(0, -4)))
@@ -189,9 +191,11 @@ async function loadOrCreatePlan(planPath: string, frameCount: number, fps: numbe
           `Its chunk outputs no longer line up; move 3-background/chunks aside to plan again.`
       )
     }
-    // Inputs made for the old plan's chunks are stale.
-    for (const f of await readdir(path.dirname(planPath))) {
-      if (/^c\d+-(video|mask)\.mp4$/.test(f)) await rm(path.join(path.dirname(planPath), f))
+    // Inputs made for the old plan's chunks are stale. A plan-only run leaves them for the real run to clear.
+    if (save) {
+      for (const f of await readdir(path.dirname(planPath))) {
+        if (/^c\d+-(video|mask)\.mp4$/.test(f)) await rm(path.join(path.dirname(planPath), f))
+      }
     }
   }
   const plan: Plan = { uploadPrefix: randomUUID(), frames: frameCount, cuts, chunks }
@@ -230,7 +234,8 @@ async function runChunk(
       path.join(chunksDir, `${chunk.id}.prediction.json`)
     )
   } finally {
-    // Reported, not thrown, so it can't hide the chunk's own error. The next run of this chunk deletes them too.
+    // Reported, not thrown, so it can't hide the chunk's own error. A failed chunk's next run deletes them too,
+    // but a chunk that succeeded is never run again, so its inputs stay public until deleted by hand.
     const deletes = await Promise.allSettled(keys.map(deletePublic))
     deletes.forEach((d, i) => {
       if (d.status === 'rejected') console.warn(`warning: couldn't delete ${keys[i]} from R2, it's still public: ${d.reason}`)

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "cli": "bun run src/cli.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "replicate": "^1.4.0",
