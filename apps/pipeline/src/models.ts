@@ -95,5 +95,5 @@ export const MODELS = {
    * xformers, and about 40% cheaper per frame than the A100's 10s; 2026-10-16). The same build runs on the 4090 PC
    * (gpu-server.ts). See plans/done/own-deforum-dream-model.md.
    */
-  deforum: 'superhighfives/lysterfield-deforum:cebe7a35d37a9e97e0039a479f186e02caab716c2f20646c361cf34bf9a68dad',
+  deforum: 'superhighfives/lysterfield-deforum:c874cd192ac419fb736be755ad148ff7b512bc8ae0d7a4d7b1c5cb9fa91e1f1e',
 } as const satisfies Record<string, `${string}/${string}` | `${string}/${string}:${string}`>
