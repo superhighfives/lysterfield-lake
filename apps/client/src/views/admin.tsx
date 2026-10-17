@@ -54,7 +54,7 @@ const slowed = (v: HTMLVideoElement | null) => {
   if (v) v.playbackRate = SAMPLE_PLAYBACK_RATE
 }
 
-/** A sample's loop, which opens full size in a lightbox, still looping, when clicked. */
+/** A sample's loop, slowed down; clicked, it opens full size and at its real speed in a lightbox. */
 function SampleLoop({ src, poster, label }: { src: string; poster: string; label: string }) {
   return (
     <Dialog.Root>
@@ -65,7 +65,7 @@ function SampleLoop({ src, poster, label }: { src: string; poster: string; label
         <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/80" />
         <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 font-sans text-stone-100">
           <Dialog.Close title="Close" className="block cursor-zoom-out outline-none">
-            <video ref={slowed} onLoadedData={(e) => slowed(e.currentTarget)} src={src} poster={poster} autoPlay loop muted playsInline className="max-h-[85vh] max-w-[calc(100vw-2rem)] rounded" />
+            <video src={src} poster={poster} autoPlay loop muted playsInline className="max-h-[85vh] max-w-[calc(100vw-2rem)] rounded" />
           </Dialog.Close>
           <Dialog.Title className="mt-2 text-sm text-stone-300">{label}</Dialog.Title>
         </Dialog.Popup>
