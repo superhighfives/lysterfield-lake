@@ -91,8 +91,10 @@ export function useSwapInput() {
 
     const handlePointerDown = (event: PointerEvent) => {
       if (event.pointerType === 'mouse' && event.button !== 0) return
-      // Not from the control pill, where dragging the time range is a seek.
+      // Only over the scene, and not from the control pill inside it, where
+      // dragging the time range is a seek.
       const target = event.target as Element
+      if (!target.closest('[data-swap-surface]')) return
       if (target.closest('button, a, input, media-controller')) return
       if (!canSwap()) return
       start = {
@@ -106,6 +108,13 @@ export function useSwapInput() {
 
     const handlePointerMove = (event: PointerEvent) => {
       if (!start) return
+      // A mouse released outside the window never sends pointerup here —
+      // a move with no button held means the press is long over.
+      if (event.pointerType === 'mouse' && event.buttons === 0) {
+        handlePointerCancel()
+        return
+      }
+
       const dx = event.clientX - start.x
       const dy = event.clientY - start.y
       // Only a mostly-sideways move becomes a drag, so a vertical swipe

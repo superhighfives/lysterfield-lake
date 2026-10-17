@@ -12,7 +12,9 @@ import {
 // A custom cursor, on devices with a precise, hovering pointer (touch keeps
 // its own). A dot sits exactly under the pointer; a ring trails it and
 // changes with what's beneath:
-// - default: a faint ring
+// - default: just the dot, stretching along its direction of travel, with
+//   a faint ghost trailing behind — the ring is collapsed into it, so every
+//   other state grows out of the dot
 // - hover: a larger ring over anything clickable (HTML controls, and the
 //   carousel's cards, which flag it through drei's useCursor)
 // - polaroid: near the player's polaroid, a wide ring with arrows either
@@ -24,7 +26,7 @@ import {
 type Mode = 'default' | 'hover' | 'polaroid' | 'drag' | 'busy'
 
 const RING_SIZE: Record<Mode, number> = {
-  default: 28,
+  default: 6,
   hover: 44,
   polaroid: 76,
   drag: 76,
@@ -32,6 +34,13 @@ const RING_SIZE: Record<Mode, number> = {
 }
 // How much of the way to the pointer the ring moves each frame.
 const RING_FOLLOW = 0.3
+// The ghost trails further behind than the ring.
+const GHOST_FOLLOW = 0.12
+// Dot stretch: pointer speed (px per frame, eased by SPEED_EASE) per unit
+// of stretch, capped at STRETCH_MAX (1 = twice as long).
+const SPEED_PER_STRETCH = 25
+const STRETCH_MAX = 1.2
+const SPEED_EASE = 0.25
 const ARC_RADIUS = 36
 const ARC_LENGTH = 2 * Math.PI * ARC_RADIUS
 
@@ -51,6 +60,8 @@ function Cursor() {
   } | null>(null)
 
   const dot = useRef<HTMLDivElement>(null)
+  const dotShape = useRef<HTMLDivElement>(null)
+  const ghost = useRef<HTMLDivElement>(null)
   const ring = useRef<HTMLDivElement>(null)
   const arc = useRef<SVGCircleElement>(null)
   const card = useRef<HTMLDivElement>(null)
@@ -68,6 +79,9 @@ function Cursor() {
 
     const pointer = { x: -100, y: -100 }
     const ringPos = { x: -100, y: -100 }
+    const ghostPos = { x: -100, y: -100 }
+    const last = { x: -100, y: -100 }
+    const velocity = { x: 0, y: 0 }
     let hovered: Element | null = null
     let currentMode: Mode = 'default'
     let previewKey = ''
@@ -94,6 +108,26 @@ function Cursor() {
         dot.current.style.transform = `translate3d(${pointer.x}px, ${pointer.y}px, 0)`
       if (ring.current)
         ring.current.style.transform = `translate3d(${ringPos.x}px, ${ringPos.y}px, 0)`
+
+      velocity.x += (pointer.x - last.x - velocity.x) * SPEED_EASE
+      velocity.y += (pointer.y - last.y - velocity.y) * SPEED_EASE
+      last.x = pointer.x
+      last.y = pointer.y
+      const speed = Math.hypot(velocity.x, velocity.y)
+      const stretch = Math.min(speed / SPEED_PER_STRETCH, STRETCH_MAX)
+      const angle = Math.atan2(velocity.y, velocity.x)
+      if (dotShape.current)
+        dotShape.current.style.transform = `translate(-50%, -50%) rotate(${angle}rad) scale(${1 + stretch}, ${1 / (1 + stretch * 0.5)})`
+
+      ghostPos.x += (pointer.x - ghostPos.x) * GHOST_FOLLOW
+      ghostPos.y += (pointer.y - ghostPos.y) * GHOST_FOLLOW
+      if (ghost.current) {
+        ghost.current.style.transform = `translate3d(${ghostPos.x}px, ${ghostPos.y}px, 0)`
+        // Only while it's trailing; sitting under the dot it would just
+        // thicken it.
+        const lag = Math.hypot(pointer.x - ghostPos.x, pointer.y - ghostPos.y)
+        ghost.current.style.opacity = `${Math.min(lag / 40, 1) * 0.35}`
+      }
 
       const { swapPhase } = useStore.getState()
       let next: Mode = 'default'
@@ -169,7 +203,7 @@ function Cursor() {
                   ? // A faint halo of the opposite colour outside the ring,
                     // so it reads over the photo whatever's in it.
                     'border-stone-900/60 dark:border-white/60 bg-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]'
-                  : 'border-stone-900/30 dark:border-white/30'
+                  : 'border-transparent'
           }`}
           style={{ width: size, height: size }}
         />
@@ -253,9 +287,24 @@ function Cursor() {
         ) : null}
       </div>
 
-      {/* Dot, exactly under the pointer */}
+      {/* Ghost, trailing the dot while it moves */}
+      <div
+        ref={ghost}
+        className={`absolute left-0 top-0 transition-[visibility] ${
+          mode === 'default' ? 'visible' : 'invisible'
+        }`}
+      >
+        <div className="absolute -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-stone-900 dark:bg-white blur-[0.5px]" />
+      </div>
+
+      {/* Dot, exactly under the pointer, with a soft glow in the site's
+          yellow */}
       <div ref={dot} className="absolute left-0 top-0">
-        <div className="absolute -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-stone-900 dark:bg-white" />
+        <div
+          ref={dotShape}
+          className="absolute w-2 h-2 rounded-full bg-stone-900 dark:bg-white shadow-[0_0_10px_2px_rgba(248,205,13,0.55)]"
+          style={{ transform: 'translate(-50%, -50%)' }}
+        />
       </div>
     </div>
   )

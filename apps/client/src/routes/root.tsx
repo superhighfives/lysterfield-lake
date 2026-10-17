@@ -135,7 +135,12 @@ function Root() {
                 Watch on YouTube?
               </a>
             </div>
-            <div className={`${isBuffering ? 'grayscale' : ''} fixed inset-0`}>
+            {/* data-swap-surface: drags that swap dreams start in here
+                (see utils/swap-gesture.ts), not on the page's own UI. */}
+            <div
+              data-swap-surface
+              className={`${isBuffering ? 'grayscale' : ''} fixed inset-0`}
+            >
               <Canvas shadows>
                 <Suspense fallback={<Loading />}>
                   <Preload all />

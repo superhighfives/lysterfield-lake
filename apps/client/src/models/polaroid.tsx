@@ -48,6 +48,12 @@ type GLTFResult = GLTF & {
 const FRAME_LIGHT = '#ffffff'
 const FRAME_DARK = '#2b2826'
 const FRAME_DARK_ROUGHNESS = 0.75
+// The player's polaroid in dark mode: still a sheen as it tilts, but a
+// broad, soft one. At the glossy paper's own roughness the spotlight
+// focused into a hard white streak across the charcoal frame, even dimmed;
+// rougher spreads it, and the dimmer dark-mode light (scene.tsx) keeps the
+// spread from washing the frame grey.
+const PLAYER_DARK_ROUGHNESS = 0.5
 
 // Carousel cards are drawn as layers, one at a time, each into its own
 // cleared depth buffer (see slider.tsx). That only works if every part of
@@ -66,7 +72,7 @@ function layeredCopy(material: MeshStandardMaterial) {
     // to a muted, slightly olive grey — the carousel's lit frames should
     // read as white (see the choose-screen light levels in scene.tsx).
     copy.toneMapped = false
-    copy.userData.roughness = material.roughness
+    copy.userData.roughness = material.userData.roughness ?? material.roughness
     layeredCopies.set(material, copy)
   }
 
@@ -115,6 +121,10 @@ const Polaroid = forwardRef<
       materials.initialShadingGroup,
     ]) {
       material.color.set(dark ? FRAME_DARK : FRAME_LIGHT)
+      material.userData.roughness ??= material.roughness
+      material.roughness = dark
+        ? PLAYER_DARK_ROUGHNESS
+        : material.userData.roughness
       const copy = layeredCopies.get(material)
       if (copy) {
         copy.color.set(dark ? FRAME_DARK : FRAME_LIGHT)

@@ -18,7 +18,11 @@ import { useIntersect } from '@react-three/drei'
 import { SwapPhase, useStore } from '../store'
 import { commitSwap, fadeOutAudio } from '../utils/swap-dream'
 import { SWAP_ANIMATIONS } from '../utils/swap-poses'
-import { polaroidRect, swapDrag } from '../utils/swap-gesture'
+import {
+  commitDistance,
+  polaroidRect,
+  swapDrag,
+} from '../utils/swap-gesture'
 import { animated, config, useSpring } from '@react-spring/three'
 // eslint-disable-next-line import/named -- useIdle is a real export (confirmed at runtime); eslint-plugin-import's static resolver doesn't handle this package's minimal `exports` map correctly
 import { useIdle } from '@uidotdev/usehooks'
@@ -54,6 +58,17 @@ const SWAP_REST = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }
 const DRAG_TILT = 0.25
 const DRAG_DIP = 0.06
 const DRAG_RETURN = 0.15
+// The avatar and lyrics dissolve as a drag starts — gone by this share of
+// the way to the release point — stay gone through the swap, and come
+// back as the new polaroid lands. FADE_EASE smooths the target per frame.
+const FADE_BY_DRAG = 0.5
+const FADE_EASE = 0.12
+// Motion smear on the polaroid photo: its per-frame movement (local
+// units, normalised to 60fps) over this width is the smear in photo UV,
+// eased per frame by VELOCITY_EASE and capped at VELOCITY_MAX.
+const PHOTO_WIDTH = 1.05
+const VELOCITY_EASE = 0.3
+const VELOCITY_MAX = 0.06
 
 function Main(
   props: ThreeElements['group'] & {
@@ -138,6 +153,10 @@ function Main(
   const swapPhaseRef = useRef<SwapPhase>('idle')
   // The drag offset actually applied, in CSS pixels (see swapDrag).
   const dragOffsetRef = useRef(0)
+  const fadeRef = useRef(1)
+  const lastSwapPosition = useRef(new Vector3(0, 0, POLAROID_Z))
+  const velocityRef = useRef(new Vector2())
+  const velocityTarget = useRef(new Vector2())
   // Scratch objects for projecting the photo's bounds to the screen.
   const photoBox = useRef(new Box3())
   const corner = useRef(new Vector3())
@@ -297,6 +316,34 @@ function Main(
         z + POLAROID_Z
       )
       swapGroup.current.rotation.set(rx, ry, rz - drag * DRAG_TILT)
+
+      const step = (1 / 60 / Math.max(delta, 1e-3)) / PHOTO_WIDTH
+      const target = velocityTarget.current
+        .set(
+          (swapGroup.current.position.x - lastSwapPosition.current.x) * step,
+          (swapGroup.current.position.y - lastSwapPosition.current.y) * step
+        )
+        .clampLength(0, VELOCITY_MAX)
+      lastSwapPosition.current.copy(swapGroup.current.position)
+      velocityRef.current.lerp(target, VELOCITY_EASE)
+      if (velocityRef.current.lengthSq() < 1e-7) velocityRef.current.set(0, 0)
+      if (polaroidMaterial.current)
+        polaroidMaterial.current.uVelocity = velocityRef.current
+    }
+
+    let fadeTarget = 1
+    if (swapPhase === 'out' || swapPhase === 'loading') fadeTarget = 0
+    else if (swapPhase === 'in') fadeTarget = 1 - swapProgressRef.current
+    else if (swapDrag.active)
+      fadeTarget = MathUtils.clamp(
+        1 - Math.abs(swapDrag.dx) / (commitDistance() * FADE_BY_DRAG),
+        0,
+        1
+      )
+    fadeRef.current = MathUtils.lerp(fadeRef.current, fadeTarget, FADE_EASE)
+    if (fadeRef.current > 0.999) fadeRef.current = 1
+    for (const material of [avatarMaterial.current, lyricsMaterial.current]) {
+      if (material) material.uFade = fadeRef.current
     }
 
     // The photo's bounds on screen, for the cursor and tap detection.

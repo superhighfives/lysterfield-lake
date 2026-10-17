@@ -35,6 +35,10 @@ const CHOOSING_LIGHT = {
 	light: { ambient: 2.6, spot: 2.5 },
 	dark: { ambient: 2.6, spot: 0.6 },
 };
+// The player's spotlight, per colour scheme. On the glossy charcoal frame
+// in dark mode, the full-strength light made a hard white streak — it's
+// meant to be a faint sheen as the polaroid tilts.
+const PLAYER_SPOT = { light: 5, dark: 1.2 };
 
 function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const camera = useRef<PerspectiveCameraType>(null);
@@ -117,10 +121,11 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 		// right). On the choose screen the ambient fill comes up and the
 		// spot comes down, so the pool still reads but the falloff is
 		// gentle. The player keeps the original balance.
-		const levels = CHOOSING_LIGHT[useStore.getState().colorScheme];
+		const scheme = useStore.getState().colorScheme;
+		const levels = CHOOSING_LIGHT[scheme];
 		spotlight.intensity = MathUtils.lerp(
 			spotlight.intensity,
-			choosing ? levels.spot : 5,
+			choosing ? levels.spot : PLAYER_SPOT[scheme],
 			0.08,
 		);
 		if (ambient.current) {
