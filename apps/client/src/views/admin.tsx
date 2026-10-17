@@ -108,6 +108,16 @@ function ExpandIcon() {
   )
 }
 
+const ADJECTIVES = ['wistful', 'hazy', 'quiet', 'amber', 'drifting', 'gentle', 'faded', 'golden', 'hollow', 'misty', 'pale', 'restless', 'silver', 'sleepy', 'soft', 'still', 'tender', 'velvet', 'wandering', 'woven']
+const NOUNS = ['house', 'forest', 'dream', 'meadow', 'tide', 'harbour', 'orchard', 'valley', 'lantern', 'garden', 'river', 'cloud', 'ember', 'field', 'grove', 'hollow', 'lake', 'moss', 'shore', 'willow']
+const randomWord = (words: string[]) => words[Math.floor(Math.random() * words.length)]
+/** `stem` with a word on the end (stem-forest) that no dream uses yet. */
+function freeName(stem: string, used: string[]): string {
+  const free = NOUNS.map((n) => `${stem}-${n}`).filter((n) => !used.includes(n))
+  if (free.length > 0) return randomWord(free)
+  for (let i = 2; ; i++) if (!used.includes(`${stem}-${i}`)) return `${stem}-${i}`
+}
+
 type NewTake = { name: string; prompt: string; colour: string | null; style: string | null; styleStrength: number; styleCopies: StyleCopies; preset: string; negative: string; seed?: number }
 
 // Rough Replicate cost and time for each paid stage of a Deforum take (L40S with xformers, ~8s a dream frame), before retries.
@@ -256,6 +266,10 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
   const [shownStyle, setShownStyle] = useState<number | null>(null)
   const [styleStrength, setStyleStrength] = useState(STYLE_STRENGTH.look)
   const [name, setName] = useState('')
+  // What the person last typed as a name, which each later variant builds on (autumn-ink, autumn-ink-forest, autumn-ink-tide...).
+  const [stem, setStem] = useState('')
+  // Ids made from this form, which may not be in `existing` yet.
+  const [made, setMade] = useState<string[]>([])
   const [negative, setNegative] = useState('')
   const [uploadError, setUploadError] = useState('')
   const [creating, setCreating] = useState(false)
@@ -300,23 +314,23 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
     input.value = ''
   }
 
+  const used = [...existing, ...made]
   const id = name.replace(/^-+|-+$/g, '')
-  const taken = existing.includes(id)
-  const ready = (prompt.trim() !== '' || style !== null) && id !== '' && !taken && preset !== '' && !creating
+  const taken = used.includes(id)
+  const ready = (prompt.trim() !== '' || style !== null) && !taken && preset !== '' && !creating
   const submit = async () => {
     if (!ready) return
     setCreating(true)
-    const made = await onCreate({ name: id, prompt, colour, style, styleStrength, styleCopies, preset: preset === BLANK ? '' : preset, negative: negative.trim(), seed: options.presets[preset]?.seed })
+    // No name: one is made up, like wistful-house.
+    const take = id || freeName(randomWord(ADJECTIVES), used)
+    const ok = await onCreate({ name: take, prompt, colour, style, styleStrength, styleCopies, preset: preset === BLANK ? '' : preset, negative: negative.trim(), seed: options.presets[preset]?.seed })
     setCreating(false)
-    // Once the dream exists and its samples are queued, start the next one fresh: its name is now
-    // taken, and the form otherwise sits there saying so.
-    if (made) {
-      setName('')
-      setNegative('')
-      setStyle(null)
-      setStyleCopies('look')
-      setStyleStrength(STYLE_STRENGTH.look)
-      startFrom(BLANK)
+    // The settings stay, so another take can be tweaked from this one. A typed name moves on to a
+    // variant of it (autumn-ink-forest); an empty one stays empty and is made up again next time.
+    if (ok) {
+      const nowUsed = [...used, take]
+      setMade((m) => [...m, take])
+      if (stem) setName(freeName(stem, nowUsed))
     }
   }
 
@@ -439,8 +453,14 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
         </GridForm.Section>
         <GridForm.Section legend="Details">
           <GridForm.Row>
-            <GridForm.Field name="name" label="Name" error={taken ? 'Already used' : undefined} description="Becomes the dream's id, like autumn-ink.">
-              <GridForm.Input required value={name} onChange={(e) => setName(slug(e.target.value))} />
+            <GridForm.Field name="name" label="Name" error={taken ? 'Already used' : undefined} description="Becomes the dream's id, like autumn-ink. Optional: left empty, one is made up. After each, it moves on to a variant, like autumn-ink-forest.">
+              <GridForm.Input
+                value={name}
+                onChange={(e) => {
+                  setName(slug(e.target.value))
+                  setStem(slug(e.target.value).replace(/^-+|-+$/g, ''))
+                }}
+              />
             </GridForm.Field>
             <GridForm.Field name="negative" label="Also avoid" span={2} description="Optional, like buildings or text. Added to the built-in list that keeps people out.">
               <GridForm.Input value={negative} onChange={(e) => setNegative(e.target.value)} />
