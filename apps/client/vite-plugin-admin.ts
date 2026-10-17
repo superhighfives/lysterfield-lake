@@ -1,7 +1,9 @@
-import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { execFile } from 'node:child_process'
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import type { Plugin } from 'vite'
 import { createQueue } from './admin-queue.ts'
 
@@ -17,6 +19,9 @@ const PIPELINE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const JOBS_DIR = path.join(PIPELINE_DIR, '.jobs')
 const COLOURS_DIR = path.join(PIPELINE_DIR, 'resources', 'colours')
 const MAX_COLOUR_UPLOAD = 20 * 1024 * 1024
+/** Webcam clips from /admin/record (plans/backlog/user-polaroid-loops.md), kept apart from the jobs made from them. */
+const RECORDINGS_DIR = path.join(JOBS_DIR, '_recordings')
+const MAX_RECORDING_UPLOAD = 40 * 1024 * 1024
 const DEFORUM_PRESETS = path.resolve(PIPELINE_DIR, '..', '..', 'models', 'deforum', 'settings', 'presets.json')
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -297,15 +302,38 @@ function deleteTake(job: string, take: string) {
   rmSync(dir, { recursive: true })
 }
 
+/**
+ * Saves a webcam recording and makes a new job from it with the pipeline's own `init` (crop to a square, 1280px,
+ * frames at 24fps). `init` makes no Replicate calls, so it runs straight away rather than through the queue.
+ */
+async function createRecordingJob(body: Record<string, unknown>): Promise<{ job: string }> {
+  const { name, data, type } = body
+  if (typeof name !== 'string' || !/^[a-z0-9][\w-]*$/.test(name) || name === 'spikes') throw new Error('name must be letters, numbers and dashes')
+  if (existsSync(path.join(JOBS_DIR, name))) throw new Error(`There's already a job called "${name}"`)
+  if (typeof data !== 'string' || !/^[A-Za-z0-9+/]+=*$/.test(data)) throw new Error('data must be base64')
+  if (data.length > MAX_RECORDING_UPLOAD * 1.4) throw new Error('recording is too large (max 40MB)')
+  const ext = typeof type === 'string' && type.startsWith('video/mp4') ? 'mp4' : 'webm'
+  mkdirSync(RECORDINGS_DIR, { recursive: true })
+  // The real path: .jobs is a symlink in a worktree, and job.json records where the source came from.
+  const source = path.join(realpathSync(RECORDINGS_DIR), `${name}.${ext}`)
+  writeFileSync(source, Buffer.from(data, 'base64'))
+  try {
+    await promisify(execFile)('bun', ['run', 'src/cli.ts', 'init', '--job', path.join(JOBS_DIR, name), '--source', source, '--length', '5'], { cwd: PIPELINE_DIR, env: pipelineEnv() })
+  } catch (error) {
+    throw new Error(`init failed: ${(error as { stderr?: string }).stderr?.trim() || (error as Error).message}`)
+  }
+  return { job: name }
+}
+
 /** Every pipeline command the page starts goes through the queue (admin-queue.ts). Made on first use, so nothing touches .jobs until the admin API is called. */
 let queue: ReturnType<typeof createQueue> | undefined
 const tasks = () => (queue ??= createQueue({ dir: path.join(JOBS_DIR, '_queue'), cwd: PIPELINE_DIR, env: pipelineEnv }))
 
-async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+async function readBody(req: IncomingMessage, limit = MAX_COLOUR_UPLOAD): Promise<Record<string, unknown>> {
   let data = ''
   for await (const chunk of req) {
     data += chunk
-    if (data.length > MAX_COLOUR_UPLOAD * 1.5) throw new Error('request body too large')
+    if (data.length > limit * 1.5) throw new Error('request body too large')
   }
   const parsed: unknown = data ? JSON.parse(data) : {}
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('request body must be a JSON object')
@@ -374,6 +402,7 @@ export default function adminPlugin(): Plugin {
             writeFileSync(file, Buffer.from(data, 'base64'))
             return send(res, 200, { name })
           }
+          if (parts[1] === 'recordings' && req.method === 'POST') return send(res, 200, await createRecordingJob(await readBody(req, MAX_RECORDING_UPLOAD)))
           if (parts[1] === 'jobs' && parts.length === 2) return send(res, 200, listJobs())
           if (parts[1] === 'jobs' && parts.length === 3 && req.method === 'GET') return send(res, 200, jobDetail(parts[2]))
           if (parts[1] === 'jobs' && parts[3] === 'checks' && parts[4] && req.method === 'GET') {

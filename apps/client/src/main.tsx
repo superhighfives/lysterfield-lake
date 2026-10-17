@@ -6,7 +6,10 @@ import './index.css'
 // The /admin dream review page only exists in dev: the DEV check is
 // replaced with `false` in production builds, so the lazy import (and the
 // page's code) is dropped from the bundle.
-const Admin = import.meta.env.DEV ? lazy(() => import('./views/admin.tsx')) : null
+// /admin/record is the webcam recorder for the polaroid prototype.
+const Admin = import.meta.env.DEV
+  ? lazy(() => (location.pathname.startsWith('/admin/record') ? import('./views/admin-record.tsx') : import('./views/admin.tsx')))
+  : null
 const showAdmin = Admin !== null && location.pathname.startsWith('/admin')
 
 createRoot(document.getElementById('root') as HTMLElement).render(
