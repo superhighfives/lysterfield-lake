@@ -169,15 +169,15 @@ export function createQueue(opts: { dir: string; cwd: string; env: () => NodeJS.
         .sort((a, b) => a.created - b.created)
         .map((t) => ({ ...t, log: logTail(t.id, t.status === 'failed' ? 6000 : 600) }))
     },
+    /** A job's tasks for one take that are waiting or running. */
+    activeFor(job: string, take: string) {
+      return Array.from(tasks.values()).filter((t) => t.job === job && t.take === take && !ended(t))
+    },
     /**
      * Stops a task. A waiting one just never starts. A running one has its process stopped; a
      * Replicate run it had already started carries on there, and starting the task again picks
      * that same run back up rather than paying for another.
      */
-    /** A job's tasks for one take that are waiting or running. */
-    activeFor(job: string, take: string) {
-      return Array.from(tasks.values()).filter((t) => t.job === job && t.take === take && !ended(t))
-    },
     cancel(id: string) {
       const task = tasks.get(id)
       if (!task || ended(task)) return
