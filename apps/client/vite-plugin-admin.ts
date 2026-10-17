@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -281,6 +281,22 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
   }
 }
 
+/**
+ * Deletes a take that hasn't made anything yet: no samples, clip, frames or final output, so nothing is lost but its
+ * settings. Waiting tasks for it are cancelled first; one that is running has to be stopped before.
+ * A take with output, or a published dream (no take.json), is refused.
+ */
+function deleteTake(job: string, take: string) {
+  const dir = checkDir(job, take, false)
+  if (!existsSync(path.join(dir, 'take.json'))) throw new Error(`"${take}" isn't a take that can be deleted`)
+  const made = ['samples', 'frames', 'preview', 'repairs', 'final'].filter((sub) => existsSync(path.join(dir, sub)) && readdirSync(path.join(dir, sub)).length > 0)
+  if (made.length > 0) throw new Error(`"${take}" already has ${made.join(', ')}; only a take that hasn't run can be deleted`)
+  const active = tasks().activeFor(job, take)
+  if (active.some((t) => t.status === 'running')) throw new Error(`Something is running for "${take}"; stop it first`)
+  for (const task of active) tasks().cancel(task.id)
+  rmSync(dir, { recursive: true })
+}
+
 /** Every pipeline command the page starts goes through the queue (admin-queue.ts). Made on first use, so nothing touches .jobs until the admin API is called. */
 let queue: ReturnType<typeof createQueue> | undefined
 const tasks = () => (queue ??= createQueue({ dir: path.join(JOBS_DIR, '_queue'), cwd: PIPELINE_DIR, env: pipelineEnv }))
@@ -389,6 +405,10 @@ export default function adminPlugin(): Plugin {
           if (parts[1] === 'tasks' && parts[3] === 'retry' && req.method === 'POST') {
             const task = tasks().retry(parts[2])
             return task ? send(res, 200, { runId: task.id }) : send(res, 400, { error: 'Only a failed or stopped task can be retried, and only once' })
+          }
+          if (parts[1] === 'jobs' && parts[3] === 'takes' && parts[4] && parts[5] === 'delete' && req.method === 'POST') {
+            deleteTake(parts[2], parts[4])
+            return send(res, 200, {})
           }
           if (parts[1] === 'tasks' && parts[3] === 'cancel' && req.method === 'POST') {
             tasks().cancel(parts[2])
