@@ -27,9 +27,10 @@ import { trailTexture, updateTrail } from '../utils/liquid-trail'
 // the texture is then exactly what would have reached the screen, and the
 // final pass copies it across unchanged, apart from the wake.
 
-// How far (CSS px) the image is pulled at full flow, and the catch of light
-// on the wake's leading edge.
-const WAKE_PX = 12
+// How far (CSS px) the image is pulled at full flow — a fast flick; the
+// trail's speed curve (utils/liquid-trail.ts) keeps slower moves well
+// under it — and the catch of light on the wake's leading edge.
+const WAKE_PX = 20
 const WAKE_GLINT = 0.12
 // MSAA for the offscreen render, matching the canvas's own antialiasing.
 const SAMPLES = 4

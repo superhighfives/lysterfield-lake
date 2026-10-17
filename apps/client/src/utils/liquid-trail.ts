@@ -19,10 +19,14 @@ const TRAIL_SIZE = 160
 const SETTLE = 0.06
 const RADIUS = 0.05
 const RADIUS_FAST = 0.1
-// Pointer speed (CSS px per frame) that counts as full speed, and a
-// stroke's opacity at it.
-const FULL_SPEED = 40
-const STROKE_ALPHA = 0.5
+// Pointer speed (CSS px per frame) that counts as full speed. The wake
+// follows speed on a curve (SPEED_CURVE > 1), so a slow drift barely
+// stirs it and a fast flick drags hard. A stroke's opacity runs from
+// STROKE_ALPHA_SLOW to STROKE_ALPHA_FAST along the same curve.
+const FULL_SPEED = 60
+const SPEED_CURVE = 1.6
+const STROKE_ALPHA_SLOW = 0.2
+const STROKE_ALPHA_FAST = 0.65
 const NEUTRAL = 'rgb(128, 128, 0)'
 
 const canvas = document.createElement('canvas')
@@ -65,12 +69,14 @@ export function updateTrail(width: number, height: number) {
     const dx = pointer.x - last.x
     const dy = pointer.y - last.y
     const distance = Math.hypot(dx, dy)
-    const speed = Math.min(distance / FULL_SPEED, 1)
-    if (speed > 0.01) {
+    const speed = Math.min(distance / FULL_SPEED, 1) ** SPEED_CURVE
+    if (speed > 0.005) {
       const radius = canvas.width * (RADIUS + (RADIUS_FAST - RADIUS) * speed)
       const r = Math.round(128 + 127 * (dx / distance) * speed)
       const g = Math.round(128 + 127 * (dy / distance) * speed)
       const b = Math.round(255 * speed)
+      const alpha =
+        STROKE_ALPHA_SLOW + (STROKE_ALPHA_FAST - STROKE_ALPHA_SLOW) * speed
       // Stamped along the path since last frame, so a fast stroke is a
       // continuous wake rather than a dotted line.
       const steps = Math.max(1, Math.ceil((distance * scale) / (radius / 2)))
@@ -78,7 +84,7 @@ export function updateTrail(width: number, height: number) {
         const x = (last.x + (dx * i) / steps) * scale
         const y = (last.y + (dy * i) / steps) * scale
         const gradient = context.createRadialGradient(x, y, 0, x, y, radius)
-        gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${STROKE_ALPHA})`)
+        gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${alpha})`)
         gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`)
         context.fillStyle = gradient
         context.fillRect(x - radius, y - radius, radius * 2, radius * 2)
