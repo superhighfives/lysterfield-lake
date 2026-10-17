@@ -134,8 +134,8 @@ export async function deforumRun(job: Job, take: string, config: TakeConfig, run
     ...(config.colour
       ? { colour_image: await readFileAsInput(colourPath(job, take, config.colour)), colour_mode: 'Specific' }
       : { colour_mode: 'Video Input' }),
-    // A style reference steers every frame towards its look and imagery (IP-Adapter, models/deforum/ip_adapter.py).
-    // Look only (the default) feeds it to the up blocks alone, which carry its look but not its content.
+    // A style reference steers every frame towards it (IP-Adapter, models/deforum/ip_adapter.py). Look only (the
+    // default) feeds it to the up blocks alone, which carry its look but not its content; look and content feeds every layer.
     ...(config.style && {
       style_image: await readFileAsInput(colourPath(job, take, config.style)),
       style_strength: config.styleStrength ?? (config.styleCopies === 'look-and-content' ? 0.6 : 1.0),

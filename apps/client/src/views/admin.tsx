@@ -187,7 +187,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
   const [preset, setPreset] = useState('')
   const [prompt, setPrompt] = useState('')
   const [colour, setColour] = useState<string | null>(null)
-  /** Style reference (IP-Adapter): its look and imagery, not just its colours. None by default. */
+  /** Style reference (IP-Adapter): its look (and optionally its content), not just its colours. None by default. */
   const [style, setStyle] = useState<string | null>(null)
   const [styleCopies, setStyleCopies] = useState<StyleCopies>('look')
   const [styleStrength, setStyleStrength] = useState(STYLE_STRENGTH.look)

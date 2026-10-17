@@ -51,7 +51,7 @@ export interface TakeConfig {
   colour?: string
   /** Deforum: which legacy dream's settings to start from (models/deforum/settings/). */
   preset?: string
-  /** Deforum: style reference (IP-Adapter), an image in `resources/colours/` (or inside the take folder): every frame is steered towards its look and imagery, not just its colours. */
+  /** Deforum: style reference (IP-Adapter), an image in `resources/colours/` (or inside the take folder): every frame is steered towards its look (and, with `styleCopies`, its content too), not just its colours. */
   style?: string
   /** Deforum: how strongly the style reference steers each frame, 0 to 1.5 (default 1.0 for its look only, 0.6 with its content). */
   styleStrength?: number

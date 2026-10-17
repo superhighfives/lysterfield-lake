@@ -154,7 +154,7 @@ class Predictor(BasePredictor):
             description="Continue an earlier run: its last rendered frame. The init and mask videos must start on that frame's source frame; it is not rendered again or returned",
             default=None,
         ),
-        style_image: Optional[Path] = Input(description="Style reference: every frame is steered towards its look and imagery (IP-Adapter), not just its colours", default=None),
+        style_image: Optional[Path] = Input(description="Style reference: every frame is steered towards its look (IP-Adapter), and with style_layers all its content too, not just its colours", default=None),
         style_layers: str = Input(description="Which layers take the style image: up (its look only: colour, texture, medium) or all (its look and its content, such as buildings)", choices=["up", "all"], default="up"),
         style_strength: float = Input(description="How strongly the style reference steers each frame (IP-Adapter's scale). 0 ignores it", default=0.6, ge=0, le=1.5),
         max_rerolls: int = Input(description="Times a frame that shows a person is rendered again (new seed, then repainting more) before the best attempt is kept and flagged. 0 only scores", default=2, ge=0, le=4),
