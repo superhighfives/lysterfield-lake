@@ -225,13 +225,13 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
     case 'take':
       if (!takeOk) throw new Error('take name: letters, numbers, - and _ only')
       if (body.method === 'deforum') {
-        if (!body.prompt) throw new Error('prompt is required')
+        if (!body.prompt && !body.style) throw new Error('a prompt, or a style image, is required')
         if (body.colour && !/^[\w.-]+\.(png|jpe?g)$/i.test(String(body.colour))) throw new Error('bad colour reference')
         if (body.style && !/^[\w.-]+\.(png|jpe?g)$/i.test(String(body.style))) throw new Error('bad style reference')
         if (body.styleStrength !== undefined && !(Number(body.styleStrength) >= 0 && Number(body.styleStrength) <= 1.5)) throw new Error('style strength must be 0 to 1.5')
         if (body.preset && !/^[\w-]+$/.test(String(body.preset))) throw new Error('bad preset')
         return [
-          'dream-take', ...base, '--take', take, '--method', 'deforum', '--prompt', String(body.prompt),
+          'dream-take', ...base, '--take', take, '--method', 'deforum', '--prompt', String(body.prompt ?? ''),
           ...(body.colour ? ['--colour', String(body.colour)] : []),
           ...(body.style ? ['--style', String(body.style), '--style-strength', String(body.styleStrength ?? 0.6)] : []),
           ...(body.preset ? ['--preset', String(body.preset)] : []),

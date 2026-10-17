@@ -252,13 +252,14 @@ switch (step) {
       brief = file.brief
       direction = { name: picked.name, palette: picked.palette, rationale: picked.rationale }
     }
-    if (!prompt) throw new Error('--prompt, or --directions <file> --index <n>, is required')
+    // With a style image a Deforum take can do without a prompt; createTake fills in a plain landscape.
+    if (!prompt && !flags.style) throw new Error('--prompt (or --style for a Deforum take), or --directions <file> --index <n>, is required')
     const method = flags.method as 'flux-kontext' | 'deforum' | undefined
     if (method && method !== 'flux-kontext' && method !== 'deforum') throw new Error('--method must be flux-kontext or deforum')
     const styleStrength = flags['style-strength'] ? Number(flags['style-strength']) : undefined
     if (styleStrength !== undefined && !(styleStrength >= 0 && styleStrength <= 1.5)) throw new Error('--style-strength must be a number from 0 to 1.5')
     const config = await createTake(job, take, {
-      prompt,
+      prompt: prompt ?? '',
       brief,
       direction,
       method,

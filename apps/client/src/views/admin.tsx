@@ -6,6 +6,7 @@ import ThemeToggle from '../components/theme-toggle.tsx'
 import { useStore } from '../store.ts'
 import { active, api, jobFile, pad, reason, runAction, type Task } from './admin-api.ts'
 import { priced, RunOnContext, RunOnSwitch, useRunOn, type GpuStatus, type RunOn } from './admin-run-on.tsx'
+import { PaletteSwatch } from './admin-palette.tsx'
 import { Tasks } from './admin-tasks.tsx'
 import { PersonCheck, type CheckSummary } from './admin-person-check.tsx'
 
@@ -29,6 +30,8 @@ type Take = {
   method?: 'flux-kontext' | 'deforum'
   colour?: string
   style?: string
+  seed?: number
+  negativePrompt?: string
   styleStrength?: number
   preset?: string
 }
@@ -45,6 +48,8 @@ const WORKING: Record<string, string> = { samples: 'Generating samples…', clip
 const SAMPLES_COST = COST.samples
 /** "Start from" choice with nothing filled in. The model's default settings (Lush and Light's) still apply underneath. */
 const BLANK = 'blank'
+/** The prompt a Deforum take gets when it has a style image and no prompt (dream.ts's STYLE_ONLY_PROMPT). */
+const STYLE_ONLY_PROMPT = 'a beautiful landscape, detailed, soft light'
 
 const colourUrl = (name: string) => `/__admin/colours/${name}`
 const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9-]+/g, '-')
@@ -231,7 +236,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
 
   const id = name.replace(/^-+|-+$/g, '')
   const taken = existing.includes(id)
-  const ready = prompt.trim() !== '' && id !== '' && !taken && preset !== '' && !creating
+  const ready = (prompt.trim() !== '' || style !== null) && id !== '' && !taken && preset !== '' && !creating
   const submit = async () => {
     if (!ready) return
     setCreating(true)
@@ -248,7 +253,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
     }
   }
 
-  const swatch = (selected: boolean) => `h-14 w-14 overflow-hidden rounded ${selected ? 'ring-2 ring-stone-900 dark:ring-stone-100 ring-offset-2 dark:ring-offset-stone-950' : 'opacity-80 hover:opacity-100'}`
+  const swatch = (selected: boolean) => `h-20 w-20 overflow-hidden rounded ${selected ? 'ring-2 ring-stone-900 dark:ring-stone-100 ring-offset-2 dark:ring-offset-stone-950' : 'opacity-80 hover:opacity-100'}`
 
   return (
     <section className="mb-14">
@@ -271,8 +276,16 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
       <GridForm.Root density="comfortable" onFormSubmit={submit}>
         <GridForm.Section legend="The look">
           <GridForm.Row>
-            <GridForm.Field name="prompt" label="Prompt" description="Describe a landscape only, never a person. The shape of the person in the footage becomes part of the scene.">
-              <GridForm.Textarea required rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+            <GridForm.Field
+              name="prompt"
+              label="Prompt"
+              description={
+                style
+                  ? 'Optional with a style image: leave it empty and the image leads. If you write one, describe a landscape only, never a person.'
+                  : 'Describe a landscape only, never a person. The shape of the person in the footage becomes part of the scene.'
+              }
+            >
+              <GridForm.Textarea required={style === null} rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
             </GridForm.Field>
           </GridForm.Row>
           <GridForm.Row>
@@ -284,19 +297,11 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
                   from the footage
                 </button>
                 {options.colours.map((c) => (
-                  <button key={c} type="button" title={c} onClick={() => setColour(c)} className={swatch(colour === c)}>
-                    <img src={colourUrl(c)} alt={c} className="h-full w-full object-cover" />
-                  </button>
+                  <PaletteSwatch key={c} src={colourUrl(c)} name={c} onClick={() => setColour(c)} className={swatch(colour === c)} />
                 ))}
-                <label className="flex h-14 w-14 cursor-pointer items-center justify-center rounded border border-dashed border-stone-400 dark:border-stone-600 px-1 text-center text-[10px] leading-tight hover:bg-white dark:hover:bg-stone-900">
-                  + your own
-                  <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => upload(e.target)} />
-                </label>
               </div>
-              <p className="gf-description">{uploadError ? <span className="text-red-700 dark:text-red-300">{uploadError}</span> : 'Every frame is colour-matched to the image you pick.'}</p>
+              <p className="gf-description">Every frame is colour-matched to the image you pick: its main colours, in proportion. Hover to see the image.</p>
             </div>
-          </GridForm.Row>
-          <GridForm.Row>
             <div className="gf-field" style={{ cursor: 'default' }}>
               <span className="gf-label">Style</span>
               <div className="gf-control flex flex-wrap gap-2 py-1">
@@ -317,8 +322,22 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
                 </label>
               )}
               <p className="gf-description">
-                Optional. Every frame borrows the picked image&apos;s look and imagery, not just its colours. Around 0.6 keeps the footage&apos;s landscape; 1.0 and up lets the image take over. Use + your own above to add an image.
+                Optional. Every frame borrows the picked image&apos;s look and imagery, not just its colours. Around 0.6 keeps the footage&apos;s landscape; 1.0 and up lets the image take over.
               </p>
+            </div>
+          </GridForm.Row>
+          <GridForm.Row>
+            {/* One image library feeds both pickers, so adding an image lives here rather than under either. */}
+            <div className="gf-field" style={{ cursor: 'default' }}>
+              <span className="gf-label">Images</span>
+              <div className="gf-control flex items-center gap-3 py-1">
+                <label className="cursor-pointer rounded border border-dashed border-stone-400 px-3 py-1.5 text-sm hover:bg-white dark:border-stone-600 dark:hover:bg-stone-900">
+                  + Add an image
+                  <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => upload(e.target)} />
+                </label>
+                <span className="text-sm text-stone-600 dark:text-stone-400">It appears in both Colours and Style.</span>
+              </div>
+              {uploadError && <p className="gf-description text-red-700 dark:text-red-300">{uploadError}</p>}
             </div>
           </GridForm.Row>
         </GridForm.Section>
@@ -394,13 +413,57 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
             {mine.action in COST ? ` (usually ${COST[mine.action as Action].split(', ')[1]})` : ''}
           </span>
         )}
-        <span className="ml-auto flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
-          {take.preset && presets[take.preset] ? `Started from ${presets[take.preset].title}` : null}
-          {take.colour && <img src={colourUrl(take.colour)} alt="" title={`Colours: ${take.colour}`} className="h-6 w-6 rounded object-cover" />}
-          {take.style && <img src={colourUrl(take.style)} alt="" title={`Style: ${take.style}, strength ${take.styleStrength ?? 0.6}`} className="h-6 w-6 rounded object-cover ring-1 ring-stone-400" />}
-        </span>
       </header>
-      <p className="mb-3 max-w-3xl text-sm text-stone-700 dark:text-stone-300">{take.prompt}</p>
+      <p className="mb-2 max-w-3xl text-sm text-stone-700 dark:text-stone-300">
+        {take.prompt === STYLE_ONLY_PROMPT ? <span className="italic text-stone-500 dark:text-stone-400">No prompt: the style image leads.</span> : take.prompt}
+      </p>
+      {isDeforum && (
+        // What the take was made with, so takes can be compared and a good one repeated.
+        <dl className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-stone-600 dark:text-stone-400">
+          <div className="flex items-center gap-1.5">
+            <dt>Style</dt>
+            <dd className="flex items-center gap-1.5 text-stone-900 dark:text-stone-100">
+              {take.style ? (
+                <>
+                  <img src={colourUrl(take.style)} alt="" title={take.style} className="h-6 w-6 rounded object-cover" />
+                  from an image, strength {(take.styleStrength ?? 0.6).toFixed(1)}
+                </>
+              ) : (
+                'none'
+              )}
+            </dd>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <dt>Colours</dt>
+            <dd className="flex items-center gap-1.5 text-stone-900 dark:text-stone-100">
+              {take.colour ? (
+                <>
+                  <img src={colourUrl(take.colour)} alt="" title={take.colour} className="h-6 w-6 rounded object-cover" />
+                  {take.colour === take.style ? 'the same image' : 'matched to an image'}
+                </>
+              ) : (
+                'from the footage'
+              )}
+            </dd>
+          </div>
+          {take.preset && presets[take.preset] && (
+            <div className="flex items-center gap-1.5">
+              <dt>Settings</dt>
+              <dd className="text-stone-900 dark:text-stone-100">{presets[take.preset].title}&apos;s</dd>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <dt>Seed</dt>
+            <dd className="tabular-nums text-stone-900 dark:text-stone-100">{take.seed}</dd>
+          </div>
+          {take.negativePrompt && (
+            <div className="flex items-center gap-1.5">
+              <dt>Also avoid</dt>
+              <dd className="text-stone-900 dark:text-stone-100">{take.negativePrompt}</dd>
+            </div>
+          )}
+        </dl>
+      )}
 
       {(take.samples.length > 0 || (working && mine.action === 'samples')) && (
         <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
