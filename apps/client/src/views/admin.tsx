@@ -260,7 +260,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
     }
   }
 
-  const swatch = (selected: boolean) => `h-20 w-20 overflow-hidden rounded ${selected ? 'ring-2 ring-stone-900 dark:ring-stone-100 ring-offset-2 dark:ring-offset-stone-950' : 'opacity-80 hover:opacity-100'}`
+  const swatch = (selected: boolean) => `aspect-square w-full overflow-hidden rounded ${selected ? 'ring-2 ring-stone-900 dark:ring-stone-100 ring-offset-2 dark:ring-offset-stone-950' : 'opacity-80 hover:opacity-100'}`
 
   return (
     <section className="mb-14">
@@ -299,7 +299,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
             {/* Not a text control, so a plain Formulaire cell rather than a Field. */}
             <div className="gf-field" style={{ cursor: 'default' }}>
               <span className="gf-label">Colours</span>
-              <div className="gf-control flex flex-wrap gap-2 py-1">
+              <div className="gf-control grid grid-cols-4 gap-2 py-1">
                 <button type="button" onClick={() => setColour(null)} className={`${swatch(colour === null)} border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-[10px] leading-tight`}>
                   from the footage
                 </button>
@@ -311,7 +311,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
             </div>
             <div className="gf-field" style={{ cursor: 'default' }}>
               <span className="gf-label">Style</span>
-              <div className="gf-control flex flex-wrap gap-2 py-1">
+              <div className="gf-control grid grid-cols-4 gap-2 py-1">
                 <button type="button" onClick={() => setStyle(null)} className={`${swatch(style === null)} border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-[10px] leading-tight`}>
                   none
                 </button>
