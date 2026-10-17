@@ -184,7 +184,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
   onUploaded: () => Promise<void>
 }) {
   const runOn = useRunOn()
-  const [preset, setPreset] = useState('')
+  const [preset, setPreset] = useState(BLANK)
   const [prompt, setPrompt] = useState('')
   const [colour, setColour] = useState<string | null>(null)
   /** Style reference (IP-Adapter): its look (and optionally its content), not just its colours. None by default. */
@@ -213,10 +213,6 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
     },
     [options.presets]
   )
-  // Start with a published dream filled in rather than an empty form.
-  useEffect(() => {
-    if (!preset) startFrom(options.presets['lush-and-light'] ? 'lush-and-light' : Object.keys(options.presets)[0] ?? '')
-  }, [preset, options.presets, startFrom])
 
   const upload = async (input: HTMLInputElement) => {
     const f = input.files?.[0]
@@ -256,7 +252,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
       setStyle(null)
       setStyleCopies('look')
       setStyleStrength(STYLE_STRENGTH.look)
-      setPreset('')
+      startFrom(BLANK)
     }
   }
 
