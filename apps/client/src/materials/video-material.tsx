@@ -48,6 +48,10 @@ const uniforms = {
   // nears it) breaks up through the dissolve's dither rather than fading
   // smoothly. 0 = smooth, 1 = all stipple.
   uHash: 0,
+  // 1 = show the avatar at full strength whatever the pointer is doing (its
+  // pointer fade, and so the hashing, held off); eased back to 0. Used
+  // just after a dream swap, so the new dream's avatar arrives whole.
+  uReveal: 0,
   // The polaroid developing after it lands (see main.tsx): 0 = a blank,
   // milky print, 1 = fully developed.
   uDevelop: 1,
@@ -162,6 +166,7 @@ export const VideoMaterial = shaderMaterial(
     uniform float uTime;
     uniform float uAvatar;
     uniform float uIdle;
+    uniform float uReveal;
     uniform float uDark;
     uniform float uBackgroundMix;
     uniform float uSharpen;
@@ -380,6 +385,9 @@ export const VideoMaterial = shaderMaterial(
         float radial = clamp((0.5 - st.y) * 1.0 - mixAmount, 0.0, 1.0);
 
         opacityOverride = ((1.0 - (mixAmount - radial + (mask.r * uIdle))) * fadeIn);
+        // Held off while revealed (see uReveal): as if the pointer were
+        // well away from the avatar.
+        opacityOverride *= 1.0 - uReveal;
       }
 
       image = mix(image, white, fadeAmount);

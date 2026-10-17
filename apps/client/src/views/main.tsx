@@ -65,10 +65,12 @@ const SWAP_REST = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }
 const DRAG_TILT = 0.25
 const DRAG_DIP = 0.06
 const DRAG_RETURN = 0.15
-// The avatar and lyrics dissolve as a drag starts — gone by this share of
+// The avatar and lyrics dissolve as a drag goes — gone by this share of
 // the way to the release point — stay gone through the swap, and come
-// back as the new polaroid lands. FADE_EASE smooths the target per frame.
-const FADE_BY_DRAG = 0.5
+// back as the new polaroid lands. All the way to the release point, so
+// the avatar can be seen trailing the drag (AVATAR_FOLLOW) as it goes.
+// FADE_EASE smooths the target per frame.
+const FADE_BY_DRAG = 1
 const FADE_EASE = 0.12
 // Motion smear on the polaroid photo: its per-frame movement (local
 // units, normalised to 60fps) over this width is the smear in photo UV,
@@ -91,6 +93,17 @@ const BEND_MAX = 1
 const BEND_EASE = 0.2
 // How much of the avatar's pointer fade breaks into stipple (uHash).
 const AVATAR_HASH = 0.6
+// After a swap the avatar arrives at full strength, wherever the pointer
+// is, for REVEAL_HOLD seconds from the landing, then eases back to its
+// pointer fade over REVEAL_RELEASE seconds.
+const REVEAL_HOLD = 2
+const REVEAL_RELEASE = 1
+// While the polaroid's dragged, the avatar trails it: AVATAR_FOLLOW of the
+// way, eased by AVATAR_FOLLOW_EASE per frame so it lags behind, tilting
+// with it by AVATAR_FOLLOW_TILT radians per world unit.
+const AVATAR_FOLLOW = 0.35
+const AVATAR_FOLLOW_EASE = 0.08
+const AVATAR_FOLLOW_TILT = 0.15
 // The polaroid swells this much (scale) on each beat.
 const PULSE_SCALE = 0.012
 
@@ -183,6 +196,10 @@ function Main(
   const velocityTarget = useRef(new Vector2())
   const bendTarget = useRef(new Vector2())
   const developRef = useRef(1)
+  // Seconds since the last swap's arrival started (Infinity = none).
+  const revealRef = useRef(Infinity)
+  const avatarFollow = useRef<Group>(null)
+  const avatarOffsetRef = useRef(0)
   const rippleRef = useRef(-1)
   // The polaroid's own, not the material's default: shaderMaterial shares
   // default uniform objects between instances, so .set() on the default
@@ -295,6 +312,7 @@ function Main(
       if (swapPhase === 'out') fadeOutAudio(video)
       if (swapPhase === 'in') {
         developRef.current = 0
+        revealRef.current = 0
         rippleRef.current = -1
       }
 
@@ -351,6 +369,19 @@ function Main(
       const { x, y, z, rx, ry, rz } = pose ?? SWAP_REST
       // Drag offset in CSS px, to world units at the polaroid (see `view`).
       const drag = (dragOffsetRef.current * w * view) / state.size.width
+
+      // The avatar trails the drag, a little and a little behind.
+      avatarOffsetRef.current = MathUtils.lerp(
+        avatarOffsetRef.current,
+        drag * AVATAR_FOLLOW,
+        AVATAR_FOLLOW_EASE
+      )
+      if (avatarFollow.current) {
+        avatarFollow.current.position.x = avatarOffsetRef.current
+        avatarFollow.current.rotation.z =
+          -avatarOffsetRef.current * AVATAR_FOLLOW_TILT
+      }
+
       swapGroup.current.position.set(
         x + drag,
         y - Math.abs(drag) * DRAG_DIP,
@@ -431,6 +462,15 @@ function Main(
       if (material) material.uFade = fadeRef.current
     }
 
+    // Full strength for a while after a swap, then back to the pointer.
+    revealRef.current += delta
+    if (avatarMaterial.current)
+      avatarMaterial.current.uReveal = MathUtils.clamp(
+        1 - (revealRef.current - REVEAL_HOLD) / REVEAL_RELEASE,
+        0,
+        1
+      )
+
     // The photo's bounds on screen, for the cursor and tap detection.
     const photo = polaroidVisible.current
       ? (polaroidIntersect as RefObject<Mesh>).current
@@ -500,33 +540,36 @@ function Main(
           />
         </group>
 
-        {/* Avatar */}
-        <animated.mesh
-          position={position as unknown as Vector3}
-          scale={scale}
-          name="avatar"
-        >
-          <planeGeometry args={[1, 1, 256, 256]} />
-          <videoMaterial
-            ref={avatarMaterial}
-            key={VideoMaterial.key}
-            uTexture={texture}
-            uFrameSelected={2}
-            uFrameSketch={6}
-            uFrameMask={4}
-            uFrameDepth={5}
-            uFrameTotal={7}
-            uAvatar={1}
-            uOpacity={1}
-            uMaskIntensity={1}
-            uDepthStrength={DEPTH_STRENGTH}
-            uShapeRadius={DEPTH_SHAPE_RADIUS}
-            uEdgeRadius={DEPTH_EDGE_RADIUS}
-            uSharpen={AVATAR_SHARPEN}
-            uHash={AVATAR_HASH}
-            uDark={dark}
-          />
-        </animated.mesh>
+        {/* Avatar — in a group that trails the polaroid's drag (its own
+            position is the spring's) */}
+        <group ref={avatarFollow}>
+          <animated.mesh
+            position={position as unknown as Vector3}
+            scale={scale}
+            name="avatar"
+          >
+            <planeGeometry args={[1, 1, 256, 256]} />
+            <videoMaterial
+              ref={avatarMaterial}
+              key={VideoMaterial.key}
+              uTexture={texture}
+              uFrameSelected={2}
+              uFrameSketch={6}
+              uFrameMask={4}
+              uFrameDepth={5}
+              uFrameTotal={7}
+              uAvatar={1}
+              uOpacity={1}
+              uMaskIntensity={1}
+              uDepthStrength={DEPTH_STRENGTH}
+              uShapeRadius={DEPTH_SHAPE_RADIUS}
+              uEdgeRadius={DEPTH_EDGE_RADIUS}
+              uSharpen={AVATAR_SHARPEN}
+              uHash={AVATAR_HASH}
+              uDark={dark}
+            />
+          </animated.mesh>
+        </group>
 
         {/* Lyrics */}
         <mesh position={[0, -0.4, 0.1]}>
