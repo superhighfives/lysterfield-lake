@@ -8,6 +8,7 @@ import {
   nearPolaroid,
   swapDrag,
 } from '../utils/swap-gesture'
+import { latestPulse } from '../utils/audio'
 
 // A custom cursor, on devices with a precise, hovering pointer (touch keeps
 // its own). A dot sits exactly under the pointer; a ring trails it and
@@ -116,8 +117,12 @@ function Cursor() {
       const speed = Math.hypot(velocity.x, velocity.y)
       const stretch = Math.min(speed / SPEED_PER_STRETCH, STRETCH_MAX)
       const angle = Math.atan2(velocity.y, velocity.x)
-      if (dotShape.current)
+      if (dotShape.current) {
         dotShape.current.style.transform = `translate(-50%, -50%) rotate(${angle}rad) scale(${1 + stretch}, ${1 / (1 + stretch * 0.5)})`
+        // The glow swells with the music's beat (utils/audio.ts).
+        const pulse = latestPulse()
+        dotShape.current.style.boxShadow = `0 0 ${10 + pulse * 14}px ${2 + pulse * 3}px rgba(248, 205, 13, ${0.55 + pulse * 0.35})`
+      }
 
       ghostPos.x += (pointer.x - ghostPos.x) * GHOST_FOLLOW
       ghostPos.y += (pointer.y - ghostPos.y) * GHOST_FOLLOW
@@ -302,7 +307,7 @@ function Cursor() {
       <div ref={dot} className="absolute left-0 top-0">
         <div
           ref={dotShape}
-          className="absolute w-2 h-2 rounded-full bg-stone-900 dark:bg-white shadow-[0_0_10px_2px_rgba(248,205,13,0.55)]"
+          className="absolute w-2 h-2 rounded-full bg-stone-900 dark:bg-white"
           style={{ transform: 'translate(-50%, -50%)' }}
         />
       </div>

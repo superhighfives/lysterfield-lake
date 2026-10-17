@@ -1,8 +1,17 @@
 import { useGLTF } from '@react-three/drei'
 import { Euler, ThreeElements, Vector3 } from '@react-three/fiber'
-import { forwardRef, JSX, RefObject, useEffect } from 'react'
+import { forwardRef, JSX, RefObject, useEffect, useMemo } from 'react'
 import { GLTF } from 'three-stdlib'
-import { CanvasTexture, Group, Mesh, MeshStandardMaterial } from 'three'
+import {
+  BufferGeometry,
+  CanvasTexture,
+  Group,
+  Material,
+  Mesh,
+  MeshStandardMaterial,
+  Vector2,
+} from 'three'
+import { TessellateModifier } from 'three/examples/jsm/modifiers/TessellateModifier.js'
 import { animated } from '@react-spring/three'
 import { useStore } from '../store'
 
@@ -79,6 +88,52 @@ function layeredCopy(material: MeshStandardMaterial) {
   return copy
 }
 
+// The player's polaroid flexes like card as it moves (see main.tsx, which
+// sets this every frame): z offset per squared normalised x and y, the same
+// as video-material.tsx's vertex shader does for the photo. The model is a
+// few dozen vertices, which can't bend, so the player's copies of its
+// geometry are subdivided once, and its frame materials get the same
+// displacement injected. The overlay material is shared with the
+// carousel, so the player gets its own copy of that one.
+export const polaroidBend = { value: new Vector2() }
+const BEND_EXTENT = 'vec2(1.83, 2.3)'
+const TESSELLATE_EDGE = 0.25
+const TESSELLATE_ITERATIONS = 8
+
+const tessellated = new Map<BufferGeometry, BufferGeometry>()
+function tessellate(geometry: BufferGeometry) {
+  let result = tessellated.get(geometry)
+  if (!result) {
+    result = new TessellateModifier(
+      TESSELLATE_EDGE,
+      TESSELLATE_ITERATIONS
+    ).modify(geometry)
+    tessellated.set(geometry, result)
+  }
+
+  return result
+}
+
+function injectBend(material: Material) {
+  if (material.userData.bend) return
+  material.userData.bend = true
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uBend = polaroidBend
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform vec2 uBend;')
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        vec2 bendUv = transformed.xy / ${BEND_EXTENT};
+        transformed.z += dot(uBend, bendUv * bendUv);`
+      )
+  }
+
+  material.needsUpdate = true
+}
+
+let playerOverlay: MeshStandardMaterial | null = null
+
 // Every Object_3/Object_4/Object_5 mesh below shares this same identity
 // transform — hoisted so the ~20 on-screen Polaroid instances in the
 // choose-screen carousel aren't each allocating three fresh arrays per
@@ -106,6 +161,29 @@ const Polaroid = forwardRef<
   ) as unknown as GLTFResult
   const frame = (material: MeshStandardMaterial) =>
     layered ? layeredCopy(material) : material
+
+  // The player's bending copies (see polaroidBend above).
+  const player = useMemo(() => {
+    if (layered) return null
+    if (!playerOverlay) {
+      playerOverlay = materials['Material.001'].clone()
+      playerOverlay.transparent = true
+    }
+
+    for (const material of [
+      playerOverlay,
+      materials.Framelambert79SG,
+      materials.initialShadingGroup,
+    ])
+      injectBend(material)
+    return {
+      overlay: playerOverlay,
+      inside: tessellate(nodes.Object_3.geometry),
+      overlayGeometry: tessellate(nodes.Object_3001.geometry),
+      back: tessellate(nodes.Object_4.geometry),
+      front: tessellate(nodes.Object_5.geometry),
+    }
+  }, [layered, nodes, materials])
 
   materials['Material.001'].transparent = true
 
@@ -167,8 +245,8 @@ const Polaroid = forwardRef<
       <mesh
         castShadow={!layered}
         receiveShadow={!layered}
-        geometry={nodes.Object_3001.geometry}
-        material={materials['Material.001']}
+        geometry={player?.overlayGeometry ?? nodes.Object_3001.geometry}
+        material={player?.overlay ?? materials['Material.001']}
         position={[0, 0, 0.001]}
       />
 
@@ -177,7 +255,7 @@ const Polaroid = forwardRef<
         ref={intersectRef}
         castShadow={!layered}
         receiveShadow={!layered}
-        geometry={nodes.Object_3.geometry}
+        geometry={player?.inside ?? nodes.Object_3.geometry}
         rotation={rotation as Euler}
         position={position as Vector3}
         scale={scale as Vector3}
@@ -188,7 +266,7 @@ const Polaroid = forwardRef<
       <mesh
         castShadow={!layered}
         receiveShadow={!layered}
-        geometry={nodes.Object_4.geometry}
+        geometry={player?.back ?? nodes.Object_4.geometry}
         material={frame(materials.Framelambert79SG)}
         rotation={rotation as Euler}
         position={position as Vector3}
@@ -198,7 +276,7 @@ const Polaroid = forwardRef<
       <mesh
         castShadow={!layered}
         receiveShadow={!layered}
-        geometry={nodes.Object_5.geometry}
+        geometry={player?.front ?? nodes.Object_5.geometry}
         material={frame(materials.initialShadingGroup)}
         rotation={rotation as Euler}
         position={position as Vector3}

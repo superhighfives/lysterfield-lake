@@ -14,6 +14,8 @@ import dreams from '../dreams.json'
 import { Play, FileText, CircleNotch } from '@phosphor-icons/react'
 import { useHistorySync } from '../utils/use-history-sync'
 import { useSwapInput } from '../utils/swap-gesture'
+import { startAudio } from '../utils/audio'
+import WaterVideo, { useWaterSplash } from '../components/water-video'
 import Cursor from '../components/cursor'
 import SwapStylePicker from '../components/swap-style-picker'
 
@@ -38,6 +40,7 @@ function Root() {
   const setIsTooSlow = useStore((state) => state.setIsTooSlow)
   const seeking = useStore((state) => state.seeking)
   const showPlayhead = useStore((state) => state.showPlayhead)
+  const splash = useWaterSplash()
   // A swap's load is covered by the polaroid's own animation (see
   // utils/swap-dream.ts), so it doesn't count as buffering.
   const swapLoading = useStore((state) => state.swapPhase === 'loading')
@@ -77,6 +80,8 @@ function Root() {
   useSwapInput()
 
   const handleReady = async () => {
+    // Inside the click, so Safari lets the audio context start.
+    startAudio()
     const orientationGranted = (await handleDeviceOrientationPermissions()) as boolean
     const isTouch = isTouchDevice() as boolean
     // macOS Safari also implements DeviceOrientationEvent.requestPermission
@@ -152,25 +157,24 @@ function Root() {
           </Viewport>
         ) : hasLoaded ? (
           <div className="relative h-screen grid place-content-center space-y-2 text-center p-4">
-            <video
-              // multiply drops the loop's white background against the
-              // light page, but against a dark page it'd take the letters
-              // down with it — so dark mode keys the white out to
-              // transparency instead (see components/key-white-filter.tsx).
+            {/* multiply drops the loop's white background against the
+                light page, but against a dark page it'd take the letters
+                down with it — so dark mode keys the white out to
+                transparency instead (see components/key-white-filter.tsx).
+                Drawn through WebGL so the pointer ripples it like water. */}
+            <WaterVideo
               className="mix-blend-multiply dark:mix-blend-normal dark:[filter:url(#key-white)]"
-              width={512}
-              height={512}
-              autoPlay
-              playsInline
-              loop
-              muted
-            >
-              <source src="video/loop.webm" type="video/webm" />
-              <source src="video/loop.mov" type="video/mp4" />
-            </video>
+              size={512}
+              splashRef={splash}
+              sources={[
+                { src: 'video/loop.webm', type: 'video/webm' },
+                { src: 'video/loop.mov', type: 'video/mp4' },
+              ]}
+            />
             <button
               className={`whitespace-nowrap fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-1 rounded-md px-4 py-2 bg-yellow-400 text-stone-900 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black flex items-center gap-2 shadow`}
               onClick={handleReady}
+              onPointerEnter={() => splash.current?.()}
             >
               <span className="uppercase">Brightly</span>
               <span className="font-serif italic text-2xl sm:text-3xl">

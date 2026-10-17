@@ -78,6 +78,7 @@
           "uShapeRadius",
           "uEdgeRadius",
           "uSharpen",
+          "uHash",
           "onBeforeCompile",
           "object",
           "shadow-bias",

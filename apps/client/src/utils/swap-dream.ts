@@ -1,6 +1,7 @@
 import { MathUtils } from 'three'
 import { useStore, SwapDirection } from '../store'
 import { HistoryState, urlFor } from './use-history-sync'
+import { fadeGain } from './audio'
 
 // Swapping to another dream without going back to the choose screen.
 // Every dream is one composite video (all seven panels plus the audio), so
@@ -26,9 +27,9 @@ export function adjacentDream(direction: SwapDirection) {
   return collection[(index + direction + collection.length) % collection.length]
 }
 
-// el.volume, faded by hand: there's no gain node in the way. iOS Safari
-// treats volume as read-only (always 1), so there the audio just cuts —
-// a GainNode via createMediaElementSource would be the fix if this ships.
+// Faded on the Web Audio gain node when there is one (utils/audio.ts),
+// which works on iOS too. Otherwise el.volume, faded by hand — read-only
+// on iOS, where the audio then just cuts.
 let fadeFrame = 0
 let restoreVolume: number | null = null
 
@@ -54,6 +55,7 @@ function fadeVolume(
 }
 
 export function fadeOutAudio(el: HTMLVideoElement) {
+  if (fadeGain(0, FADE_OUT_MS)) return
   restoreVolume ??= el.volume
   fadeVolume(el, 0, FADE_OUT_MS)
 }
@@ -61,6 +63,7 @@ export function fadeOutAudio(el: HTMLVideoElement) {
 // The volume to come back to is only forgotten once the fade in is done,
 // so a swap that starts mid-fade doesn't take the half-faded level for it.
 function fadeInAudio(el: HTMLVideoElement) {
+  if (fadeGain(1, FADE_IN_MS)) return
   fadeVolume(el, restoreVolume ?? 1, FADE_IN_MS, () => (restoreVolume = null))
 }
 

@@ -28,6 +28,7 @@ import {
   MediaPreviewTimeDisplay,
 } from 'media-chrome/react'
 import Footer from '../views/footer'
+import { connectAudio } from '../utils/audio'
 
 const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
   (_props, ref) => {
@@ -59,6 +60,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       const el = (ref as MutableRefObject<HTMLVideoElement>).current
       el.load()
       if (!dream) return
+      connectAudio(el)
 
       let cancelled = false
 

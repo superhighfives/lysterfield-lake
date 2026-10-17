@@ -1,7 +1,7 @@
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
 import { RefObject, useRef } from 'react'
 import { VideoMaterial, VideoMaterialProps } from '../materials/video-material'
-import Polaroid from '../models/polaroid'
+import Polaroid, { polaroidBend } from '../models/polaroid'
 import { isVideoPlaying } from '../utils'
 import {
   LinearSRGBColorSpace,
@@ -18,6 +18,8 @@ import { useIntersect } from '@react-three/drei'
 import { SwapPhase, useStore } from '../store'
 import { commitSwap, fadeOutAudio } from '../utils/swap-dream'
 import { SWAP_ANIMATIONS } from '../utils/swap-poses'
+import { trailTexture, updateTrail } from '../utils/liquid-trail'
+import { readPulse } from '../utils/audio'
 import {
   commitDistance,
   polaroidRect,
@@ -69,6 +71,23 @@ const FADE_EASE = 0.12
 const PHOTO_WIDTH = 1.05
 const VELOCITY_EASE = 0.3
 const VELOCITY_MAX = 0.06
+// After a swap the new polaroid develops (see uDevelop) over this long,
+// and a ripple rings out through it when it lands — this far through its
+// arrival (swap progress counts 1 -> 0).
+const DEVELOP_SECONDS = 2.5
+const LANDING_AT = 0.5
+// The polaroid flexes with its motion: model z units of curl per unit of
+// photo-UV velocity (edges bending back against the air), capped.
+const BEND_PER_VELOCITY = 6
+const BEND_MAX = 0.4
+// How strongly the cursor's liquid wake bends each image.
+const TRAIL_POLAROID = 1
+const TRAIL_AVATAR = 0.5
+const TRAIL_LYRICS = 0.6
+// How much of the avatar's pointer fade breaks into stipple (uHash).
+const AVATAR_HASH = 0.6
+// The polaroid swells this much (scale) on each beat.
+const PULSE_SCALE = 0.012
 
 function Main(
   props: ThreeElements['group'] & {
@@ -157,6 +176,12 @@ function Main(
   const lastSwapPosition = useRef(new Vector3(0, 0, POLAROID_Z))
   const velocityRef = useRef(new Vector2())
   const velocityTarget = useRef(new Vector2())
+  const developRef = useRef(1)
+  const rippleRef = useRef(-1)
+  // The polaroid's own, not the material's default: shaderMaterial shares
+  // default uniform objects between instances, so .set() on the default
+  // would ripple the avatar and lyrics too.
+  const rippleUniform = useRef(new Vector3(0.5, 0.5, -1))
   // Scratch objects for projecting the photo's bounds to the screen.
   const photoBox = useRef(new Box3())
   const corner = useRef(new Vector3())
@@ -262,6 +287,11 @@ function Main(
     const animation = SWAP_ANIMATIONS[swapStyle]
     if (swapPhase !== swapPhaseRef.current) {
       if (swapPhase === 'out') fadeOutAudio(video)
+      if (swapPhase === 'in') {
+        developRef.current = 0
+        rippleRef.current = -1
+      }
+
       if (swapPhase === 'loading') {
         // Off-screen now; the next one comes in from rest.
         swapDrag.committed = false
@@ -329,6 +359,52 @@ function Main(
       if (velocityRef.current.lengthSq() < 1e-7) velocityRef.current.set(0, 0)
       if (polaroidMaterial.current)
         polaroidMaterial.current.uVelocity = velocityRef.current
+
+      const v = velocityRef.current
+      polaroidBend.value.set(
+        -Math.min(Math.abs(v.x) * BEND_PER_VELOCITY, BEND_MAX),
+        -Math.min(Math.abs(v.y) * BEND_PER_VELOCITY, BEND_MAX)
+      )
+      if (polaroidMaterial.current)
+        polaroidMaterial.current.uBend = polaroidBend.value
+    }
+
+    // Developing and the landing ripple, after a swap.
+    developRef.current = Math.min(1, developRef.current + delta / DEVELOP_SECONDS)
+    if (
+      swapPhase === 'in' &&
+      rippleRef.current < 0 &&
+      swapProgressRef.current <= LANDING_AT
+    )
+      rippleRef.current = 0
+    else if (rippleRef.current >= 0) rippleRef.current += delta
+    if (polaroidMaterial.current) {
+      polaroidMaterial.current.uDevelop =
+        swapPhase === 'in' || swapPhase === 'idle' ? developRef.current : 1
+      rippleUniform.current.z = rippleRef.current
+      polaroidMaterial.current.uRipple = rippleUniform.current
+    }
+
+    // The cursor's liquid wake, and the music's pulse.
+    updateTrail(state.size.width, state.size.height)
+    const pulse = readPulse()
+    for (const [material, amount] of [
+      [polaroidMaterial.current, TRAIL_POLAROID],
+      [avatarMaterial.current, TRAIL_AVATAR],
+      [lyricsMaterial.current, TRAIL_LYRICS],
+    ] as const) {
+      if (!material) continue
+      material.uTrail = trailTexture
+      material.uTrailAmount = amount
+      material.uResolution.set(
+        state.size.width * state.viewport.dpr,
+        state.size.height * state.viewport.dpr
+      )
+      material.uPulse = pulse
+    }
+
+    if (swapGroup.current) {
+      swapGroup.current.scale.setScalar(1 + pulse * PULSE_SCALE)
     }
 
     let fadeTarget = 1
@@ -438,6 +514,7 @@ function Main(
             uShapeRadius={DEPTH_SHAPE_RADIUS}
             uEdgeRadius={DEPTH_EDGE_RADIUS}
             uSharpen={AVATAR_SHARPEN}
+            uHash={AVATAR_HASH}
             uDark={dark}
           />
         </animated.mesh>

@@ -118,7 +118,7 @@ export function useSwapInput() {
       const dx = event.clientX - start.x
       const dy = event.clientY - start.y
       // Only a mostly-sideways move becomes a drag, so a vertical swipe
-      // still scrolls back up to the choose screen.
+      // isn't taken for one.
       if (!swapDrag.active) {
         if (Math.abs(dx) < TAP_DISTANCE || Math.abs(dx) < Math.abs(dy)) return
         swapDrag.active = true
