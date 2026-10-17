@@ -282,10 +282,11 @@ function Cursor() {
                 className="w-16 h-16 object-cover"
               />
             </div>
-            <span className="font-serif italic text-sm whitespace-nowrap text-stone-900 dark:text-white">
+            {/* Backed, so they read over whatever photo is underneath. */}
+            <span className="font-serif italic text-sm whitespace-nowrap text-stone-900 dark:text-white bg-white/85 dark:bg-stone-900/85 backdrop-blur-sm rounded-full px-2.5 py-0.5 shadow-sm">
               {preview.dream.title}
             </span>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-stone-500 opacity-0 group-data-[ready=true]:opacity-100 transition-opacity">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-stone-700 dark:text-stone-300 bg-white/85 dark:bg-stone-900/85 backdrop-blur-sm rounded-full px-2 shadow-sm opacity-0 group-data-[ready=true]:opacity-100 transition-opacity">
               let go
             </span>
           </div>

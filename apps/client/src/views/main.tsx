@@ -19,6 +19,7 @@ import { SwapPhase, useStore } from '../store'
 import { commitSwap, fadeOutAudio } from '../utils/swap-dream'
 import { SWAP_ANIMATIONS } from '../utils/swap-poses'
 import { readPulse } from '../utils/audio'
+import DreamGlow from '../components/dream-glow'
 import {
   commitDistance,
   polaroidRect,
@@ -519,6 +520,9 @@ function Main(
             utils/swap-gesture.ts). The swap
             animation moves this outer group; the pointer tilt (above)
             turns the polaroid inside it. */}
+        {/* The dream's colour, glowing out from behind the polaroid */}
+        <DreamGlow video={videoElement} fade={fadeRef} />
+
         <group ref={swapGroup} position={[0, 0, POLAROID_Z]}>
           <Polaroid
             intersectRef={polaroidIntersect as RefObject<Mesh>}

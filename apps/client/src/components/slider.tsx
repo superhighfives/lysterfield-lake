@@ -53,6 +53,9 @@ const FLOAT_BOB = 0.008
 const TURN_DISTANCE = 1
 const TURN_AMOUNT = 0.5
 const TURN_MAX = 0.4
+// A card is hidden once the cosine between its front and the direction to
+// the camera drops below this (about 85 degrees).
+const FACING_MIN = 0.08
 
 export default function Slider({
   items,
@@ -241,6 +244,8 @@ export default function Slider({
   //   cards keep moving independently even with the pointer still.
   const tiltRefs = useRef<Record<number, Object3D | null>>({})
   const cardWorld = useRef(new Vector3()).current
+  const cardFacing = useRef(new Vector3()).current
+  const cardToCamera = useRef(new Vector3()).current
   useFrame((state) => {
     const { x: pointerX, y: pointerY } = state.pointer
     // The pointer, projected onto the z=0 plane the camera frames.
@@ -289,6 +294,14 @@ export default function Slider({
       tilt.position.x = MathUtils.lerp(tilt.position.x, driftX, ease)
       tilt.position.y = MathUtils.lerp(tilt.position.y, driftY, ease)
       tilt.position.z = MathUtils.lerp(tilt.position.z, driftZ, ease)
+
+      // The fan turns cards further the further out they sit, and at the
+      // far end they turned past side-on: their photo (front only) dropped
+      // away and the bare white back of the frame showed. Hide a card once
+      // its front is turned away, or so nearly edge-on it's a sliver.
+      tilt.getWorldDirection(cardFacing)
+      cardToCamera.copy(state.camera.position).sub(cardWorld).normalize()
+      tilt.visible = cardFacing.dot(cardToCamera) > FACING_MIN
     })
   })
 

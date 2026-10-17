@@ -34,6 +34,9 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
   (_props, ref) => {
     const dream = useStore((state) => state.dream)
     const showPlayhead = useStore((state) => state.showPlayhead)
+    const swapping = useStore(
+      (state) => state.swapPhase === 'out' || state.swapPhase === 'loading'
+    )
     const videoPlaying = useStore((state) => state.videoPlaying)
     const isMobile = useStore((state) => state.isMobile)
     const isTouch = useStore((state) => state.isTouch)
@@ -210,6 +213,30 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
             <CameraRotate className="inline" />
             <span className="font-serif text-lg">Reorient mobile</span>
           </button>
+        </div>
+        {/* The dream's name and prompt, just above the controls. Fades out
+            as a swap starts, and in again (keyed on the dream) with the
+            new one. Placed above the pill at either of its heights. */}
+        <div
+          aria-live="polite"
+          className={`fixed z-10 left-1/2 -translate-x-1/2 bottom-[calc(2.5rem+104px+0.75rem)] xs:bottom-[calc(2.5rem+34px+0.75rem)] flex flex-col items-center text-center pointer-events-none transition-opacity duration-300 ${
+            showPlayhead && polaroidPillVisible && dream && !swapping
+              ? 'opacity-100'
+              : 'opacity-0'
+          }`}
+        >
+          {dream ? (
+            <div key={dream.id} className="animate-fade-in flex flex-col items-center">
+              <span className="font-serif italic text-xl text-stone-900 dark:text-stone-100">
+                {dream.title}
+              </span>
+              {dream.prompt ? (
+                <span className="font-mono text-[11px] text-stone-500 dark:text-stone-400">
+                  &ldquo;{dream.prompt}&rdquo;
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div
           className={`fixed z-10 bottom-10 left-1/2 -translate-x-1/2 w-[calc(100vw-4rem)] max-w-[400px] h-[104px] xs:h-[34px] bg-white text-stone-900 dark:bg-stone-900 dark:text-stone-100 border border-yellow-400 rounded-lg xs:rounded-full shadow-xl transition-opacity xs:[--media-control-padding:4px] ${

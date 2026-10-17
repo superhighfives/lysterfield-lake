@@ -52,6 +52,13 @@ export const PolaroidMaterial = shaderMaterial(
   (material) => {
     if (material) {
       material.transparent = true
+      // The photo sits a hair in front of its frame. Face-on that's
+      // enough, but on cards turned steeply away (the ends of the fan) the
+      // gap collapses in depth and the frame won, hiding the photo — the
+      // card read as a blank frame. Biased toward the camera so it doesn't.
+      material.polygonOffset = true
+      material.polygonOffsetFactor = -4
+      material.polygonOffsetUnits = -4
       material.needsUpdate = true
     }
   }

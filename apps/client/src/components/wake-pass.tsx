@@ -36,9 +36,9 @@ const WAKE_GLINT = 0.12
 // (up to GLOW_SMEAR_PX at full wake, over GLOW_TAPS samples), its colour
 // channels split by up to GLOW_SPLIT_PX, and its colour lifted toward
 // white by up to GLOW_BLOWOUT.
-const GLOW_SMEAR_PX = 28
+const GLOW_SMEAR_PX = 12
 const GLOW_TAPS = 10
-const GLOW_SPLIT_PX = 3
+const GLOW_SPLIT_PX = 1.5
 const GLOW_BLOWOUT = 0.35
 // MSAA for the offscreen render, matching the canvas's own antialiasing.
 const SAMPLES = 4

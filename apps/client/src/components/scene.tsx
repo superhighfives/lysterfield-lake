@@ -32,6 +32,11 @@ const SPOT_ANGLE_CHOOSING = 0.85;
 // (untone-mapped, see polaroid.tsx) carousel frames to near-white; the spot
 // pool on top then clips the highlighted cards to full white. Dark mode's
 // charcoal frames need far less spot, or the pool reads as a glare.
+// How far below its scroll page the player sits, as a share of the viewport
+// height: enough to centre the polaroid on screen (it sits further back
+// than z = 0, so it moves less than this on screen), rather than riding
+// high above the controls.
+const PLAYER_DROP = 0.1;
 const CHOOSING_LIGHT = {
 	light: { ambient: 2.6, spot: 2.5 },
 	dark: { ambient: 2.6, spot: 0.6 },
@@ -249,7 +254,11 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 				<Fireflies />
 				<Scroll>
 					<Choose position={[0, 0, 0]} />
-					<Main video={video} position={[0, -h * 1.6, 0]} tilt={rotation} />
+					<Main
+						video={video}
+						position={[0, -h * (1.6 + PLAYER_DROP), 0]}
+						tilt={rotation}
+					/>
 				</Scroll>
 			</ScrollControls>
 
