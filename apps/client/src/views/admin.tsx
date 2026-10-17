@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertDialog } from '@base-ui/react/alert-dialog'
+import { Dialog } from '@base-ui/react/dialog'
 import { GridForm } from 'formulaire-ui'
 import formulaireCss from 'formulaire-ui/styles.css?raw'
 import ThemeToggle from '../components/theme-toggle.tsx'
@@ -47,6 +48,32 @@ type StyleCopies = 'look' | 'look-and-content'
 const STYLE_STRENGTH: Record<StyleCopies, number> = { look: 1.0, 'look-and-content': 0.6 }
 /** A sample's loop is about a second of the dream at its real 12 frames a second: slowed down so the motion can be followed. Playback only; the dream itself keeps its speed. */
 const SAMPLE_PLAYBACK_RATE = 0.5
+
+/** Sets a sample loop's speed once its video is there, and again once it has loaded (loading resets it). */
+const slowed = (v: HTMLVideoElement | null) => {
+  if (v) v.playbackRate = SAMPLE_PLAYBACK_RATE
+}
+
+/** A sample's loop, which opens full size in a lightbox, still looping, when clicked. */
+function SampleLoop({ src, poster, label }: { src: string; poster: string; label: string }) {
+  return (
+    <Dialog.Root>
+      <Dialog.Trigger title="Show full size" className="block w-full cursor-zoom-in">
+        <video ref={slowed} onLoadedData={(e) => slowed(e.currentTarget)} src={src} poster={poster} autoPlay loop muted playsInline className="aspect-square w-full rounded object-cover" />
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/80" />
+        <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 font-sans text-stone-100">
+          <Dialog.Close title="Close" className="block cursor-zoom-out outline-none">
+            <video ref={slowed} onLoadedData={(e) => slowed(e.currentTarget)} src={src} poster={poster} autoPlay loop muted playsInline className="max-h-[85vh] max-w-[calc(100vw-2rem)] rounded" />
+          </Dialog.Close>
+          <Dialog.Title className="mt-2 text-sm text-stone-300">{label}</Dialog.Title>
+        </Dialog.Popup>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
+}
+
 type NewTake = { name: string; prompt: string; colour: string | null; style: string | null; styleStrength: number; styleCopies: StyleCopies; preset: string; negative: string; seed?: number }
 
 // Rough Replicate cost and time for each paid stage of a Deforum take (L40S with xformers, ~8s a dream frame), before retries.
@@ -527,7 +554,7 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
                 {!take.samples.includes(s.frame) ? (
                   <div className="flex aspect-square w-full items-center justify-center rounded border border-dashed border-stone-300 dark:border-stone-700 text-xs text-stone-400 dark:text-stone-500">{working ? 'Generating…' : 'Not made yet'}</div>
                 ) : isDeforum ? (
-                  <video ref={(v) => { if (v) v.playbackRate = SAMPLE_PLAYBACK_RATE }} onLoadedData={(e) => (e.currentTarget.playbackRate = SAMPLE_PLAYBACK_RATE)} src={sample(s.frame, 'mp4')} poster={sample(s.frame, 'jpg')} autoPlay loop muted playsInline className="aspect-square w-full rounded object-cover" />
+                  <SampleLoop src={sample(s.frame, 'mp4')} poster={sample(s.frame, 'jpg')} label={s.label} />
                 ) : (
                   <img src={sample(s.frame, 'jpg')} alt="" className="aspect-square w-full rounded object-cover" />
                 )}
