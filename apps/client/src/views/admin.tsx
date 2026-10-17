@@ -343,7 +343,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
   )
 }
 
-function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onUpdate, onChanged }: {
+function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onUpdate, onDelete, onChanged }: {
   job: string
   take: Take
   samples: { frame: number; label: string }[]
@@ -352,6 +352,7 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
   tasks: Task[]
   onGenerate: (take: string, action: Action) => void
   onRetry: (task: string) => void
+  onDelete: (take: string) => void
   onUpdate: (take: string, change: { status?: Take['status']; notes?: string }) => void
   onChanged: () => void
 }) {
@@ -375,6 +376,28 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
     <a href={`/?preview=${job}/${take.id}`} target="_blank" rel="noreferrer" className={plain}>
       Watch the clip in the player
     </a>
+  )
+  // A take that hasn't made anything (no samples, clip or frames) can be deleted outright; the server checks too.
+  const runningForTake = tasks.some((t) => t.take === take.id && t.status === 'running')
+  const deletable = take.samples.length === 0 && !take.hasPreview && take.status !== 'generated' && !runningForTake
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const remove = deletable && (
+    <span className="flex items-center gap-2">
+      {confirmingDelete ? (
+        <>
+          <button type="button" onClick={() => onDelete(take.id)} className="rounded bg-red-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-800">
+            Delete {take.id}
+          </button>
+          <button type="button" onClick={() => setConfirmingDelete(false)} className={plain}>
+            Cancel
+          </button>
+        </>
+      ) : (
+        <button type="button" onClick={() => setConfirmingDelete(true)} className={plain} title="It hasn't made anything yet, so only its settings go">
+          Delete
+        </button>
+      )}
+    </span>
   )
   const reject = (
     <button type="button" onClick={() => onUpdate(take.id, { status: 'rejected' })} className={plain}>
@@ -484,6 +507,7 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
             Move back to review
           </button>
         )}
+        {remove}
         <input
           defaultValue={take.notes ?? ''}
           placeholder="Notes"
@@ -607,6 +631,16 @@ export default function Admin() {
     }
   }
 
+  const removeTake = async (take: string) => {
+    setError('')
+    try {
+      await api(`/__admin/api/jobs/${job}/takes/${take}/delete`, {})
+      await Promise.all([reload(), loadTasks()])
+    } catch (e) {
+      fail(e)
+    }
+  }
+
   /** Approvals and notes: instant, and allowed while something is generating. */
   const update = async (take: string, change: { status?: Take['status']; notes?: string }) => {
     setError('')
@@ -641,7 +675,7 @@ export default function Admin() {
   const inReview = takes.filter((t) => t.status !== 'generated' && t.status !== 'rejected')
   const finished = takes.filter((t) => t.status === 'generated')
   const rejected = takes.filter((t) => t.status === 'rejected')
-  const card = (take: Take) => <TakeCard key={take.id} job={job} take={take} samples={samples} presets={options.presets} tasks={tasks} onGenerate={generate} onRetry={retry} onUpdate={update} onChanged={() => reload().catch(fail)} />
+  const card = (take: Take) => <TakeCard key={take.id} job={job} take={take} samples={samples} presets={options.presets} tasks={tasks} onGenerate={generate} onRetry={retry} onDelete={removeTake} onUpdate={update} onChanged={() => reload().catch(fail)} />
 
   return (
     // The player's global styles lock the page (overflow hidden, touch-action none), so this view scrolls itself.

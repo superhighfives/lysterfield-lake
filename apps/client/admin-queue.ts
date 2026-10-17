@@ -174,6 +174,10 @@ export function createQueue(opts: { dir: string; cwd: string; env: () => NodeJS.
      * Replicate run it had already started carries on there, and starting the task again picks
      * that same run back up rather than paying for another.
      */
+    /** A job's tasks for one take that are waiting or running. */
+    activeFor(job: string, take: string) {
+      return Array.from(tasks.values()).filter((t) => t.job === job && t.take === take && !ended(t))
+    },
     cancel(id: string) {
       const task = tasks.get(id)
       if (!task || ended(task)) return
