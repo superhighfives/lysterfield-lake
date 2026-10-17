@@ -14,6 +14,17 @@ const MIME_TYPES = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9', 'video/web
 
 type Stage = { kind: 'idle' } | { kind: 'countdown'; n: number } | { kind: 'recording'; started: number } | { kind: 'review'; blob: Blob; url: string } | { kind: 'saving'; blob: Blob; url: string } | { kind: 'saved'; job: string; url: string }
 
+/** The camera last picked, remembered in this browser only. */
+const CAMERA_KEY = 'admin-record-camera'
+
+function savedCamera(): string {
+  try {
+    return localStorage.getItem(CAMERA_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
 function defaultName(): string {
   const d = new Date()
   const two = (n: number) => String(n).padStart(2, '0')
@@ -56,24 +67,56 @@ export default function AdminRecord() {
   const [name, setName] = useState(defaultName)
   const [error, setError] = useState('')
   const [size, setSize] = useState('')
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([])
+  const [camera, setCamera] = useState(savedCamera)
+
+  // Camera names only show once the page has been allowed a camera, so the list is read after each one opens,
+  // and again when one is plugged in or out.
+  const listCameras = useCallback(async () => {
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    setCameras(devices.filter((d) => d.kind === 'videoinput' && d.deviceId))
+  }, [])
+
+  useEffect(() => {
+    navigator.mediaDevices.addEventListener('devicechange', listCameras)
+    return () => navigator.mediaDevices.removeEventListener('devicechange', listCameras)
+  }, [listCameras])
 
   useEffect(() => {
     let cancelled = false
+    setSize('')
     navigator.mediaDevices
-      .getUserMedia({ video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } }, audio: false })
+      .getUserMedia({ video: { deviceId: camera ? { exact: camera } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } }, audio: false })
       .then((s) => {
         if (cancelled) return s.getTracks().forEach((t) => t.stop())
         stream.current = s
         if (live.current) live.current.srcObject = s
         const settings = s.getVideoTracks()[0]?.getSettings()
         if (settings) setSize(`${settings.width}×${settings.height} at ${Math.round(settings.frameRate ?? 0)}fps`)
+        listCameras().catch(() => {})
       })
-      .catch((e: Error) => setError(`Couldn't open the camera: ${e.message}`))
+      .catch((e: Error) => {
+        if (cancelled) return
+        // A remembered camera that's gone: fall back to the default one.
+        if (camera && e.name === 'OverconstrainedError') return setCamera('')
+        setError(`Couldn't open the camera: ${e.message}`)
+      })
     return () => {
       cancelled = true
       stream.current?.getTracks().forEach((t) => t.stop())
+      stream.current = null
     }
-  }, [])
+  }, [camera, listCameras])
+
+  const chooseCamera = (id: string) => {
+    setError('')
+    setCamera(id)
+    try {
+      localStorage.setItem(CAMERA_KEY, id)
+    } catch {
+      // Not remembered; it still switches.
+    }
+  }
 
   const record = useCallback(async () => {
     const s = stream.current
@@ -143,7 +186,22 @@ export default function AdminRecord() {
             </>
           )}
         </div>
-        {size && <p className="mb-4 text-xs text-stone-500 dark:text-stone-400">Camera: {size}</p>}
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-stone-600 dark:text-stone-400">
+          {cameras.length > 0 && (
+            <label>
+              Camera{' '}
+              <select value={camera} onChange={(e) => chooseCamera(e.target.value)} disabled={stage.kind === 'countdown' || stage.kind === 'recording'} className="max-w-64 rounded border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-2 py-1 text-stone-900 dark:text-stone-100 disabled:opacity-40">
+                <option value="">Default</option>
+                {cameras.map((c, i) => (
+                  <option key={c.deviceId} value={c.deviceId}>
+                    {c.label || `Camera ${i + 1}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {size && <span className="text-xs text-stone-500 dark:text-stone-400">{size}</span>}
+        </div>
 
         {stage.kind === 'idle' && (
           <button onClick={record} disabled={!size} className="rounded bg-stone-900 px-4 py-2 text-white disabled:opacity-40 dark:bg-stone-100 dark:text-stone-900">
