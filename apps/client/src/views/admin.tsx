@@ -475,7 +475,8 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
               {take.style ? (
                 <>
                   <img src={colourUrl(take.style)} alt="" title={take.style} className="h-6 w-6 rounded object-cover" />
-                  from an image, strength {(take.styleStrength ?? 0.6).toFixed(1)}
+                  {/* Takes from before styleCopies existed fed every layer: look and content. */}
+                  its {take.styleCopies === 'look' ? 'look only' : 'look and content'}, strength {(take.styleStrength ?? 0.6).toFixed(1)}
                 </>
               ) : (
                 'none'
