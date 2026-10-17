@@ -98,8 +98,13 @@ export default function AdminRecord() {
       .catch((e: Error) => {
         if (cancelled) return
         // A remembered camera that's gone: fall back to the default one.
-        if (camera && e.name === 'OverconstrainedError') return setCamera('')
-        setError(`Couldn't open the camera: ${e.message}`)
+        if (camera && (e.name === 'OverconstrainedError' || e.name === 'NotFoundError')) return setCamera('')
+        setError(
+          e.name === 'NotFoundError'
+            ? 'No camera found. Connect one (or bring an iPhone close for Continuity Camera), or choose a video file below.'
+            : `Couldn't open the camera: ${e.message}`
+        )
+        listCameras().catch(() => {})
       })
     return () => {
       cancelled = true
@@ -141,6 +146,12 @@ export default function AdminRecord() {
     setTimeout(() => recorder.stop(), RECORD_MS)
   }, [])
 
+  const chooseFile = (file: File | undefined) => {
+    if (!file) return
+    setError('')
+    setStage({ kind: 'review', blob: file, url: URL.createObjectURL(file) })
+  }
+
   const retake = () => {
     if ('url' in stage) URL.revokeObjectURL(stage.url)
     setStage({ kind: 'idle' })
@@ -167,7 +178,7 @@ export default function AdminRecord() {
       <div className="mx-auto max-w-xl px-6 pb-10 pt-7">
         <header className="mb-6">
           <h1 className="font-serif text-4xl">Record a loop</h1>
-          <p className="text-sm text-stone-600 dark:text-stone-400">Five seconds from the webcam, saved as a new pipeline job. Only what&apos;s inside the square is kept.</p>
+          <p className="text-sm text-stone-600 dark:text-stone-400">Five seconds from the webcam (or the start of a video file), saved as a new pipeline job. Only what&apos;s inside the square is kept.</p>
         </header>
 
         {error && <p className="mb-6 rounded bg-red-50 dark:bg-red-950/50 p-3 text-sm text-red-800 dark:text-red-200">{error}</p>}
@@ -204,9 +215,16 @@ export default function AdminRecord() {
         </div>
 
         {stage.kind === 'idle' && (
-          <button onClick={record} disabled={!size} className="rounded bg-stone-900 px-4 py-2 text-white disabled:opacity-40 dark:bg-stone-100 dark:text-stone-900">
-            Record 5 seconds
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button onClick={record} disabled={!size} className="rounded bg-stone-900 px-4 py-2 text-white disabled:opacity-40 dark:bg-stone-100 dark:text-stone-900">
+              Record 5 seconds
+            </button>
+            {/* A clip from elsewhere (a phone, say): its first 5 seconds are used. */}
+            <label className="cursor-pointer rounded border border-stone-300 dark:border-stone-700 px-4 py-2">
+              Choose a video file
+              <input type="file" accept="video/*" onChange={(e) => chooseFile(e.target.files?.[0])} className="sr-only" />
+            </label>
+          </div>
         )}
 
         {(stage.kind === 'review' || stage.kind === 'saving') && (

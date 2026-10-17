@@ -21,7 +21,7 @@ const COLOURS_DIR = path.join(PIPELINE_DIR, 'resources', 'colours')
 const MAX_COLOUR_UPLOAD = 20 * 1024 * 1024
 /** Webcam clips from /admin/record (plans/backlog/user-polaroid-loops.md), kept apart from the jobs made from them. */
 const RECORDINGS_DIR = path.join(JOBS_DIR, '_recordings')
-const MAX_RECORDING_UPLOAD = 40 * 1024 * 1024
+const MAX_RECORDING_UPLOAD = 150 * 1024 * 1024
 const DEFORUM_PRESETS = path.resolve(PIPELINE_DIR, '..', '..', 'models', 'deforum', 'settings', 'presets.json')
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -311,8 +311,9 @@ async function createRecordingJob(body: Record<string, unknown>): Promise<{ job:
   if (typeof name !== 'string' || !/^[a-z0-9][\w-]*$/.test(name) || name === 'spikes') throw new Error('name must be letters, numbers and dashes')
   if (existsSync(path.join(JOBS_DIR, name))) throw new Error(`There's already a job called "${name}"`)
   if (typeof data !== 'string' || !/^[A-Za-z0-9+/]+=*$/.test(data)) throw new Error('data must be base64')
-  if (data.length > MAX_RECORDING_UPLOAD * 1.4) throw new Error('recording is too large (max 40MB)')
-  const ext = typeof type === 'string' && type.startsWith('video/mp4') ? 'mp4' : 'webm'
+  if (data.length > MAX_RECORDING_UPLOAD * 1.4) throw new Error('recording is too large (max 150MB)')
+  // MediaRecorder writes mp4 or webm; a chosen file may also be a phone's .mov. ffmpeg reads all three.
+  const ext = typeof type !== 'string' ? 'webm' : type.startsWith('video/mp4') ? 'mp4' : type.startsWith('video/quicktime') ? 'mov' : 'webm'
   mkdirSync(RECORDINGS_DIR, { recursive: true })
   // The real path: .jobs is a symlink in a worktree, and job.json records where the source came from.
   const source = path.join(realpathSync(RECORDINGS_DIR), `${name}.${ext}`)
