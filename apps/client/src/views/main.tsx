@@ -18,11 +18,6 @@ import { useIntersect } from '@react-three/drei'
 import { SwapPhase, useStore } from '../store'
 import { commitSwap, fadeOutAudio } from '../utils/swap-dream'
 import { SWAP_ANIMATIONS } from '../utils/swap-poses'
-import {
-  trailResolution,
-  trailTexture,
-  updateTrail,
-} from '../utils/liquid-trail'
 import { readPulse } from '../utils/audio'
 import {
   commitDistance,
@@ -88,10 +83,6 @@ const BEND_PER_VELOCITY = 20
 const BEND_HELD = 0.7
 const BEND_MAX = 1
 const BEND_EASE = 0.2
-// How strongly the cursor's liquid wake bends each image.
-const TRAIL_POLAROID = 1
-const TRAIL_AVATAR = 0.5
-const TRAIL_LYRICS = 0.6
 // How much of the avatar's pointer fade breaks into stipple (uHash).
 const AVATAR_HASH = 0.6
 // The polaroid swells this much (scale) on each beat.
@@ -395,19 +386,15 @@ function Main(
       polaroidMaterial.current.uRipple = rippleUniform.current
     }
 
-    // The cursor's liquid wake, and the music's pulse.
-    updateTrail(state.size.width, state.size.height, state.viewport.dpr)
+    // The music's pulse. (The cursor's liquid wake is drawn over the whole
+    // scene by components/wake-pass.tsx.)
     const pulse = readPulse()
-    for (const [material, amount] of [
-      [polaroidMaterial.current, TRAIL_POLAROID],
-      [avatarMaterial.current, TRAIL_AVATAR],
-      [lyricsMaterial.current, TRAIL_LYRICS],
-    ] as const) {
-      if (!material) continue
-      material.uTrail = trailTexture
-      material.uTrailAmount = amount
-      material.uResolution = trailResolution
-      material.uPulse = pulse
+    for (const material of [
+      polaroidMaterial.current,
+      avatarMaterial.current,
+      lyricsMaterial.current,
+    ]) {
+      if (material) material.uPulse = pulse
     }
 
     if (swapGroup.current) {

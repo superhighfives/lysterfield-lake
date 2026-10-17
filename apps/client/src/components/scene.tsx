@@ -22,6 +22,7 @@ import { getRotation } from "../utils";
 import Choose from "../views/choose";
 import Main from "../views/main";
 import Fireflies from "./fireflies";
+import WakePass from "./wake-pass";
 
 // Half-angle of the choose screen's pointer-following light cone. With a
 // full penumbra, brightness falls off smoothly from the centre to this edge.
@@ -219,6 +220,7 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 					enablePan={false}
 				/>
 			) : null}
+			<WakePass />
 			<ambientLight ref={ambient} intensity={0.5} />
 			<group>
 				{/* decay={0} — three.js dropped the legacy (non-physically-correct)

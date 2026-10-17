@@ -1,6 +1,5 @@
 import { shaderMaterial } from '@react-three/drei'
 import { extend, ThreeElement } from '@react-three/fiber'
-import { WAKE_GLSL } from './wake'
 import { ShaderMaterial, Texture, Vector2, Vector3 } from 'three'
 
 const uniforms = {
@@ -58,12 +57,6 @@ const uniforms = {
   // The polaroid flexing like card as it moves: z offset per squared
   // normalised x (x) and y (y) of the model. See BEND_* in main.tsx.
   uBend: new Vector2(0, 0),
-  // The cursor's liquid wake (see utils/liquid-trail.ts): a screen-space
-  // height map whose slope bends the image, and the canvas's size in device
-  // pixels to look it up by gl_FragCoord. uTrailAmount 0 skips it.
-  uTrail: new Texture(),
-  uTrailAmount: 0,
-  uResolution: new Vector2(1, 1),
   // The music's low end, 0-1 (see utils/audio.ts).
   uPulse: 0,
 }
@@ -197,8 +190,6 @@ export const VideoMaterial = shaderMaterial(
     const float LANDING_AMOUNT = 0.012;
     const float LANDING_WIDTH = 0.12;
     const float LANDING_SECONDS = 1.4;
-    // The cursor's liquid wake (see wake.ts).
-    ${WAKE_GLSL}
 
     vec3 blendMultiply(vec3 base, vec3 blend) {
       return base*blend;
@@ -269,11 +260,6 @@ export const VideoMaterial = shaderMaterial(
         float decay = 1.0 - uRipple.z / LANDING_SECONDS;
         st += normalize(fromOrigin + 1e-5) * sin(front * LANDING_FREQUENCY) * ring * decay * LANDING_AMOUNT;
       }
-
-      // Liquid wake: bend the image along the slope of the trail's height
-      // under this pixel.
-      vec2 trailSlope = wakeSlope();
-      st += trailSlope * WAKE_SLOPE;
 
       float offsetX = 0.0;
       float offsetY = 0.0;
@@ -398,7 +384,6 @@ export const VideoMaterial = shaderMaterial(
 
       image = mix(image, white, fadeAmount);
 
-      image.rgb += wakeGlint(trailSlope);
 
       // Developing: a blank milky print, then the tones come up, then the
       // colour — the way an instant photo develops.
