@@ -2,7 +2,7 @@
 title: Visitors upload or record a 5-second loop and get their own looping polaroid
 status: Backlog
 created: 2026-10-10
-updated: 2026-10-16
+updated: 2026-10-17
 ---
 
 # Visitors upload or record a 5-second loop and get their own looping polaroid
@@ -71,6 +71,62 @@ hosted, unattended, paid-per-use service.
   check. The worker never retries a failed job automatically. Retries are a
   manual admin action.
 
+## Prototype run: `park-party` (2026-10-17)
+
+A 5s handheld iPhone selfie in a park (sky and grass swinging behind,
+two strangers in the first frames), recorded with `/admin/record`, run
+through panels 2-6 locally with the existing steps and defaults (24fps,
+stepFps 6, concurrency 4). 122 frames.
+
+| Step | Calls | GPU time | Wall clock | Cost (est.) |
+| --- | --- | --- | --- | --- |
+| matte (RVM) | 1 | 35s | 50s | ~$0.01-0.05 |
+| portrait (DiffusionCLIP, T4) | 126 | 9,098s (72s/frame) | 37m, plus a ~3m cold start | ~$2.05 |
+| upscale (real-esrgan) | 122 | 221s | 3.6m | ~$0.05-0.30 |
+| background plate (flux-fill-pro) | 31 | 539s | 2.6m | $1.55 |
+| background stabilize | local | – | 18s | free |
+| depth (zoedepth) | 122 | 226s | 9.2m (one ~6m cold start) | ~$0.05-0.30 |
+| outline (lineart, CPU) | 122 | 737s | 4.6m | ~$0.07 |
+| **Total** | 524 | | **~64m** | **~$4-4.50** |
+
+- **Cost is fine; time isn't.** About $4 a loop, half of it the
+  portrait. But at concurrency 4 a loop takes an hour, almost all of it
+  DiffusionCLIP at 72s a frame on a T4. Faster hardware (an L40S is
+  several times faster for about 4x the per-second price) and more
+  parallelism should get this down to minutes for a similar cost. Measure
+  it before choosing.
+- **Cold starts are real.** DiffusionCLIP's first predictions waited
+  ~3m and zoedepth's ~6m. `models.ts` says DiffusionCLIP has no cold boot
+  (a deployment with min instances 1), but the pipeline calls the model
+  version, not the deployment. Hosted, either point at warm deployments
+  (a fixed monthly cost) or accept minutes of start-up after a quiet
+  spell.
+- **Replicate's API 502'd once** (Cloudflare `http_response_incomplete`)
+  mid-portrait and killed the step. Resumed by hand, and skip-if-exists
+  meant only 4 portrait frames were paid twice. A hosted worker needs to
+  survive this without a retry loop: fail the job cleanly, resume it on
+  a manual admin retry.
+- **Matte and outline are good.** The matte follows the subject through
+  heavy camera motion and leaves the background people out; only frame 1
+  has a smudge (RVM settling), which is a reason to trim the first few
+  frames anyway. Depth is coarse but usable.
+- **Portrait is good on wide frames, smeared on close-ups:** the face
+  turns to mush in some mid-clip frames.
+- **Background (panel 3) isn't usable for polaroids as it is.**
+  - Its prompt is the music video's scene, so every keyframe becomes a
+    boardwalk (sometimes with mountains), not a continuation of the
+    visitor's own background, and it jumps between quite different scenes
+    every 4 frames.
+  - flux-fill invented people (a walker in 0109 and 0117, small figures in
+    0021 and 0097/0101).
+  - `leak-detection.ts` got it backwards: it flagged 17 of 31 keyframes,
+    all sunlit grass with no person, and missed every invented figure,
+    then "repaired" 0089-0097 by copying 0101, which has one in it. The
+    skin-tone heuristic can't gate a stranger's footage.
+  - Likely fix: Bria video-erase (`port-bria-background-step.md`), which
+    is temporally consistent, continues the real scene and costs ~$0.25
+    for 5s. Or a single still plate held for the whole loop.
+
 ## Approach (rough, still being scoped)
 
 1. **Capture** (client): sign in with Clerk, then record 5s from the camera
@@ -106,13 +162,16 @@ hosted, unattended, paid-per-use service.
 
 ## Tasks
 
-- [ ] Prototype: run one 5s clip of a new person through panels 2-6 locally
+- [x] Prototype: run one 5s clip of a new person through panels 2-6 locally
       end to end, measuring cost per step, wall-clock time and cold
-      starts
+      starts (`park-party`, above)
+- [ ] Try Bria video-erase for panel 3 on `park-party`
+- [ ] Time DiffusionCLIP on faster hardware and higher concurrency
 - [ ] Prototype the loop seam on that clip
 - [ ] Prototype the R3F polaroid from that clip's atlas (depth relief,
       interaction)
-- [ ] Check `leak-detection.ts` (and the matte) across a range of skin
+- [ ] Replace or retire `leak-detection.ts` for polaroids (it failed both
+      ways on `park-party`), and check the matte across a range of skin
       tones and lighting
 - [ ] Pick the hosted runtime and the input-gate model(s)
 - [ ] Gallery performance spike: N looping polaroids on a phone
