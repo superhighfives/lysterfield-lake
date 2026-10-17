@@ -52,7 +52,7 @@ export async function reshapeMask(alphaPaths: string | string[], outputPath: str
  * plain max filter on these masks (tested: the silhouette's top edge moved
  * the wrong way and by inconsistent amounts).
  */
-function dilate(data: Buffer, size: number, radius: number): Buffer {
+export function dilate(data: Buffer, size: number, radius: number): Buffer {
   const pass = (src: Buffer, horizontal: boolean): Buffer => {
     const out = Buffer.alloc(src.length)
     const at = (line: number, i: number) => (horizontal ? line * size + i : i * size + line)
