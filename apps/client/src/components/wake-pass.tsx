@@ -29,7 +29,7 @@ import { trailTexture, updateTrail } from '../utils/liquid-trail'
 
 // How far (CSS px) the image is pulled at full flow, and the catch of light
 // on the wake's leading edge.
-const WAKE_PX = 8
+const WAKE_PX = 12
 const WAKE_GLINT = 0.12
 // MSAA for the offscreen render, matching the canvas's own antialiasing.
 const SAMPLES = 4
