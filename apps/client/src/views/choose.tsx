@@ -50,6 +50,9 @@ const invertInk = (shader: { fragmentShader: string }) => {
 // drei's <Center> inside it is unaffected.
 const CAROUSEL_FORWARD = 0.25
 
+// Frames between nudges while arriving at the player (see useFrame).
+const NUDGE_EVERY = 4
+
 const CAROUSEL_REFERENCE_HEIGHT = 900
 const CAROUSEL_MIN_SCALE = 0.6
 
@@ -99,6 +102,7 @@ function Choose(props: ThreeElements['group']) {
   // down to it. Done from useFrame once the scroll container has a real
   // height, since on a cold load the dream is set as the scene mounts.
   const scrollToPlayer = useRef(false)
+  const nudgeFrame = useRef(0)
   useEffect(() => {
     if (dream) scrollToPlayer.current = true
   }, [dream])
@@ -164,16 +168,24 @@ function Choose(props: ThreeElements['group']) {
     const overflow = lock ? 'hidden' : 'auto'
     if (data.el.style.overflowY !== overflow) data.el.style.overflowY = overflow
 
-    if (scrollToPlayer.current) {
-      // ScrollControls ignores scroll events until a frame after it starts
-      // listening, so a jump made in that window is silently dropped — keep
-      // re-announcing it until its offset actually starts moving.
+    // Arriving at the player. A dream restored from the URL starts with the
+    // page at the top, so it's scrolled down — and ScrollControls only
+    // takes a scroll position from a real scroll event: a synthetic
+    // dispatched one never registered, and the first real one after it
+    // starts listening is dropped. It also measures the scrollable length
+    // only as it starts, so on a cold load the page could sit fully
+    // scrolled down with the scene stuck partway, back at the choose
+    // screen. So while a dream's set and the scene hasn't arrived, nudge
+    // the real scroll position (up a couple of pixels, then back to the
+    // bottom) every few frames until it does.
+    if (dream) {
       const max = data.el.scrollHeight - data.el.clientHeight
-      if (data.offset > 0.01) {
-        scrollToPlayer.current = false
-      } else if (max > 0) {
-        if (data.el.scrollTop < max) data.el.scrollTop = max
-        else data.el.dispatchEvent(new Event('scroll'))
+      const arrived = data.offset > 0.99
+      if (arrived) scrollToPlayer.current = false
+      if (!arrived && max > 0 && (scrollToPlayer.current || data.el.scrollTop >= max - 1)) {
+        nudgeFrame.current = (nudgeFrame.current + 1) % NUDGE_EVERY
+        if (nudgeFrame.current === 0)
+          data.el.scrollTop = data.el.scrollTop >= max - 1 ? max - 2 : max
       }
     }
 
