@@ -15,7 +15,7 @@ import { Play, FileText, CircleNotch } from '@phosphor-icons/react'
 import { useHistorySync } from '../utils/use-history-sync'
 import { useSwapInput } from '../utils/swap-gesture'
 import { startAudio } from '../utils/audio'
-import WaterVideo, { useWaterSplash } from '../components/water-video'
+import WaterVideo, { DIVE_MS, useWater } from '../components/water-video'
 import Cursor from '../components/cursor'
 import SwapStylePicker from '../components/swap-style-picker'
 
@@ -40,7 +40,8 @@ function Root() {
   const setIsTooSlow = useStore((state) => state.setIsTooSlow)
   const seeking = useStore((state) => state.seeking)
   const showPlayhead = useStore((state) => state.showPlayhead)
-  const splash = useWaterSplash()
+  const water = useWater()
+  const [diving, setDiving] = useState(false)
   // A swap's load is covered by the polaroid's own animation (see
   // utils/swap-dream.ts), so it doesn't count as buffering.
   const swapLoading = useStore((state) => state.swapPhase === 'loading')
@@ -93,7 +94,17 @@ function Root() {
     setIsMobile(isMobile)
     setIsTouch(isTouch)
     console.log(`Accelerometer: ${isMobile} | Touch: ${isTouch}`)
-    setReady(true)
+    // Dive into the lake first (see components/water-video.tsx): the
+    // permission request and audio above had to happen inside the click,
+    // but the scene can wait for the splash.
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setReady(true)
+      return
+    }
+
+    setDiving(true)
+    water.current?.dive()
+    window.setTimeout(() => setReady(true), DIVE_MS)
   }
 
   return (
@@ -163,18 +174,25 @@ function Root() {
                 transparency instead (see components/key-white-filter.tsx).
                 Drawn through WebGL so the pointer ripples it like water. */}
             <WaterVideo
-              className="mix-blend-multiply dark:mix-blend-normal dark:[filter:url(#key-white)]"
+              className="mix-blend-multiply dark:mix-blend-normal"
+              mediaClassName="dark:[filter:url(#key-white)]"
               size={512}
-              splashRef={splash}
+              handle={water}
               sources={[
                 { src: 'video/loop.webm', type: 'video/webm' },
                 { src: 'video/loop.mov', type: 'video/mp4' },
               ]}
             />
             <button
-              className={`whitespace-nowrap fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-1 rounded-md px-4 py-2 bg-yellow-400 text-stone-900 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black flex items-center gap-2 shadow`}
+              // Lifts on hover, and drops into the water with the title
+              // when pressed.
+              className={`whitespace-nowrap fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-1 rounded-md px-4 py-2 bg-yellow-400 text-stone-900 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black flex items-center gap-2 shadow hover:shadow-xl transition-[transform,opacity,box-shadow,background-color,color] duration-300 hover:scale-105 motion-reduce:transition-none ${
+                diving ? 'scale-90 opacity-0 pointer-events-none' : ''
+              }`}
+              style={diving ? { transitionDuration: `${DIVE_MS / 2}ms` } : undefined}
               onClick={handleReady}
-              onPointerEnter={() => splash.current?.()}
+              onPointerEnter={() => water.current?.hover(true)}
+              onPointerLeave={() => water.current?.hover(false)}
             >
               <span className="uppercase">Brightly</span>
               <span className="font-serif italic text-2xl sm:text-3xl">

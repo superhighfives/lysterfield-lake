@@ -32,6 +32,14 @@ import { trailTexture, updateTrail } from '../utils/liquid-trail'
 // under it — and the catch of light on the wake's leading edge.
 const WAKE_PX = 20
 const WAKE_GLINT = 0.12
+// Where there's wake, the image also glows: smeared back along the flow
+// (up to GLOW_SMEAR_PX at full wake, over GLOW_TAPS samples), its colour
+// channels split by up to GLOW_SPLIT_PX, and its colour lifted toward
+// white by up to GLOW_BLOWOUT.
+const GLOW_SMEAR_PX = 28
+const GLOW_TAPS = 10
+const GLOW_SPLIT_PX = 3
+const GLOW_BLOWOUT = 0.35
 // MSAA for the offscreen render, matching the canvas's own antialiasing.
 const SAMPLES = 4
 
@@ -58,7 +66,33 @@ const fragmentShader = /* glsl */ `
   void main() {
     vec3 wake = wakeAt(vUv);
     vec2 offset = wake.xy * ${WAKE_PX.toFixed(1)} / uSize;
-    vec4 color = texture2D(uScene, vUv - offset);
+    vec2 uv = vUv - offset;
+    vec4 color;
+
+    if (wake.z < 0.002) {
+      color = texture2D(uScene, uv);
+    } else {
+      // The glow: a smear back along the flow with the channels split
+      // across it, averaged.
+      vec2 direction = normalize(wake.xy + 1e-5);
+      vec2 smear = direction * ${GLOW_SMEAR_PX.toFixed(1)} * wake.z / uSize;
+      vec2 split = direction * ${GLOW_SPLIT_PX.toFixed(1)} * wake.z / uSize;
+      color = vec4(0.0);
+      for (int i = 0; i < ${GLOW_TAPS}; i++) {
+        vec2 tap = uv - smear * (float(i) / float(${GLOW_TAPS - 1}));
+        vec4 middle = texture2D(uScene, tap);
+        color += vec4(
+          texture2D(uScene, tap + split).r,
+          middle.g,
+          texture2D(uScene, tap - split).b,
+          middle.a
+        );
+      }
+      color /= float(${GLOW_TAPS});
+      // Blown out toward white. The image is premultiplied (it was blended
+      // onto a transparent target), so "white" here is its own alpha.
+      color.rgb = mix(color.rgb, vec3(color.a), ${GLOW_BLOWOUT.toFixed(2)} * wake.z);
+    }
 
     // Light on the edge the wake is moving into: how fast its presence
     // falls away ahead of the flow.

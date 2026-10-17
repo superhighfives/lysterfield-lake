@@ -1,15 +1,25 @@
-import { MutableRefObject, useEffect, useRef } from 'react'
+import { MutableRefObject, useEffect, useRef, useState } from 'react'
 
 // The welcome screen's title loop, drawn through a small WebGL canvas so
-// the pointer can disturb it like water: moving over it drops ripples
-// where it goes, and `splash()` (the button's hover) drops a bigger one at
-// the centre. The canvas takes the same CSS the plain <video> had (blend
-// and dark-mode key), so at rest it looks exactly as before.
+// it can be disturbed like water: moving the pointer over it drops ripples
+// where it goes, and the start button drives it through a handle
+// (useWater): a big splash from the centre on hover, gentle rings for as
+// long as it's hovered, and a "dive" into the lake when it's pressed —
+// one huge splash as the title swells, blurs and fades away.
+//
+// Rings bend the title and also shade the paper around it a little, so
+// the water shows between the letters too, fading out before the edge of
+// the square. The blend with the page (multiply in light mode) is on the
+// wrapper, not the canvas, so the dive can scale and fade it without
+// isolating the blend from the page.
 
 // Ripples: at most MAX_DROPS rings at once; a new drop every DROP_SPACING
-// CSS px of pointer travel. Each ring spreads at SPEED (UV/s) with this
-// wavelength (FREQUENCY) and width, displaces by up to AMOUNT (UV), and
-// fades out over DROP_SECONDS. A splash is SPLASH_STRENGTH times a drop.
+// CSS px of pointer travel. Each ring spreads at SPEED (UV/s), with this
+// wavelength (FREQUENCY) and width at strength 1 — stronger rings are
+// longer and wider — displaces by up to AMOUNT (UV) per unit of strength,
+// and fades out over DROP_SECONDS. SHADE is how much a ring darkens and
+// lightens the paper; kept faint, as dark mode's key turns near-white
+// transparent and anything darker shows strongly against the dark page.
 const MAX_DROPS = 12
 const DROP_SPACING = 28
 const SPEED = 0.35
@@ -17,7 +27,15 @@ const FREQUENCY = 60
 const WIDTH = 0.06
 const AMOUNT = 0.022
 const DROP_SECONDS = 2.2
-const SPLASH_STRENGTH = 2.5
+const SHADE = 0.05
+// The button's ripples: the hover splash, the rings while it's held
+// (every RAIN_MS), and the dive's splash.
+const HOVER_STRENGTH = 3.5
+const RAIN_STRENGTH = 1.2
+const RAIN_MS = 650
+const DIVE_STRENGTH = 7
+/** How long the dive takes, before the scene should replace this. */
+export const DIVE_MS = 900
 
 const vertexSource = /* glsl */ `#version 300 es
 in vec2 position;
@@ -36,43 +54,62 @@ uniform sampler2D uVideo;
 uniform vec4 uDrops[${MAX_DROPS}];
 void main() {
   vec2 offset = vec2(0.0);
-  float glint = 0.0;
+  float shade = 0.0;
   for (int i = 0; i < ${MAX_DROPS}; i++) {
     vec4 drop = uDrops[i];
     if (drop.w <= 0.0) continue;
+    // Stronger drops make longer, wider rings, not just taller ones.
+    float scale = 0.6 + 0.4 * sqrt(drop.w);
     vec2 away = vUv - drop.xy;
-    float dist = length(away);
-    float front = dist - drop.z * ${SPEED.toFixed(3)};
-    float ring = exp(-(front * front) / ${(WIDTH * WIDTH).toFixed(5)});
+    float front = length(away) - drop.z * ${SPEED.toFixed(3)} * scale;
+    float width = ${WIDTH.toFixed(3)} * scale;
+    float ring = exp(-(front * front) / (width * width));
     float fade = max(0.0, 1.0 - drop.z / ${DROP_SECONDS.toFixed(2)});
-    float wave = sin(front * ${FREQUENCY.toFixed(1)}) * ring * fade * fade * drop.w;
+    float wave = sin(front * ${FREQUENCY.toFixed(1)} / scale) * ring * fade * fade * drop.w;
     offset += normalize(away + 1e-5) * wave * ${AMOUNT.toFixed(4)};
-    glint += wave;
+    shade += wave;
   }
   color = texture(uVideo, vUv + offset);
-  // A faint catch of light on the crests.
-  color.rgb += max(glint, 0.0) * 0.08;
+  // Light and shadow on the water, out to just short of the square's
+  // edge so it never shows as a box.
+  float edge = smoothstep(0.5, 0.32, length(vUv - 0.5));
+  color.rgb *= 1.0 - clamp(shade, -2.0, 2.0) * ${SHADE.toFixed(3)} * edge;
 }`
 
 type Drop = { x: number; y: number; born: number; strength: number }
 
-export function useWaterSplash() {
-  return useRef<(() => void) | null>(null)
+export type WaterHandle = {
+  /** A big splash from the centre, then gentle rings until hover(false). */
+  hover: (on: boolean) => void
+  /** One huge splash as the title swells, blurs and fades away. */
+  dive: () => void
 }
+
+export function useWater() {
+  return useRef<WaterHandle | null>(null)
+}
+
+const reducedMotion = () =>
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 function WaterVideo({
   className,
+  mediaClassName,
   size = 512,
   sources,
-  splashRef,
+  handle,
 }: {
+  /** On the wrapper: the blend with the page. */
   className?: string
+  /** On the canvas (and the fallback video): filters, like dark mode's key. */
+  mediaClassName?: string
   size?: number
   sources: { src: string; type: string }[]
-  splashRef?: MutableRefObject<(() => void) | null>
+  handle?: MutableRefObject<WaterHandle | null>
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const video = useRef<HTMLVideoElement>(null)
+  const [diving, setDiving] = useState(false)
 
   useEffect(() => {
     const el = canvas.current
@@ -84,6 +121,7 @@ function WaterVideo({
       vid.style.position = 'static'
       vid.style.opacity = '1'
       el.style.display = 'none'
+      if (handle) handle.current = { hover: () => {}, dive: () => setDiving(true) }
       return
     }
 
@@ -129,8 +167,24 @@ function WaterVideo({
       if (drops.length > MAX_DROPS) drops.shift()
     }
 
-    if (splashRef)
-      splashRef.current = () => addDrop(0.5, 0.5, SPLASH_STRENGTH)
+    let rain = 0
+    if (handle)
+      handle.current = {
+        hover: (on) => {
+          window.clearInterval(rain)
+          if (!on || reducedMotion()) return
+          addDrop(0.5, 0.5, HOVER_STRENGTH)
+          rain = window.setInterval(
+            () => addDrop(0.5, 0.5, RAIN_STRENGTH),
+            RAIN_MS
+          )
+        },
+        dive: () => {
+          window.clearInterval(rain)
+          if (!reducedMotion()) addDrop(0.5, 0.5, DIVE_STRENGTH)
+          setDiving(true)
+        },
+      }
 
     let last: { x: number; y: number } | null = null
     const handleMove = (event: PointerEvent) => {
@@ -182,29 +236,46 @@ function WaterVideo({
 
     return () => {
       cancelAnimationFrame(frame)
+      window.clearInterval(rain)
       window.removeEventListener('pointermove', handleMove)
-      if (splashRef) splashRef.current = null
+      if (handle) handle.current = null
       gl.deleteTexture(texture)
       gl.deleteBuffer(quad)
       gl.deleteProgram(program)
     }
-  }, [size, splashRef])
+  }, [size, handle])
 
+  // The dive: the title swells and fades as the splash spreads, and blurs
+  // like it's sinking out of focus.
   return (
-    <>
-      <canvas
-        ref={canvas}
-        className={className}
-        style={{ width: size, height: size }}
-      />
+    <div
+      className={`${className ?? ''} relative transition-[transform,opacity] ease-in motion-reduce:transition-none ${
+        diving ? 'scale-[1.6] opacity-0' : ''
+      }`}
+      style={{ transitionDuration: `${DIVE_MS}ms` }}
+    >
+      <div
+        className={`transition-[filter] ease-in ${diving ? 'blur-md' : ''}`}
+        style={{ transitionDuration: `${DIVE_MS}ms` }}
+      >
+        <canvas
+          ref={canvas}
+          className={mediaClassName}
+          style={{ width: size, height: size }}
+        />
+      </div>
       {/* The source: transparent and out of the layout, unless WebGL2
           isn't there to draw it. Not display: none — Chrome pauses muted
           autoplay video it thinks is invisible. */}
-      { }
       <video
         ref={video}
-        className={className}
-        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}
+        className={mediaClassName}
+        style={{
+          position: 'absolute',
+          top: 0,
+          opacity: 0,
+          pointerEvents: 'none',
+        }}
         width={size}
         height={size}
         autoPlay
@@ -216,7 +287,7 @@ function WaterVideo({
           <source key={source.src} {...source} />
         ))}
       </video>
-    </>
+    </div>
   )
 }
 

@@ -16,7 +16,7 @@ import { CanvasTexture, LinearFilter } from 'three'
 // of the neutral wash per frame), and a stroke's radius as a share of the
 // canvas width, at rest and at full speed.
 const TRAIL_SIZE = 160
-const SETTLE = 0.06
+const SETTLE = 0.025
 const RADIUS = 0.05
 const RADIUS_FAST = 0.1
 // Pointer speed (CSS px per frame) that counts as full speed. The wake
