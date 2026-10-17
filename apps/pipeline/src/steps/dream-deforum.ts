@@ -135,7 +135,12 @@ export async function deforumRun(job: Job, take: string, config: TakeConfig, run
       ? { colour_image: await readFileAsInput(colourPath(job, take, config.colour)), colour_mode: 'Specific' }
       : { colour_mode: 'Video Input' }),
     // A style reference steers every frame towards its look and imagery (IP-Adapter, models/deforum/ip_adapter.py).
-    ...(config.style && { style_image: await readFileAsInput(colourPath(job, take, config.style)), style_strength: config.styleStrength ?? 0.6 }),
+    // Look only (the default) feeds it to the up blocks alone, which carry its look but not its content.
+    ...(config.style && {
+      style_image: await readFileAsInput(colourPath(job, take, config.style)),
+      style_strength: config.styleStrength ?? (config.styleCopies === 'look-and-content' ? 0.6 : 1.0),
+      style_layers: config.styleCopies === 'look-and-content' ? 'all' : 'up',
+    }),
     preset: config.preset ?? 'lush-and-light',
     extract_nth_frame: 1,
     max_frames: jobFrames.length,

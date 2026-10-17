@@ -298,6 +298,14 @@ at 1.0 the reference takes over. No person at either strength. The form has
 a Style picker (the same image library as Colours) with a strength slider,
 default 0.6.
 
+**Look only (2026-10-16).** Fed to all 16 layers, the reference's content
+came through too: both test dreams (0.6 and 1.5) turned the footage into its
+timber towers. Fed only to the up blocks (layers 6-14), as style-transfer
+work suggests, the landscape stayed and took on the reference's palette and
+painterly look, with almost no buildings (`.jobs/spikes/style-grid/`). That
+is now the default ("its look", strength 1.0); "its look and content" (all
+layers, 0.6) stays as an option.
+
 ### Other methods (later)
 
 Deforum is the baseline. A candidate replaces it only if it keeps "the

@@ -33,6 +33,8 @@ type Take = {
   seed?: number
   negativePrompt?: string
   styleStrength?: number
+  /** What the style image carries over: its look only (the default) or its look and content. */
+  styleCopies?: 'look' | 'look-and-content'
   preset?: string
 }
 type Action = 'samples' | 'clip' | 'full'
@@ -40,7 +42,10 @@ type Song = { id: string; title: string; published: boolean; check: CheckSummary
 type JobDetail = { name: string; config: { samples?: { frame: number; label: string }[] }; takes: Take[]; songs: Song[] }
 type Preset = { title: string; prompt: string; colour: string | null; seed: number }
 type DeforumOptions = { presets: Record<string, Preset>; colours: string[] }
-type NewTake = { name: string; prompt: string; colour: string | null; style: string | null; styleStrength: number; preset: string; negative: string; seed?: number }
+type StyleCopies = 'look' | 'look-and-content'
+/** Each style mode's default strength: look only can go stronger before the image takes over. */
+const STYLE_STRENGTH: Record<StyleCopies, number> = { look: 1.0, 'look-and-content': 0.6 }
+type NewTake = { name: string; prompt: string; colour: string | null; style: string | null; styleStrength: number; styleCopies: StyleCopies; preset: string; negative: string; seed?: number }
 
 // Rough Replicate cost and time for each paid stage of a Deforum take (L40S with xformers, ~8s a dream frame), before retries.
 const COST: Record<Action, string> = { samples: 'about $0.50, 4 minutes', clip: 'about $1.50, 26 minutes', full: 'about $20, 6 hours' }
@@ -184,7 +189,8 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
   const [colour, setColour] = useState<string | null>(null)
   /** Style reference (IP-Adapter): its look and imagery, not just its colours. None by default. */
   const [style, setStyle] = useState<string | null>(null)
-  const [styleStrength, setStyleStrength] = useState(0.6)
+  const [styleCopies, setStyleCopies] = useState<StyleCopies>('look')
+  const [styleStrength, setStyleStrength] = useState(STYLE_STRENGTH.look)
   const [name, setName] = useState('')
   const [negative, setNegative] = useState('')
   const [uploadError, setUploadError] = useState('')
@@ -240,7 +246,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
   const submit = async () => {
     if (!ready) return
     setCreating(true)
-    const made = await onCreate({ name: id, prompt, colour, style, styleStrength, preset: preset === BLANK ? '' : preset, negative: negative.trim(), seed: options.presets[preset]?.seed })
+    const made = await onCreate({ name: id, prompt, colour, style, styleStrength, styleCopies, preset: preset === BLANK ? '' : preset, negative: negative.trim(), seed: options.presets[preset]?.seed })
     setCreating(false)
     // Once the dream exists and its samples are queued, start the next one fresh: its name is now
     // taken, and the form otherwise sits there saying so.
@@ -248,7 +254,8 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
       setName('')
       setNegative('')
       setStyle(null)
-      setStyleStrength(0.6)
+      setStyleCopies('look')
+      setStyleStrength(STYLE_STRENGTH.look)
       setPreset('')
     }
   }
@@ -315,6 +322,25 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
                 ))}
               </div>
               {style && (
+                <div role="radiogroup" aria-label="What the style image carries over" className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                  {(['look', 'look-and-content'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      role="radio"
+                      aria-checked={styleCopies === mode}
+                      onClick={() => {
+                        setStyleCopies(mode)
+                        setStyleStrength(STYLE_STRENGTH[mode])
+                      }}
+                      className={`rounded px-2.5 py-1 ${styleCopies === mode ? 'bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900' : 'border border-stone-300 dark:border-stone-700'}`}
+                    >
+                      {mode === 'look' ? 'Its look' : 'Its look and content'}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {style && (
                 <label className="mt-1 flex items-center gap-3 text-sm">
                   Strength
                   <input type="range" min={0.1} max={1.5} step={0.1} value={styleStrength} onChange={(e) => setStyleStrength(Number(e.target.value))} className="w-48" />
@@ -322,7 +348,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
                 </label>
               )}
               <p className="gf-description">
-                Optional. Every frame borrows the picked image&apos;s look and imagery, not just its colours. Around 0.6 keeps the footage&apos;s landscape; 1.0 and up lets the image take over.
+                Optional. Its look carries over its colour, texture and medium while the footage stays a landscape; its look and content also brings its buildings, figures and objects into the scene.
               </p>
             </div>
           </GridForm.Row>
@@ -719,7 +745,7 @@ export default function Admin() {
   const create = async (take: NewTake): Promise<boolean> => {
     setError('')
     try {
-      const made = await runAction(job, { action: 'take', method: 'deforum', take: take.name, prompt: take.prompt, colour: take.colour, style: take.style ?? undefined, styleStrength: take.style ? take.styleStrength : undefined, preset: take.preset, negative: take.negative || undefined, seed: take.seed })
+      const made = await runAction(job, { action: 'take', method: 'deforum', take: take.name, prompt: take.prompt, colour: take.colour, style: take.style ?? undefined, styleStrength: take.style ? take.styleStrength : undefined, styleCopies: take.style ? take.styleCopies : undefined, preset: take.preset, negative: take.negative || undefined, seed: take.seed })
       await reload()
       if (made.status === 'failed') {
         setError(reason(made.log))

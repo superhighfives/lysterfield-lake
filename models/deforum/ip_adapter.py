@@ -28,7 +28,19 @@ import torch
 from einops import rearrange
 
 # Set by predict.py for a run with a style image, cleared otherwise. Read by every wrapped layer.
-state = {"tokens": None, "uncond_tokens": None, "scale": 0.0}
+# `layers` is which cross-attention layers take the image at all (see LAYER_SETS).
+state = {"tokens": None, "uncond_tokens": None, "scale": 0.0, "layers": None}
+
+# Which of the 16 cross-attention layers (in diffusers' order: 0-5 down, 6-14 up, 15 middle) take the
+# style image. All of them copies its content as well as its look; style-transfer work (InstantStyle)
+# found the layout and content come mostly from the down and middle blocks, the look from the up blocks.
+# Checked on the 4090 (2026-10-16, .jobs/spikes/style-grid): with all layers a timber-pagoda reference
+# turned the jetty into its buildings; with the up blocks only the landscape stayed and took on the
+# reference's palette and painterly look. Narrower groups of up blocks did much the same, or less.
+LAYER_SETS = {
+    "all": set(range(16)),
+    "up": set(range(6, 15)),
+}
 
 
 class ImageProj(torch.nn.Module):
@@ -87,15 +99,15 @@ def install(unet, weights, device):
         layer.to_v_ip = torch.nn.Linear(v_w.shape[1], v_w.shape[0], bias=False).to(device).half()
         layer.to_k_ip.weight.data.copy_(k_w)
         layer.to_v_ip.weight.data.copy_(v_w)
-        layer.forward = _wrap(layer, layer.forward)
+        layer.forward = _wrap(layer, layer.forward, i)
     return proj
 
 
-def _wrap(layer, forward):
+def _wrap(layer, forward, index):
     def wrapped(x, context=None, mask=None):
         out = forward(x, context=context, mask=mask)
         tokens = state["tokens"]
-        if tokens is None or state["scale"] == 0:
+        if tokens is None or state["scale"] == 0 or (state["layers"] is not None and index not in state["layers"]):
             return out
         # Deforum runs the unconditional and conditional passes as one batch, in that order
         # (helpers/model_wrap.py); the unconditional half gets IP-Adapter's "no image" tokens.

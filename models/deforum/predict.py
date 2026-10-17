@@ -155,6 +155,7 @@ class Predictor(BasePredictor):
             default=None,
         ),
         style_image: Optional[Path] = Input(description="Style reference: every frame is steered towards its look and imagery (IP-Adapter), not just its colours", default=None),
+        style_layers: str = Input(description="Which layers take the style image: up (its look only: colour, texture, medium) or all (its look and its content, such as buildings)", choices=["up", "all"], default="up"),
         style_strength: float = Input(description="How strongly the style reference steers each frame (IP-Adapter's scale). 0 ignores it", default=0.6, ge=0, le=1.5),
         max_rerolls: int = Input(description="Times a frame that shows a person is rendered again (new seed, then repainting more) before the best attempt is kept and flagged. 0 only scores", default=2, ge=0, le=4),
         person_threshold: float = Input(description="Person score above which a frame is rendered again", default=0.35, ge=0, le=1),
@@ -306,9 +307,9 @@ class Predictor(BasePredictor):
             from PIL import Image
 
             tokens, uncond_tokens = self.ip_adapter.encode(Image.open(str(style_image)), self.style_encoder, self.style_processor, self.style_proj, self.device)
-            self.ip_adapter.state.update(tokens=tokens, uncond_tokens=uncond_tokens, scale=style_strength)
+            self.ip_adapter.state.update(tokens=tokens, uncond_tokens=uncond_tokens, scale=style_strength, layers=self.ip_adapter.LAYER_SETS[style_layers])
         else:
-            self.ip_adapter.state.update(tokens=None, uncond_tokens=None, scale=0.0)
+            self.ip_adapter.state.update(tokens=None, uncond_tokens=None, scale=0.0, layers=None)
         render.generate = checked_generate
         try:
             render_animation(root, ns_anim, ns_args, cond, uncond)
@@ -326,7 +327,7 @@ class Predictor(BasePredictor):
             "args": {k: v for k, v in args.items() if is_json(v)}, "anim_args": {k: v for k, v in anim.items() if is_json(v)},
             "frames": len(frames),
             "max_rerolls": max_rerolls, "person_threshold": person_threshold,
-            "style_image": style_image is not None, "style_strength": style_strength if style_image is not None else 0,
+            "style_image": style_image is not None, "style_strength": style_strength if style_image is not None else 0, "style_layers": style_layers,
         }
         out = "/tmp/frames.zip"
         with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED) as z:

@@ -238,7 +238,7 @@ switch (step) {
   case 'dream-take': {
     // Creates a take at "proposed", from a direction (--directions <file> --index <n>) or a bare --prompt.
     // Deforum takes (the legacy dreams' method): --method deforum [--colour <ref in resources/colours>] [--preset <legacy dream>] [--negative <prompt>]
-    // [--style <image in resources/colours>] [--style-strength <0-1.5, default 0.6>].
+    // [--style <image in resources/colours>] [--style-strength <0-1.5>] [--style-copies look|look-and-content (default look)].
     const job = await loadJob(requireFlag('job'))
     const take = requireFlag('take')
     let prompt = flags.prompt
@@ -258,6 +258,8 @@ switch (step) {
     if (method && method !== 'flux-kontext' && method !== 'deforum') throw new Error('--method must be flux-kontext or deforum')
     const styleStrength = flags['style-strength'] ? Number(flags['style-strength']) : undefined
     if (styleStrength !== undefined && !(styleStrength >= 0 && styleStrength <= 1.5)) throw new Error('--style-strength must be a number from 0 to 1.5')
+    const styleCopies = flags['style-copies'] as 'look' | 'look-and-content' | undefined
+    if (styleCopies && styleCopies !== 'look' && styleCopies !== 'look-and-content') throw new Error('--style-copies must be look or look-and-content')
     const config = await createTake(job, take, {
       prompt: prompt ?? '',
       brief,
@@ -266,6 +268,7 @@ switch (step) {
       colour: flags.colour,
       preset: flags.preset,
       style: flags.style,
+      styleCopies,
       styleStrength,
       negativePrompt: flags.negative,
       seed: flags.seed ? Number(flags.seed) : undefined,
