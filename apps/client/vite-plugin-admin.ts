@@ -233,7 +233,7 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
         return [
           'dream-take', ...base, '--take', take, '--method', 'deforum', '--prompt', String(body.prompt ?? ''),
           ...(body.colour ? ['--colour', String(body.colour)] : []),
-          ...(body.style ? ['--style', String(body.style), '--style-strength', String(body.styleStrength ?? 0.6)] : []),
+          ...(body.style ? ['--style', String(body.style), '--style-strength', String(body.styleStrength ?? 1), '--style-copies', body.styleCopies === 'look-and-content' ? 'look-and-content' : 'look'] : []),
           ...(body.preset ? ['--preset', String(body.preset)] : []),
           ...(body.negative ? ['--negative', String(body.negative)] : []),
           ...(body.seed ? ['--seed', String(body.seed)] : []),

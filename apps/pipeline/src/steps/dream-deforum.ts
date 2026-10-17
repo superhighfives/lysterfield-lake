@@ -134,8 +134,14 @@ export async function deforumRun(job: Job, take: string, config: TakeConfig, run
     ...(config.colour
       ? { colour_image: await readFileAsInput(colourPath(job, take, config.colour)), colour_mode: 'Specific' }
       : { colour_mode: 'Video Input' }),
-    // A style reference steers every frame towards its look and imagery (IP-Adapter, models/deforum/ip_adapter.py).
-    ...(config.style && { style_image: await readFileAsInput(colourPath(job, take, config.style)), style_strength: config.styleStrength ?? 0.6 }),
+    // A style reference steers every frame towards it (IP-Adapter, models/deforum/ip_adapter.py). Look only (the
+    // default) feeds it to the up blocks alone, which carry its look but not its content; look and content feeds every layer.
+    // A take from before styleCopies existed was made with every layer, so it re-renders that way.
+    ...(config.style && {
+      style_image: await readFileAsInput(colourPath(job, take, config.style)),
+      style_strength: config.styleStrength ?? (config.styleCopies === 'look' ? 1.0 : 0.6),
+      style_layers: config.styleCopies === 'look' ? 'up' : 'all',
+    }),
     preset: config.preset ?? 'lush-and-light',
     extract_nth_frame: 1,
     max_frames: jobFrames.length,
