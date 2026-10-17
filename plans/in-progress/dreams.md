@@ -374,6 +374,15 @@ Make and publish:
       stills and loops that sat beside the videos, unused by the client,
       moved to `.jobs/spikes/legacy-client-dream-extras/` so the R2 sync
       doesn't upload them
+- [x] Blank depth panel, checked 2026-10-17 and left as is (user's call):
+      132 frames (about 5½s, almost all the walk-away at 1:59-2:08, plus
+      15 near 3:30) have a black panel 5 while the matte shows the person.
+      The depth look keeps only the top brightness band (235-255 after
+      gamma), so a subject far from the camera drops out entirely. The 2023
+      depth frames on the HDD are black at the same moments, so the
+      published videos always had it. Fixing it would mean re-running
+      ZoeDepth on those frames with a per-frame range, then composing all
+      ten again
 - [ ] Review: panel 7 timing per dream, plus a full watch of at least one
 - [ ] Sync R2 (`deploy-dreams`), with the user's go-ahead; deploy the client
 - [ ] Optional: review `repairGlitchedFrames`'s 80 flagged matte frames on
