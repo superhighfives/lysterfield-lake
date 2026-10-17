@@ -65,7 +65,7 @@ export function updateTrail(width: number, height: number) {
         const x = (last.x + (dx * i) / steps) * scale
         const y = (last.y + (dy * i) / steps) * scale
         const gradient = context.createRadialGradient(x, y, 0, x, y, radius)
-        gradient.addColorStop(0, `rgba(255, 255, 255, ${0.25 * speed})`)
+        gradient.addColorStop(0, `rgba(255, 255, 255, ${0.5 * speed})`)
         gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
         context.fillStyle = gradient
         context.fillRect(x - radius, y - radius, radius * 2, radius * 2)

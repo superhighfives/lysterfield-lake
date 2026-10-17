@@ -121,6 +121,15 @@ function injectBend(material: Material) {
     shader.uniforms.uBend = polaroidBend
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nuniform vec2 uBend;')
+      // Tilt the normals with the curve too, so the sheen sweeps across
+      // it — face-on, the curl alone barely shows.
+      .replace(
+        '#include <beginnormal_vertex>',
+        `#include <beginnormal_vertex>
+        vec2 bendExtent = ${BEND_EXTENT};
+        vec2 slope = 2.0 * uBend * position.xy / (bendExtent * bendExtent);
+        objectNormal = normalize(objectNormal - vec3(slope, 0.0) * sign(objectNormal.z));`
+      )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>

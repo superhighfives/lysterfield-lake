@@ -209,8 +209,15 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 					onChange={onOrientationChange}
 				/>
 			) : null}
+			{/* Pan off too: nothing uses it, and a right- or modifier-drag
+			    (or a two-finger drag) panned the camera's target, which
+			    nothing ever reset — the scene stayed skewed. */}
 			{!isMobile && !isTouch ? (
-				<OrbitControls enableRotate={false} enableZoom={false} />
+				<OrbitControls
+					enableRotate={false}
+					enableZoom={false}
+					enablePan={false}
+				/>
 			) : null}
 			<ambientLight ref={ambient} intensity={0.5} />
 			<group>

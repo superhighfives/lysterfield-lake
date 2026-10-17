@@ -76,10 +76,14 @@ const VELOCITY_MAX = 0.06
 // arrival (swap progress counts 1 -> 0).
 const DEVELOP_SECONDS = 2.5
 const LANDING_AT = 0.5
-// The polaroid flexes with its motion: model z units of curl per unit of
-// photo-UV velocity (edges bending back against the air), capped.
-const BEND_PER_VELOCITY = 6
-const BEND_MAX = 0.4
+// The polaroid flexes like card (model z units of curl at its edges): back
+// against the air as it moves, per unit of photo-UV velocity, and while
+// it's held mid-drag, up to BEND_HELD at the release point. Capped at
+// BEND_MAX and eased by BEND_EASE per frame.
+const BEND_PER_VELOCITY = 20
+const BEND_HELD = 0.7
+const BEND_MAX = 1
+const BEND_EASE = 0.2
 // How strongly the cursor's liquid wake bends each image.
 const TRAIL_POLAROID = 1
 const TRAIL_AVATAR = 0.5
@@ -176,6 +180,7 @@ function Main(
   const lastSwapPosition = useRef(new Vector3(0, 0, POLAROID_Z))
   const velocityRef = useRef(new Vector2())
   const velocityTarget = useRef(new Vector2())
+  const bendTarget = useRef(new Vector2())
   const developRef = useRef(1)
   const rippleRef = useRef(-1)
   // The polaroid's own, not the material's default: shaderMaterial shares
@@ -361,10 +366,11 @@ function Main(
         polaroidMaterial.current.uVelocity = velocityRef.current
 
       const v = velocityRef.current
-      polaroidBend.value.set(
-        -Math.min(Math.abs(v.x) * BEND_PER_VELOCITY, BEND_MAX),
-        -Math.min(Math.abs(v.y) * BEND_PER_VELOCITY, BEND_MAX)
-      )
+      const held =
+        (Math.abs(dragOffsetRef.current) / commitDistance()) * BEND_HELD
+      const bendX = Math.min(Math.abs(v.x) * BEND_PER_VELOCITY + held, BEND_MAX)
+      const bendY = Math.min(Math.abs(v.y) * BEND_PER_VELOCITY, BEND_MAX)
+      polaroidBend.value.lerp(bendTarget.current.set(-bendX, -bendY), BEND_EASE)
       if (polaroidMaterial.current)
         polaroidMaterial.current.uBend = polaroidBend.value
     }
