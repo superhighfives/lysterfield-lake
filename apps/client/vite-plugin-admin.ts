@@ -282,14 +282,14 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
 }
 
 /**
- * Deletes a take that hasn't made anything yet: no samples, clip or frames, so nothing is lost but its
+ * Deletes a take that hasn't made anything yet: no samples, clip, frames or final output, so nothing is lost but its
  * settings. Waiting tasks for it are cancelled first; one that is running has to be stopped before.
  * A take with output, or a published dream (no take.json), is refused.
  */
 function deleteTake(job: string, take: string) {
   const dir = checkDir(job, take, false)
   if (!existsSync(path.join(dir, 'take.json'))) throw new Error(`"${take}" isn't a take that can be deleted`)
-  const made = ['samples', 'frames', 'preview', 'repairs'].filter((sub) => existsSync(path.join(dir, sub)) && readdirSync(path.join(dir, sub)).length > 0)
+  const made = ['samples', 'frames', 'preview', 'repairs', 'final'].filter((sub) => existsSync(path.join(dir, sub)) && readdirSync(path.join(dir, sub)).length > 0)
   if (made.length > 0) throw new Error(`"${take}" already has ${made.join(', ')}; only a take that hasn't run can be deleted`)
   const active = tasks().activeFor(job, take)
   if (active.some((t) => t.status === 'running')) throw new Error(`Something is running for "${take}"; stop it first`)
