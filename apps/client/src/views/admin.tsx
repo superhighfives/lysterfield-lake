@@ -300,10 +300,8 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
                   <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => upload(e.target)} />
                 </label>
               </div>
-              <p className="gf-description">{uploadError ? <span className="text-red-700 dark:text-red-300">{uploadError}</span> : 'Every frame is colour-matched to the image you pick: its main colours, in proportion. Hover to see the image.'}</p>
+              <p className="gf-description">{uploadError ? <span className="text-red-700 dark:text-red-300">{uploadError}</span> : 'Every frame is colour-matched to the image you pick: its main colours, in proportion.'}</p>
             </div>
-          </GridForm.Row>
-          <GridForm.Row>
             <div className="gf-field" style={{ cursor: 'default' }}>
               <span className="gf-label">Style</span>
               <div className="gf-control flex flex-wrap gap-2 py-1">
@@ -324,7 +322,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
                 </label>
               )}
               <p className="gf-description">
-                Optional. Every frame borrows the picked image&apos;s look and imagery, not just its colours. Around 0.6 keeps the footage&apos;s landscape; 1.0 and up lets the image take over. Use + your own above to add an image.
+                Optional. Every frame borrows the picked image&apos;s look and imagery, not just its colours. Around 0.6 keeps the footage&apos;s landscape; 1.0 and up lets the image take over. Add an image with + your own under Colours.
               </p>
             </div>
           </GridForm.Row>
