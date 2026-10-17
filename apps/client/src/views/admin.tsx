@@ -76,7 +76,7 @@ function Lightbox({ items, index, onIndex }: { items: LightboxItem[]; index: num
         >
           {item && (
             <>
-              <Dialog.Close title="Close" className="block cursor-zoom-out outline-none">
+              <Dialog.Close title="Close" className="block cursor-zoom-out rounded outline-none focus-visible:ring-2 focus-visible:ring-stone-300">
                 {item.video ? (
                   <video key={item.src} ref={slowed} onLoadedData={(e) => slowed(e.currentTarget)} src={item.src} poster={item.poster} autoPlay loop muted playsInline className="max-h-[85vh] max-w-[calc(100vw-2rem)] rounded" />
                 ) : (
