@@ -260,7 +260,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
     }
   }
 
-  const swatch = (selected: boolean) => `h-20 w-20 overflow-hidden rounded ${selected ? 'ring-2 ring-stone-900 dark:ring-stone-100 ring-offset-2 dark:ring-offset-stone-950' : 'opacity-80 hover:opacity-100'}`
+  const swatch = (selected: boolean) => `aspect-square w-full overflow-hidden rounded ${selected ? 'ring-2 ring-stone-900 dark:ring-stone-100 ring-offset-2 dark:ring-offset-stone-950' : 'opacity-80 hover:opacity-100'}`
 
   return (
     <section className="mb-14">
@@ -299,7 +299,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
             {/* Not a text control, so a plain Formulaire cell rather than a Field. */}
             <div className="gf-field" style={{ cursor: 'default' }}>
               <span className="gf-label">Colours</span>
-              <div className="gf-control flex flex-wrap gap-2 py-1">
+              <div className="gf-control grid grid-cols-4 gap-2 py-1">
                 <button type="button" onClick={() => setColour(null)} className={`${swatch(colour === null)} border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-[10px] leading-tight`}>
                   from the footage
                 </button>
@@ -311,7 +311,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
             </div>
             <div className="gf-field" style={{ cursor: 'default' }}>
               <span className="gf-label">Style</span>
-              <div className="gf-control flex flex-wrap gap-2 py-1">
+              <div className="gf-control grid grid-cols-4 gap-2 py-1">
                 <button type="button" onClick={() => setStyle(null)} className={`${swatch(style === null)} border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-[10px] leading-tight`}>
                   none
                 </button>
@@ -320,9 +320,18 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
                     <img src={colourUrl(c)} alt={c} className="h-full w-full object-cover" />
                   </button>
                 ))}
+                {/* Inside the image grid: as the field's own child, the grid places it beside the label and pushes the images down. */}
+                {style && (
+                  <label className="col-span-4 mt-1 flex items-center gap-3 text-sm">
+                    Strength
+                    <input type="range" min={0.1} max={1.5} step={0.1} value={styleStrength} onChange={(e) => setStyleStrength(Number(e.target.value))} className="w-48" />
+                    <span className="tabular-nums">{styleStrength.toFixed(1)}</span>
+                  </label>
+                )}
               </div>
               {style && (
-                <div role="radiogroup" aria-label="What the style image carries over" className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                // Out of the flow, beside the label, so it doesn't push the Style images below the Colours ones.
+                <div role="radiogroup" aria-label="What the style image carries over" className="absolute right-3 top-1.5 flex items-center gap-1.5 text-xs">
                   {(['look', 'look-and-content'] as const).map((mode) => (
                     <button
                       key={mode}
@@ -333,19 +342,12 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
                         setStyleCopies(mode)
                         setStyleStrength(STYLE_STRENGTH[mode])
                       }}
-                      className={`rounded px-2.5 py-1 ${styleCopies === mode ? 'bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900' : 'border border-stone-300 dark:border-stone-700'}`}
+                      className={`rounded px-2 py-0.5 ${styleCopies === mode ? 'border border-transparent bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900' : 'border border-stone-300 dark:border-stone-700'}`}
                     >
                       {mode === 'look' ? 'Its look' : 'Its look and content'}
                     </button>
                   ))}
                 </div>
-              )}
-              {style && (
-                <label className="mt-1 flex items-center gap-3 text-sm">
-                  Strength
-                  <input type="range" min={0.1} max={1.5} step={0.1} value={styleStrength} onChange={(e) => setStyleStrength(Number(e.target.value))} className="w-48" />
-                  <span className="tabular-nums">{styleStrength.toFixed(1)}</span>
-                </label>
               )}
               <p className="gf-description">
                 Optional. Its look carries over its colour, texture and medium while the footage stays a landscape; its look and content also brings its buildings, figures and objects into the scene.
