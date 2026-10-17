@@ -13,7 +13,8 @@ import { handleDeviceOrientationPermissions, isTouchDevice, shuffle } from '../u
 import dreams from '../dreams.json'
 import { Play, FileText, CircleNotch } from '@phosphor-icons/react'
 import { useHistorySync } from '../utils/use-history-sync'
-import { useSwapInput } from '../utils/swap-dream'
+import { useSwapInput } from '../utils/swap-gesture'
+import Cursor from '../components/cursor'
 import SwapStylePicker from '../components/swap-style-picker'
 
 // How long buffering has to last before offering the YouTube escape hatch.
@@ -94,6 +95,7 @@ function Root() {
     <>
       <KeyWhiteFilter />
       <SwapStylePicker />
+      <Cursor />
       <div className="fixed z-10 top-1 right-1 flex items-center gap-1 font-sans text-sm">
         <ThemeToggle />
         <a href="/about" className={linkClassName}>

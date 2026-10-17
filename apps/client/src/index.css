@@ -77,3 +77,22 @@ canvas {
   touch-action: none;
   overflow: hidden;
 }
+
+/* The custom cursor (components/cursor.tsx) replaces the native one on
+   devices with a precise, hovering pointer. media-chrome's controls set
+   their own cursor inside shadow DOM, so it needs its own variable. */
+.custom-cursor,
+.custom-cursor * {
+  cursor: none !important;
+  --media-cursor: none;
+}
+
+@keyframes cursor-nudge-left {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-3px); }
+}
+
+@keyframes cursor-nudge-right {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(3px); }
+}

@@ -1,5 +1,5 @@
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
-import { RefObject, useRef, useState } from 'react'
+import { RefObject, useRef } from 'react'
 import { VideoMaterial, VideoMaterialProps } from '../materials/video-material'
 import Polaroid from '../models/polaroid'
 import { isVideoPlaying } from '../utils'
@@ -11,12 +11,14 @@ import {
   Group,
   Mesh,
   Vector3,
+  Box3,
 } from 'three'
 import { suspend } from 'suspend-react'
-import { useCursor, useIntersect } from '@react-three/drei'
+import { useIntersect } from '@react-three/drei'
 import { SwapPhase, useStore } from '../store'
 import { commitSwap, fadeOutAudio } from '../utils/swap-dream'
 import { SWAP_ANIMATIONS } from '../utils/swap-poses'
+import { polaroidRect, swapDrag } from '../utils/swap-gesture'
 import { animated, config, useSpring } from '@react-spring/three'
 // eslint-disable-next-line import/named -- useIdle is a real export (confirmed at runtime); eslint-plugin-import's static resolver doesn't handle this package's minimal `exports` map correctly
 import { useIdle } from '@uidotdev/usehooks'
@@ -43,7 +45,15 @@ const AVATAR_SHARPEN = 1.2
 // The polaroid sits behind the avatar. Set on the swap group around it,
 // so swap rotations (a flip) turn it about its own centre.
 const POLAROID_Z = -1.0
+// Scale of the group the polaroid, avatar and lyrics sit in.
+const MAIN_SCALE = 1.1
 const SWAP_REST = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }
+// While dragged, the polaroid follows the pointer 1:1 sideways, tilting
+// into the drag (radians per world unit) and dipping a little, like a
+// photo held by one corner. Let go short of a swap and it eases back.
+const DRAG_TILT = 0.25
+const DRAG_DIP = 0.06
+const DRAG_RETURN = 0.15
 
 function Main(
   props: ThreeElements['group'] & {
@@ -66,9 +76,6 @@ function Main(
   const isMobile = useStore((state) => state.isMobile)
   const isTouch = useStore((state) => state.isTouch)
   const setGlobalPointer = useStore((state) => state.setGlobalPointer)
-  const requestSwap = useStore((state) => state.requestSwap)
-  const [polaroidHover, setPolaroidHover] = useState(false)
-  useCursor(polaroidHover)
   const colorScheme = useStore((state) => state.colorScheme)
   const dark = colorScheme === 'dark' ? 1 : 0
 
@@ -129,6 +136,11 @@ function Main(
   // out. Read from the store non-reactively, like everything else here.
   const swapProgressRef = useRef(0)
   const swapPhaseRef = useRef<SwapPhase>('idle')
+  // The drag offset actually applied, in CSS pixels (see swapDrag).
+  const dragOffsetRef = useRef(0)
+  // Scratch objects for projecting the photo's bounds to the screen.
+  const photoBox = useRef(new Box3())
+  const corner = useRef(new Vector3())
 
   const [{ scale }, scaleApi] = useSpring(() => ({
     scale: 0,
@@ -231,8 +243,22 @@ function Main(
     const animation = SWAP_ANIMATIONS[swapStyle]
     if (swapPhase !== swapPhaseRef.current) {
       if (swapPhase === 'out') fadeOutAudio(video)
+      if (swapPhase === 'loading') {
+        // Off-screen now; the next one comes in from rest.
+        swapDrag.committed = false
+        dragOffsetRef.current = 0
+      }
+
       swapPhaseRef.current = swapPhase
     }
+
+    if (swapDrag.active) dragOffsetRef.current = swapDrag.dx
+    else if (!swapDrag.committed)
+      dragOffsetRef.current = MathUtils.lerp(
+        dragOffsetRef.current,
+        0,
+        DRAG_RETURN
+      )
 
     let pose
     if (swapPhase === 'out') {
@@ -257,8 +283,46 @@ function Main(
 
     if (swapGroup.current) {
       const { x, y, z, rx, ry, rz } = pose ?? SWAP_REST
-      swapGroup.current.position.set(x, y, z + POLAROID_Z)
-      swapGroup.current.rotation.set(rx, ry, rz)
+      // `w` is the viewport's width at z = 0; the polaroid sits further
+      // back (and inside the 1.1x scaled group below), so a CSS pixel
+      // covers more world there. Scaled by depth so it tracks the pointer
+      // 1:1.
+      const cameraZ = state.camera.position.z
+      const depth = (cameraZ - POLAROID_Z * MAIN_SCALE) / cameraZ
+      const drag =
+        (dragOffsetRef.current * w * depth) / state.size.width / MAIN_SCALE
+      swapGroup.current.position.set(
+        x + drag,
+        y - Math.abs(drag) * DRAG_DIP,
+        z + POLAROID_Z
+      )
+      swapGroup.current.rotation.set(rx, ry, rz - drag * DRAG_TILT)
+    }
+
+    // The photo's bounds on screen, for the cursor and tap detection.
+    const photo = polaroidVisible.current
+      ? (polaroidIntersect as RefObject<Mesh>).current
+      : null
+    polaroidRect.visible = !!photo && !!dream && !resetting
+    if (photo && polaroidRect.visible) {
+      const box = photoBox.current.setFromObject(photo)
+      polaroidRect.left = polaroidRect.top = Infinity
+      polaroidRect.right = polaroidRect.bottom = -Infinity
+      for (let i = 0; i < 8; i++) {
+        corner.current
+          .set(
+            i & 1 ? box.max.x : box.min.x,
+            i & 2 ? box.max.y : box.min.y,
+            i & 4 ? box.max.z : box.min.z
+          )
+          .project(state.camera)
+        const sx = ((corner.current.x + 1) / 2) * state.size.width
+        const sy = ((1 - corner.current.y) / 2) * state.size.height
+        polaroidRect.left = Math.min(polaroidRect.left, sx)
+        polaroidRect.right = Math.max(polaroidRect.right, sx)
+        polaroidRect.top = Math.min(polaroidRect.top, sy)
+        polaroidRect.bottom = Math.max(polaroidRect.bottom, sy)
+      }
     }
 
     if (!isMobile && !isTouch) {
@@ -276,10 +340,11 @@ function Main(
   return (
     <group ref={main} {...props}>
       <animated.group
-        scale={1.1}
+        scale={MAIN_SCALE}
         position={polaroidPosition as unknown as Vector3}
       >
-        {/* Dreaming — clicking it swaps to the next dream. The swap
+        {/* Dreaming — dragging or tapping it swaps dreams (see
+            utils/swap-gesture.ts). The swap
             animation moves this outer group; the pointer tilt (above)
             turns the polaroid inside it. */}
         <group ref={swapGroup} position={[0, 0, POLAROID_Z]}>
@@ -287,12 +352,6 @@ function Main(
             intersectRef={polaroidIntersect as RefObject<Mesh>}
             name="polaroid"
             scale={0.35}
-            onClick={(e) => {
-              e.stopPropagation()
-              requestSwap(1)
-            }}
-            onPointerOver={() => setPolaroidHover(true)}
-            onPointerOut={() => setPolaroidHover(false)}
             passthroughMaterial={
               <videoMaterial
                 ref={polaroidMaterial}

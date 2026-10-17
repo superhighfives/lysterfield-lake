@@ -40,6 +40,16 @@ const easeInOutCubic = (t: number) =>
   t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
 // For `enter`, where p counts down: eases out as the polaroid settles.
 const settle = (p: number) => 1 - easeOutCubic(1 - p)
+// Overshoots rest by a little and comes back, like landing on a pile. For
+// `enter` too: 1 -> 0, briefly dipping below 0.
+const LAND_OVERSHOOT = 1.4
+const land = (p: number) => {
+  const t = 1 - p
+  return -(
+    LAND_OVERSHOOT * (t - 1) ** 2 +
+    (LAND_OVERSHOOT + 1) * (t - 1) ** 3
+  )
+}
 
 export const SWAP_ANIMATIONS: Record<SwapStyle, SwapAnimation> = {
   // Slides off one side with a slight tilt; the next slides in from the
@@ -95,7 +105,12 @@ export const SWAP_ANIMATIONS: Record<SwapStyle, SwapAnimation> = {
     },
     enter: (p, dir, w, h) => {
       const e = settle(p)
-      return { ...rest, x: dir * e * w * 0.15, y: e * h, rz: -dir * e * 0.4 }
+      return {
+        ...rest,
+        x: dir * e * w * 0.15,
+        y: land(p) * h,
+        rz: -dir * e * 0.4,
+      }
     },
   },
 }
