@@ -253,7 +253,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
     }
   }
 
-  const swatch = (selected: boolean) => `h-14 w-14 overflow-hidden rounded ${selected ? 'ring-2 ring-stone-900 dark:ring-stone-100 ring-offset-2 dark:ring-offset-stone-950' : 'opacity-80 hover:opacity-100'}`
+  const swatch = (selected: boolean) => `h-20 w-20 overflow-hidden rounded ${selected ? 'ring-2 ring-stone-900 dark:ring-stone-100 ring-offset-2 dark:ring-offset-stone-950' : 'opacity-80 hover:opacity-100'}`
 
   return (
     <section className="mb-14">
@@ -299,12 +299,8 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
                 {options.colours.map((c) => (
                   <PaletteSwatch key={c} src={colourUrl(c)} name={c} onClick={() => setColour(c)} className={swatch(colour === c)} />
                 ))}
-                <label className="flex h-14 w-14 cursor-pointer items-center justify-center rounded border border-dashed border-stone-400 dark:border-stone-600 px-1 text-center text-[10px] leading-tight hover:bg-white dark:hover:bg-stone-900">
-                  + your own
-                  <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => upload(e.target)} />
-                </label>
               </div>
-              <p className="gf-description">{uploadError ? <span className="text-red-700 dark:text-red-300">{uploadError}</span> : 'Every frame is colour-matched to the image you pick: its main colours, in proportion.'}</p>
+              <p className="gf-description">Every frame is colour-matched to the image you pick: its main colours, in proportion. Hover to see the image.</p>
             </div>
             <div className="gf-field" style={{ cursor: 'default' }}>
               <span className="gf-label">Style</span>
@@ -326,8 +322,22 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
                 </label>
               )}
               <p className="gf-description">
-                Optional. Every frame borrows the picked image&apos;s look and imagery, not just its colours. Around 0.6 keeps the footage&apos;s landscape; 1.0 and up lets the image take over. Add an image with + your own under Colours.
+                Optional. Every frame borrows the picked image&apos;s look and imagery, not just its colours. Around 0.6 keeps the footage&apos;s landscape; 1.0 and up lets the image take over.
               </p>
+            </div>
+          </GridForm.Row>
+          <GridForm.Row>
+            {/* One image library feeds both pickers, so adding an image lives here rather than under either. */}
+            <div className="gf-field" style={{ cursor: 'default' }}>
+              <span className="gf-label">Images</span>
+              <div className="gf-control flex items-center gap-3 py-1">
+                <label className="cursor-pointer rounded border border-dashed border-stone-400 px-3 py-1.5 text-sm hover:bg-white dark:border-stone-600 dark:hover:bg-stone-900">
+                  + Add an image
+                  <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => upload(e.target)} />
+                </label>
+                <span className="text-sm text-stone-600 dark:text-stone-400">It appears in both Colours and Style.</span>
+              </div>
+              {uploadError && <p className="gf-description text-red-700 dark:text-red-300">{uploadError}</p>}
             </div>
           </GridForm.Row>
         </GridForm.Section>

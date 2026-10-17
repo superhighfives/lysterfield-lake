@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 // matches every frame's whole colour distribution to the reference (histogram
 // matching, helpers/colors.py), so what carries over is how much of each colour
 // there is, not just which colours appear: the bands are its main colours, each
-// as wide as the share of the image it covers, with the picture small in the corner.
+// as wide as the share of the image it covers, with the picture small in the corner and in full on hover.
 
 type Band = { colour: string; share: number }
 const cache = new Map<string, Promise<Band[]>>()
@@ -73,17 +73,19 @@ function usePalette(src: string): Band[] | null {
   return bands
 }
 
-/** A colour reference's swatch: its colour bands, with the picture small in the bottom-right corner. */
+/** A colour reference's swatch: its colour bands, with the picture small in the bottom-right corner, and in full on hover. */
 export function PaletteSwatch({ src, name, className, onClick }: { src: string; name: string; className: string; onClick: () => void }) {
   const bands = usePalette(src)
   return (
-    <button type="button" title={name} onClick={onClick} className={`${className} relative`}>
+    <button type="button" title={name} onClick={onClick} className={`${className} group relative`}>
       <span className="flex h-full w-full">
         {(bands ?? []).map((b, i) => (
           <span key={i} style={{ background: b.colour, flexGrow: b.share }} className="h-full" />
         ))}
       </span>
-      <img src={src} alt={name} className="absolute bottom-1 right-1 h-1/3 w-1/3 rounded-sm border border-white/80 object-cover shadow" />
+      <img src={src} alt="" className="absolute bottom-1 right-1 h-1/3 w-1/3 rounded-sm border border-white/80 object-cover shadow transition-opacity duration-150 group-hover:opacity-0" />
+      {/* The whole picture on hover. */}
+      <img src={src} alt={name} className="absolute inset-0 h-full w-full rounded object-cover opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
     </button>
   )
 }
