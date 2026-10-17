@@ -70,6 +70,12 @@ export interface BackgroundVideoResult {
  * Bria keeps whatever's in panel 2, so a stray frame there becomes a
  * glitch here. `planOnly` runs the free checks and prints the plan and cost
  * without spending anything.
+ *
+ * Untested against Bria and R2 (2026-10-16): full-video's panel 3 was made
+ * by hand with the spike scripts, and this step is that same process. The
+ * planning, masks, inputs and blend are tested (it reproduces full-video's
+ * panel 3 from the spike's chunk outputs); the upload, the Bria call and
+ * the delete haven't run yet. Try it first on a single chunk.
  */
 export async function backgroundVideo(
   job: Job,

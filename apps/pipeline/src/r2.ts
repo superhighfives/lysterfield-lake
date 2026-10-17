@@ -11,6 +11,8 @@ import { S3Client } from 'bun'
  * `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (an R2 API token with object
  * read and write on the bucket), `R2_BUCKET`, and `R2_PUBLIC_URL` (the
  * bucket's `https://pub-<hash>.r2.dev` address).
+ *
+ * Not yet run against a real bucket (the spike uploaded by hand).
  */
 const ENV = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET', 'R2_PUBLIC_URL'] as const
 

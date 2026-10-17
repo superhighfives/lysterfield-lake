@@ -1,11 +1,67 @@
 ---
 title: Port the Bria video-erase panel 3 approach into apps/pipeline
-status: In Progress
+status: Complete
 created: 2026-10-09
 updated: 2026-10-16
 ---
 
 # Port the Bria video-erase panel 3 approach into `apps/pipeline`
+
+## Overview
+
+`background-video` makes panel 3 from Bria's video object eraser: panel 2
+in overlapping 5s chunks with the person masked out, crossfaded back into
+`3-background/frames`. It's the process used by hand for `.jobs/full-video`
+(phase 4e), written down as a pipeline step so the next job doesn't need
+the spike scripts.
+
+**Untested against Bria and R2.** Everything free was tested: the chunk
+plan matches the spike's 55 chunks for full-video, the panel 2 checks find
+the real cut and a planted stray, the inputs encode correctly, and blending
+the spike's chunk outputs reproduces full-video's approved panel 3 (only
+frame 0142 differs, which was hand-replaced). The upload, the Bria call and
+the delete have never run. The first real run should be one chunk
+(`--chunks c000`, about $0.25), checking that Bria reads the r2.dev URLs and
+that the inputs are gone from the bucket afterwards.
+
+## Architecture
+
+- `src/steps/background-video.ts`: the step. `planChunks` (pure), the free
+  panel 2 checks, chunk inputs piped as raw frames into ffmpeg, the run per
+  chunk, and the blend.
+- `src/r2.ts`: upload and delete against a public r2.dev bucket via Bun's
+  `S3Client`. `@types/bun` was added and `bun` added to `tsconfig` types
+  for it; the pipeline already ran under Bun.
+- `models.ts`: `backgroundVideo`, pinned to the version the spike used
+  (still Bria's latest on 2026-10-16).
+- `job.ts`: `cuts`, the first frame of each new shot.
+- `mask.ts`: `dilate` exported for the temporal mask.
+- CLI: `background-video`, with `--plan true` (checks and cost only) and
+  `--chunks` (run only these).
+
+Deviations from the spike, and why:
+
+- **Crossfade weights generalised.** Each covering chunk is weighted by its
+  distance from its nearest end. For two chunks that's exactly the spike's
+  linear crossfade, but it also handles a frame in three chunks, which the
+  even spacing allows for some shot lengths (a ~220-frame shot at 24fps
+  plans chunks 50 frames apart). The spike would have thrown there.
+- **Prediction state saved per chunk** through `runModelToFileResumable`,
+  rather than the spike's bare `predictions.create`, so a crashed run picks
+  its predictions back up instead of paying again.
+- **Same R2 keys every run** (a random prefix saved in `plan.json`), so
+  inputs a crashed run left behind are overwritten and deleted next time.
+- **Cut and stray checks** are new. Thresholds use the median step, not
+  mean and spread, because in a short clip one stray raised the spread
+  enough to hide itself. A cut must also be 4× both neighbouring steps:
+  fast arms on full-video (~2023) were a run of big steps, while the real
+  cut at 3770 was 0.17 against neighbours under 0.01.
+- **Plan guard.** The plan is replanned freely until a chunk has run
+  against it; after that a change in frames or cuts is refused. `--plan
+  true` never saves it.
+- **Blend is sequential**, decoding chunks only while needed instead of all
+  up front: 9 min for the full song against the spike's ~5, but it uses far
+  less disk. Fine for 5s loops.
 
 ## Goal
 
@@ -78,6 +134,6 @@ to `background-plate` + `background-stabilize` that writes the same
 - [x] Blend the spike's chunk outputs and compare with full-video's approved
       panel 3: identical except frame 0142 (hand-replaced in the spike).
       9 min for 5,156 frames, sequential; fine for 5s loops
-- [ ] R2 bucket and credentials in `apps/pipeline/.env` (user)
-- [ ] First paid run on the 5s loop job (~$0.25), checking Bria reads the
-      R2 URLs and the inputs are gone afterwards
+- Not done, by choice: R2 credentials and a first paid run. Panel 3 for
+  full-video already exists, so the step was written down as the process
+  and left untested against Bria and R2 for now.
