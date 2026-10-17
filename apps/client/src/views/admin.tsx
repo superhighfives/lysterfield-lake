@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertDialog } from '@base-ui/react/alert-dialog'
+import { Dialog } from '@base-ui/react/dialog'
 import { GridForm } from 'formulaire-ui'
 import formulaireCss from 'formulaire-ui/styles.css?raw'
 import ThemeToggle from '../components/theme-toggle.tsx'
@@ -45,6 +46,68 @@ type DeforumOptions = { presets: Record<string, Preset>; colours: string[] }
 type StyleCopies = 'look' | 'look-and-content'
 /** Each style mode's default strength: look only can go stronger before the image takes over. */
 const STYLE_STRENGTH: Record<StyleCopies, number> = { look: 1.0, 'look-and-content': 0.6 }
+/** A sample's loop is about a second of the dream at its real 12 frames a second: slowed down so the motion can be followed. Playback only; the dream itself keeps its speed. */
+const SAMPLE_PLAYBACK_RATE = 0.5
+
+/** Sets a sample loop's speed once its video is there, and again once it has loaded (loading resets it). */
+const slowed = (v: HTMLVideoElement | null) => {
+  if (v) v.playbackRate = SAMPLE_PLAYBACK_RATE
+}
+
+type LightboxItem = { src: string; label: string; poster?: string; video?: boolean }
+
+/**
+ * Shows one of `items` full size (a video loops, at the same slowed speed as the samples). Left and right step
+ * through them (wrapping round); a click or Escape closes it. `index` is the one shown, or null when closed.
+ */
+function Lightbox({ items, index, onIndex }: { items: LightboxItem[]; index: number | null; onIndex: (index: number | null) => void }) {
+  const item = index === null ? undefined : items[index]
+  const step = (by: number) => index !== null && onIndex((index + by + items.length) % items.length)
+  return (
+    <Dialog.Root open={item !== undefined} onOpenChange={(open) => !open && onIndex(null)}>
+      <Dialog.Portal>
+        <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/80" />
+        <Dialog.Popup
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') step(-1)
+            if (e.key === 'ArrowRight') step(1)
+          }}
+          className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 font-sans text-stone-100 outline-none"
+        >
+          {item && index !== null && (
+            <>
+              <Dialog.Close title="Close" className="block cursor-zoom-out rounded outline-none focus-visible:ring-2 focus-visible:ring-stone-300">
+                {item.video ? (
+                  <video key={item.src} ref={slowed} onLoadedData={(e) => slowed(e.currentTarget)} src={item.src} poster={item.poster} autoPlay loop muted playsInline className="max-h-[85vh] max-w-[calc(100vw-2rem)] rounded" />
+                ) : (
+                  <img src={item.src} alt="" className="max-h-[85vh] max-w-[calc(100vw-2rem)] rounded" />
+                )}
+              </Dialog.Close>
+              <div className="mt-2 flex justify-between gap-4 text-sm text-stone-300">
+                <Dialog.Title>{item.label}</Dialog.Title>
+                {items.length > 1 && (
+                  <span className="tabular-nums text-stone-400">
+                    {index + 1} of {items.length} · ← →
+                  </span>
+                )}
+              </div>
+            </>
+          )}
+        </Dialog.Popup>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
+}
+
+/** Two arrows pointing out to opposite corners: "show this bigger". */
+function ExpandIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden>
+      <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" />
+    </svg>
+  )
+}
+
 type NewTake = { name: string; prompt: string; colour: string | null; style: string | null; styleStrength: number; styleCopies: StyleCopies; preset: string; negative: string; seed?: number }
 
 // Rough Replicate cost and time for each paid stage of a Deforum take (L40S with xformers, ~8s a dream frame), before retries.
@@ -190,6 +253,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
   /** Style reference (IP-Adapter): its look (and optionally its content), not just its colours. None by default. */
   const [style, setStyle] = useState<string | null>(null)
   const [styleCopies, setStyleCopies] = useState<StyleCopies>('look')
+  const [shownStyle, setShownStyle] = useState<number | null>(null)
   const [styleStrength, setStyleStrength] = useState(STYLE_STRENGTH.look)
   const [name, setName] = useState('')
   const [negative, setNegative] = useState('')
@@ -311,11 +375,19 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
                 <button type="button" onClick={() => setStyle(null)} className={`${swatch(style === null)} border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-[10px] leading-tight`}>
                   none
                 </button>
-                {options.colours.map((c) => (
-                  <button key={c} type="button" title={c} onClick={() => setStyle(c)} className={swatch(style === c)}>
-                    <img src={colourUrl(c)} alt={c} className="h-full w-full object-cover" />
-                  </button>
+                {options.colours.map((c, i) => (
+                  <div key={c} className="relative">
+                    <button type="button" title={c} onClick={() => setStyle(c)} className={swatch(style === c)}>
+                      <img src={colourUrl(c)} alt={c} className="h-full w-full object-cover" />
+                    </button>
+                    {style === c && (
+                      <button type="button" title="Show full size" onClick={() => setShownStyle(i)} className="absolute right-1.5 top-1.5 rounded bg-black/60 p-1 text-white hover:bg-black/80">
+                        <ExpandIcon />
+                      </button>
+                    )}
+                  </div>
                 ))}
+                <Lightbox items={options.colours.map((c) => ({ src: colourUrl(c), label: c }))} index={shownStyle} onIndex={setShownStyle} />
                 {/* Inside the image grid: as the field's own child, the grid places it beside the label and pushes the images down. */}
                 {style && (
                   <label className="col-span-4 mt-1 flex items-center gap-3 text-sm">
@@ -411,6 +483,8 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
   const allSamples = take.samples.length >= samples.length
   const isDeforum = take.method === 'deforum'
   const sample = (frame: number, ext: string) => jobFile(job, `7-dreams/${take.id}/samples/${pad(frame)}.${ext}`)
+  const madeSamples = samples.filter((s) => take.samples.includes(s.frame))
+  const [shownSample, setShownSample] = useState<number | null>(null)
   const progress = mine?.log.match(/Dream frames: (\d+) of (\d+) done(?![\s\S]*Dream frames:)/)
   const primary = 'rounded bg-stone-900 dark:bg-stone-100 px-3 py-1.5 text-sm font-medium text-white dark:text-stone-900 disabled:opacity-40'
   const approve = 'rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800'
@@ -521,7 +595,9 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
                 {!take.samples.includes(s.frame) ? (
                   <div className="flex aspect-square w-full items-center justify-center rounded border border-dashed border-stone-300 dark:border-stone-700 text-xs text-stone-400 dark:text-stone-500">{working ? 'Generating…' : 'Not made yet'}</div>
                 ) : isDeforum ? (
-                  <video src={sample(s.frame, 'mp4')} poster={sample(s.frame, 'jpg')} autoPlay loop muted playsInline className="aspect-square w-full rounded object-cover" />
+                  <button type="button" title="Show full size" onClick={() => setShownSample(madeSamples.findIndex((m) => m.frame === s.frame))} className="block w-full cursor-zoom-in">
+                    <video ref={slowed} onLoadedData={(e) => slowed(e.currentTarget)} src={sample(s.frame, 'mp4')} poster={sample(s.frame, 'jpg')} autoPlay loop muted playsInline className="aspect-square w-full rounded object-cover" />
+                  </button>
                 ) : (
                   <img src={sample(s.frame, 'jpg')} alt="" className="aspect-square w-full rounded object-cover" />
                 )}
@@ -530,6 +606,9 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
               <figcaption className="mt-1 text-xs text-stone-500 dark:text-stone-400">{s.label}</figcaption>
             </figure>
           ))}
+          {isDeforum && (
+            <Lightbox items={madeSamples.map((m) => ({ src: sample(m.frame, 'mp4'), poster: sample(m.frame, 'jpg'), label: m.label, video: true }))} index={shownSample} onIndex={setShownSample} />
+          )}
         </div>
       )}
 
