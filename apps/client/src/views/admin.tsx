@@ -6,6 +6,7 @@ import ThemeToggle from '../components/theme-toggle.tsx'
 import { useStore } from '../store.ts'
 import { active, api, jobFile, pad, reason, runAction, type Task } from './admin-api.ts'
 import { priced, RunOnContext, RunOnSwitch, useRunOn, type GpuStatus, type RunOn } from './admin-run-on.tsx'
+import { PaletteSwatch } from './admin-palette.tsx'
 import { Tasks } from './admin-tasks.tsx'
 import { PersonCheck, type CheckSummary } from './admin-person-check.tsx'
 
@@ -231,7 +232,7 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
 
   const id = name.replace(/^-+|-+$/g, '')
   const taken = existing.includes(id)
-  const ready = prompt.trim() !== '' && id !== '' && !taken && preset !== '' && !creating
+  const ready = (prompt.trim() !== '' || style !== null) && id !== '' && !taken && preset !== '' && !creating
   const submit = async () => {
     if (!ready) return
     setCreating(true)
@@ -271,8 +272,16 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
       <GridForm.Root density="comfortable" onFormSubmit={submit}>
         <GridForm.Section legend="The look">
           <GridForm.Row>
-            <GridForm.Field name="prompt" label="Prompt" description="Describe a landscape only, never a person. The shape of the person in the footage becomes part of the scene.">
-              <GridForm.Textarea required rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+            <GridForm.Field
+              name="prompt"
+              label="Prompt"
+              description={
+                style
+                  ? 'Optional with a style image: leave it empty and the image leads. If you write one, describe a landscape only, never a person.'
+                  : 'Describe a landscape only, never a person. The shape of the person in the footage becomes part of the scene.'
+              }
+            >
+              <GridForm.Textarea required={style === null} rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
             </GridForm.Field>
           </GridForm.Row>
           <GridForm.Row>
@@ -284,16 +293,14 @@ function NewDream({ options, existing, onCreate, onUploaded }: {
                   from the footage
                 </button>
                 {options.colours.map((c) => (
-                  <button key={c} type="button" title={c} onClick={() => setColour(c)} className={swatch(colour === c)}>
-                    <img src={colourUrl(c)} alt={c} className="h-full w-full object-cover" />
-                  </button>
+                  <PaletteSwatch key={c} src={colourUrl(c)} name={c} onClick={() => setColour(c)} className={swatch(colour === c)} />
                 ))}
                 <label className="flex h-14 w-14 cursor-pointer items-center justify-center rounded border border-dashed border-stone-400 dark:border-stone-600 px-1 text-center text-[10px] leading-tight hover:bg-white dark:hover:bg-stone-900">
                   + your own
                   <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => upload(e.target)} />
                 </label>
               </div>
-              <p className="gf-description">{uploadError ? <span className="text-red-700 dark:text-red-300">{uploadError}</span> : 'Every frame is colour-matched to the image you pick.'}</p>
+              <p className="gf-description">{uploadError ? <span className="text-red-700 dark:text-red-300">{uploadError}</span> : 'Every frame is colour-matched to the image you pick: its main colours, in proportion. Hover to see the image.'}</p>
             </div>
           </GridForm.Row>
           <GridForm.Row>

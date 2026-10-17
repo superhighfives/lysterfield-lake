@@ -59,6 +59,12 @@ export interface TakeConfig {
 }
 
 const DEFAULT_STEP_FPS = 6
+/**
+ * The prompt for a Deforum take with a style image and no prompt of its own. Deforum always needs
+ * some text (every frame is diffused with it, and its CLIP guidance pulls towards it), so this is a
+ * plain landscape that leaves the look to the style image.
+ */
+export const STYLE_ONLY_PROMPT = 'a beautiful landscape, detailed, soft light'
 const DEFAULT_SEED = 42
 
 function takePath(job: Job, take: string): string {
@@ -98,9 +104,11 @@ export async function createTake(
   }
 ): Promise<TakeConfig> {
   if (await loadTake(job, take)) throw new Error(`Take "${take}" already exists — pick a new name.`)
-  if (init.method === 'deforum') assertLandscapePrompt(init.prompt)
+  const prompt = init.prompt.trim() || (init.method === 'deforum' && init.style ? STYLE_ONLY_PROMPT : '')
+  if (!prompt) throw new Error('A take needs a prompt (or, for Deforum, a style image).')
+  if (init.method === 'deforum') assertLandscapePrompt(prompt)
   return saveTake(job, take, {
-    prompt: init.prompt,
+    prompt,
     seed: init.seed ?? DEFAULT_SEED,
     stepFps: init.stepFps ?? job.stepFps ?? DEFAULT_STEP_FPS,
     status: 'proposed',
