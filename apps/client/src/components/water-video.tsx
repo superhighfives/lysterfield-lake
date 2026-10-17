@@ -3,8 +3,8 @@ import { MutableRefObject, useEffect, useRef, useState } from 'react'
 // The welcome screen's title loop, drawn through a small WebGL canvas so
 // it can be disturbed like water: moving the pointer over it drops ripples
 // where it goes, and the start button drives it through a handle
-// (useWater): a big splash from the centre on hover, gentle rings for as
-// long as it's hovered, and a "dive" into the lake when it's pressed —
+// (useWater): a big splash from the centre on hover, and a "dive" into the
+// lake when it's pressed —
 // one huge splash as the title swells, blurs and fades away.
 //
 // Rings bend the title and also shade the paper around it a little, so
@@ -28,11 +28,8 @@ const WIDTH = 0.06
 const AMOUNT = 0.022
 const DROP_SECONDS = 2.2
 const SHADE = 0.05
-// The button's ripples: the hover splash, the rings while it's held
-// (every RAIN_MS), and the dive's splash.
+// The button's ripples: the hover splash, and the dive's.
 const HOVER_STRENGTH = 3.5
-const RAIN_STRENGTH = 1.2
-const RAIN_MS = 650
 const DIVE_STRENGTH = 7
 /** How long the dive takes, before the scene should replace this. */
 export const DIVE_MS = 900
@@ -79,7 +76,7 @@ void main() {
 type Drop = { x: number; y: number; born: number; strength: number }
 
 export type WaterHandle = {
-  /** A big splash from the centre, then gentle rings until hover(false). */
+  /** A big splash from the centre (once, on hover). */
   hover: (on: boolean) => void
   /** One huge splash as the title swells, blurs and fades away. */
   dive: () => void
@@ -167,20 +164,12 @@ function WaterVideo({
       if (drops.length > MAX_DROPS) drops.shift()
     }
 
-    let rain = 0
     if (handle)
       handle.current = {
         hover: (on) => {
-          window.clearInterval(rain)
-          if (!on || reducedMotion()) return
-          addDrop(0.5, 0.5, HOVER_STRENGTH)
-          rain = window.setInterval(
-            () => addDrop(0.5, 0.5, RAIN_STRENGTH),
-            RAIN_MS
-          )
+          if (on && !reducedMotion()) addDrop(0.5, 0.5, HOVER_STRENGTH)
         },
         dive: () => {
-          window.clearInterval(rain)
           if (!reducedMotion()) addDrop(0.5, 0.5, DIVE_STRENGTH)
           setDiving(true)
         },
@@ -236,7 +225,6 @@ function WaterVideo({
 
     return () => {
       cancelAnimationFrame(frame)
-      window.clearInterval(rain)
       window.removeEventListener('pointermove', handleMove)
       if (handle) handle.current = null
       gl.deleteTexture(texture)

@@ -19,6 +19,17 @@ export type SwapDirection = 1 | -1
 export const SWAP_STYLES = ['drop', 'slide', 'flip'] as const
 export type SwapStyle = (typeof SWAP_STYLES)[number]
 
+// The choose screen's carousel: the fan (components/slider.tsx), or one
+// of the experiments in components/carousels/. Picked with ?carousel= or
+// the dev picker.
+export const CAROUSEL_STYLES = ['fan', 'stack', 'scatter', 'lake', 'hand'] as const
+export type CarouselStyle = (typeof CAROUSEL_STYLES)[number]
+
+function initialCarouselStyle(): CarouselStyle {
+  const param = new URLSearchParams(location.search).get('carousel')
+  return CAROUSEL_STYLES.find((style) => style === param) ?? 'fan'
+}
+
 function initialSwapStyle(): SwapStyle {
   const param = new URLSearchParams(location.search).get('swap')
   return SWAP_STYLES.find((style) => style === param) ?? 'drop'
@@ -58,6 +69,7 @@ export interface AppState {
   swapPhase: SwapPhase
   swapDirection: SwapDirection
   swapStyle: SwapStyle
+  carouselStyle: CarouselStyle
   setDream: (dream: Dream | null) => void
   setResetting: (resetting: boolean) => void
   setSeeking: (seeking: boolean) => void
@@ -81,6 +93,7 @@ export interface AppState {
   requestSwap: (direction: SwapDirection) => void
   setSwapPhase: (swapPhase: SwapPhase) => void
   setSwapStyle: (swapStyle: SwapStyle) => void
+  setCarouselStyle: (carouselStyle: CarouselStyle) => void
 }
 
 export const useStore = create<AppState>()((set) => ({
@@ -106,6 +119,7 @@ export const useStore = create<AppState>()((set) => ({
   swapPhase: 'idle',
   swapDirection: 1,
   swapStyle: initialSwapStyle(),
+  carouselStyle: initialCarouselStyle(),
   setDream: (dream: Dream | null) => set({ dream }),
   setResetting: (resetting: boolean) => {
     set(() => ({ resetting }))
@@ -146,4 +160,6 @@ export const useStore = create<AppState>()((set) => ({
     ),
   setSwapPhase: (swapPhase: SwapPhase) => set(() => ({ swapPhase })),
   setSwapStyle: (swapStyle: SwapStyle) => set(() => ({ swapStyle })),
+  setCarouselStyle: (carouselStyle: CarouselStyle) =>
+    set(() => ({ carouselStyle })),
 }))

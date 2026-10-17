@@ -1,21 +1,19 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useMemo, useRef, useState } from 'react'
+ 
+import { useEffect, useMemo, useRef } from 'react'
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
-import { Euler, MathUtils, Mesh, MeshBasicMaterial, Vector3 } from 'three'
+import { MathUtils, Mesh, MeshBasicMaterial, Vector3 } from 'three'
 import type { Dream } from '../utils/types'
-import Polaroid from '../models/polaroid'
-import { PolaroidMaterial } from '../materials/polaroid-material'
 import {
-  useCursor,
   useIntersect,
   useScroll,
   useTexture,
   useVideoTexture,
-  Text,
 } from '@react-three/drei'
-import { animated, useSpring, config, a } from '@react-spring/three'
+import { animated, useSpring, config } from '@react-spring/three'
 import { useStore } from '../store'
 import Slider from '../components/slider'
+import DreamCard from '../components/dream-card'
+import { CAROUSELS } from '../components/carousels'
 import dreams from '../dreams.json'
 
 // Warms suspend-react's cache (the mechanism behind every useTexture call in
@@ -58,6 +56,8 @@ const CAROUSEL_MIN_SCALE = 0.6
 
 function Choose(props: ThreeElements['group']) {
   const collection = useStore((state) => state.collection)
+  const carouselStyle = useStore((state) => state.carouselStyle)
+  const Experiment = carouselStyle === 'fan' ? null : CAROUSELS[carouselStyle]
   const isMobile = useStore((state) => state.isMobile)
   const dream = useStore((state) => state.dream)
   const setDream = useStore((state) => state.setDream)
@@ -274,10 +274,6 @@ function Choose(props: ThreeElements['group']) {
     }
   }
 
-  const PolaroidShaderWrapper = a(({ ...props }) => (
-    <polaroidMaterial {...props} />
-  ))
-
   return (
     <group {...props}>
       {/* Title */}
@@ -332,101 +328,23 @@ function Choose(props: ThreeElements['group']) {
         position={polaroidPosition as unknown as Vector3}
         scale={carouselScale}
       >
-        <Slider
-          items={doubledCollection}
-          isDragging={isDragging}
-          width={POLAROID_WIDTH}
-          visible={collection.length * 2 - 1}
-        >
-          {(dream: Dream) => {
-            const textureImage = useTexture(`/assets/${dream.id}/hero.jpg`)
-            const [hover, setHover] = useState(false)
-            useCursor(hover)
-
-            // Was React state polled every frame via useFrame — size only
-            // actually changes on window resize, and this whole block runs
-            // once per visible card (up to ~20), so that was up to 20
-            // useFrame subscriptions each calling two setStates 60x/sec.
-            // useThree's selector already only re-renders on a real resize.
-            const { width: canvasWidth, height: canvasHeight } = useThree(
-              (state) => state.size
-            )
-            const size = [canvasWidth, canvasHeight]
-            const aspect =
-              canvasWidth > canvasHeight
-                ? [1, canvasWidth / canvasHeight]
-                : [canvasHeight / canvasWidth, 1]
-
-            const { uHover: hoverAmount } = useSpring({
-              uHover: hover ? 1.0 : 0.0,
-              config: { ...config.molasses, precision: 0.0000001 },
-            })
-
-            const { scale: scaleAmount } = useSpring({
-              scale: hover ? 0.12 : 0.1,
-              config: { ...config.molasses, precision: 0.0000001 },
-            })
-
-            const { rotation: rotationAmount } = useSpring({
-              rotation: hover ? [-0.25, 0, 0] : [0, 0, 0],
-              config: { ...config.molasses, precision: 0.0000001 },
-            })
-
-            return (
-              <animated.group
-                key={dream.id}
-                rotation={rotationAmount as unknown as Euler}
-                scale={scaleAmount}
-              >
-                <Polaroid
-                  layered
-                  onPointerOver={(e) => {
-                    e.stopPropagation()
-                    setHover(true)
-                  }}
-                  onPointerOut={(e) => {
-                    e.stopPropagation()
-                    setHover(false)
-                  }}
-                  onClick={(e) => handleClick(e as any, dream)}
-                  passthroughMaterial={
-                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                    //@ts-ignore: https://github.com/pmndrs/react-spring/issues/1515 */}
-                    <PolaroidShaderWrapper
-                      key={PolaroidMaterial.key}
-                      uTexture={textureImage}
-                      uSize={size}
-                      uAspect={aspect}
-                      uHover={hoverAmount}
-                    />
-                  }
-                />
-                <group position={[-1.55, -1.75, 0.1]}>
-                  <Text
-                    scale={0.25}
-                    font="/fonts/redaction/Redaction_35-Italic.ttf"
-                    color={dark ? 'white' : 'black'}
-                    fillOpacity={0.8}
-                    anchorX="left"
-                    anchorY="middle"
-                  >
-                    {dream.title}
-                  </Text>
-                  <Text
-                    scale={0.115}
-                    position={[0, -0.25, 0]}
-                    font="/fonts/space-mono/SpaceMono-Regular.ttf"
-                    color={dark ? '#78716c' : '#bbb'}
-                    anchorX="left"
-                    anchorY="middle"
-                  >
-                    {`"${dream.prompt}"`}
-                  </Text>
-                </group>
-              </animated.group>
-            )
-          }}
-        </Slider>
+        {Experiment ? (
+          <Experiment items={collection} onSelect={setDream} />
+        ) : (
+          <Slider
+            items={doubledCollection}
+            isDragging={isDragging}
+            width={POLAROID_WIDTH}
+            visible={collection.length * 2 - 1}
+          >
+            {(dream: Dream) => (
+              <DreamCard
+                dream={dream}
+                onSelect={(e) => handleClick(e as unknown as Event, dream)}
+              />
+            )}
+          </Slider>
+        )}
       </animated.group>
     </group>
   )

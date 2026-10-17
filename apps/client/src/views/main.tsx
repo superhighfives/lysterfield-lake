@@ -520,8 +520,8 @@ function Main(
             utils/swap-gesture.ts). The swap
             animation moves this outer group; the pointer tilt (above)
             turns the polaroid inside it. */}
-        {/* The dream's colour, glowing out from behind the polaroid */}
-        <DreamGlow video={videoElement} fade={fadeRef} />
+        {/* The dream, spilling out from behind the polaroid */}
+        <DreamGlow video={videoElement} texture={texture} fade={fadeRef} />
 
         <group ref={swapGroup} position={[0, 0, POLAROID_Z]}>
           <Polaroid
