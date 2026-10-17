@@ -45,6 +45,8 @@ type DeforumOptions = { presets: Record<string, Preset>; colours: string[] }
 type StyleCopies = 'look' | 'look-and-content'
 /** Each style mode's default strength: look only can go stronger before the image takes over. */
 const STYLE_STRENGTH: Record<StyleCopies, number> = { look: 1.0, 'look-and-content': 0.6 }
+/** A sample's loop is about a second of the dream at its real 12 frames a second: slowed down so the motion can be followed. Playback only; the dream itself keeps its speed. */
+const SAMPLE_PLAYBACK_RATE = 0.5
 type NewTake = { name: string; prompt: string; colour: string | null; style: string | null; styleStrength: number; styleCopies: StyleCopies; preset: string; negative: string; seed?: number }
 
 // Rough Replicate cost and time for each paid stage of a Deforum take (L40S with xformers, ~8s a dream frame), before retries.
@@ -525,7 +527,7 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
                 {!take.samples.includes(s.frame) ? (
                   <div className="flex aspect-square w-full items-center justify-center rounded border border-dashed border-stone-300 dark:border-stone-700 text-xs text-stone-400 dark:text-stone-500">{working ? 'Generating…' : 'Not made yet'}</div>
                 ) : isDeforum ? (
-                  <video src={sample(s.frame, 'mp4')} poster={sample(s.frame, 'jpg')} autoPlay loop muted playsInline className="aspect-square w-full rounded object-cover" />
+                  <video ref={(v) => { if (v) v.playbackRate = SAMPLE_PLAYBACK_RATE }} onLoadedData={(e) => (e.currentTarget.playbackRate = SAMPLE_PLAYBACK_RATE)} src={sample(s.frame, 'mp4')} poster={sample(s.frame, 'jpg')} autoPlay loop muted playsInline className="aspect-square w-full rounded object-cover" />
                 ) : (
                   <img src={sample(s.frame, 'jpg')} alt="" className="aspect-square w-full rounded object-cover" />
                 )}
