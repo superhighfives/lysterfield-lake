@@ -1,4 +1,4 @@
-import { CanvasTexture, LinearFilter } from 'three'
+import { CanvasTexture, LinearFilter, Vector2 } from 'three'
 
 // The cursor's wake, as if it were dragged through water: a small
 // screen-shaped height map where the pointer has been, fading as it
@@ -11,15 +11,18 @@ import { CanvasTexture, LinearFilter } from 'three'
 // of the clearing wash per frame), and a stroke's radius as a share of the
 // canvas width, at rest and at full speed.
 const TRAIL_SIZE = 160
-const SETTLE = 0.08
-const RADIUS = 0.035
-const RADIUS_FAST = 0.07
+const SETTLE = 0.05
+const RADIUS = 0.08
+const RADIUS_FAST = 0.16
 // Pointer speed (CSS px per frame) that counts as full speed.
 const FULL_SPEED = 40
 
 const canvas = document.createElement('canvas')
 const context = canvas.getContext('2d')!
 export const trailTexture = new CanvasTexture(canvas)
+/** The canvas's size in device pixels, for the shaders to look the trail
+ *  up by gl_FragCoord (see materials/wake.ts). */
+export const trailResolution = new Vector2(1, 1)
 trailTexture.minFilter = LinearFilter
 trailTexture.magFilter = LinearFilter
 
@@ -42,8 +45,11 @@ function resize(width: number, height: number) {
 }
 
 /** Advances the trail one frame, for a canvas of this CSS size. */
-export function updateTrail(width: number, height: number) {
+export function updateTrail(width: number, height: number, dpr: number) {
+  // The canvas is 0x0 for its first frames; nothing to size the trail by.
+  if (!width || !height) return
   resize(width, height)
+  trailResolution.set(width * dpr, height * dpr)
   const scale = canvas.width / width
 
   context.globalCompositeOperation = 'source-over'
@@ -65,7 +71,7 @@ export function updateTrail(width: number, height: number) {
         const x = (last.x + (dx * i) / steps) * scale
         const y = (last.y + (dy * i) / steps) * scale
         const gradient = context.createRadialGradient(x, y, 0, x, y, radius)
-        gradient.addColorStop(0, `rgba(255, 255, 255, ${0.5 * speed})`)
+        gradient.addColorStop(0, `rgba(255, 255, 255, ${0.3 * speed})`)
         gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
         context.fillStyle = gradient
         context.fillRect(x - radius, y - radius, radius * 2, radius * 2)

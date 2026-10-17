@@ -1,12 +1,17 @@
 import { shaderMaterial } from '@react-three/drei'
 import { extend, ThreeElement } from '@react-three/fiber'
 import { ShaderMaterial, Texture, Vector2 } from 'three'
+import { WAKE_GLSL } from './wake'
 
 const uniforms = {
   uTexture: new Texture(),
   uSize: new Vector2(),
   uAspect: new Vector2(),
   uHover: 0,
+  // The cursor's liquid wake (see wake.ts); uTrailAmount 0 skips it.
+  uTrail: new Texture(),
+  uResolution: new Vector2(1, 1),
+  uTrailAmount: 0,
 }
 
 export const PolaroidMaterial = shaderMaterial(
@@ -32,8 +37,9 @@ export const PolaroidMaterial = shaderMaterial(
     uniform vec2 uAspect;
     varying vec2 vVertCoord;
     uniform float uHover;
+    ${WAKE_GLSL}
 
-    void main() {      
+    void main() {
       // The photo is inset 10% on each side (vUv * 0.8 + 0.1) to leave room
       // for this screen-position parallax offset. The offset is built from
       // clip-space coordinates (before the perspective divide), so it grows
@@ -42,8 +48,10 @@ export const PolaroidMaterial = shaderMaterial(
       // overshot that room and sampled off the image entirely, showing a
       // blank photo. Clamped to the room the inset actually leaves.
       vec2 parallax = clamp(vVertCoord - 0.5, -0.1, 0.1);
-      vec2 position = (vUv.xy * 0.8) + 0.1 + parallax;
+      vec2 wake = wakeSlope();
+      vec2 position = (vUv.xy * 0.8) + 0.1 + parallax + wake * WAKE_SLOPE;
       vec4 image = texture2D(uTexture, position);
+      image.rgb += wakeGlint(wake);
       gl_FragColor = image;
 
       #include <colorspace_fragment>

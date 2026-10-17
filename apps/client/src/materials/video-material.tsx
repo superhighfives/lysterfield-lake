@@ -1,5 +1,6 @@
 import { shaderMaterial } from '@react-three/drei'
 import { extend, ThreeElement } from '@react-three/fiber'
+import { WAKE_GLSL } from './wake'
 import { ShaderMaterial, Texture, Vector2, Vector3 } from 'three'
 
 const uniforms = {
@@ -188,9 +189,6 @@ export const VideoMaterial = shaderMaterial(
     uniform float uHash;
     uniform float uDevelop;
     uniform vec3 uRipple;
-    uniform sampler2D uTrail;
-    uniform float uTrailAmount;
-    uniform vec2 uResolution;
     uniform float uPulse;
     // Landing ripple: ring speed (UV/s), wavelength, peak UV displacement,
     // ring width and how long it rings for (s).
@@ -199,14 +197,8 @@ export const VideoMaterial = shaderMaterial(
     const float LANDING_AMOUNT = 0.012;
     const float LANDING_WIDTH = 0.12;
     const float LANDING_SECONDS = 1.4;
-    // Liquid wake: how far one trail texel's height difference bends the
-    // image, in UV.
-    // Liquid wake: the slope is measured across TRAIL_SPREAD trail texels,
-    // and bends the image by TRAIL_SLOPE UV per unit of it; TRAIL_GLINT is
-    // the catch of light on its slopes.
-    const float TRAIL_SPREAD = 2.0;
-    const float TRAIL_SLOPE = 0.08;
-    const float TRAIL_GLINT = 0.35;
+    // The cursor's liquid wake (see wake.ts).
+    ${WAKE_GLSL}
 
     vec3 blendMultiply(vec3 base, vec3 blend) {
       return base*blend;
@@ -280,15 +272,8 @@ export const VideoMaterial = shaderMaterial(
 
       // Liquid wake: bend the image along the slope of the trail's height
       // under this pixel.
-      vec2 trailSlope = vec2(0.0);
-      if(uTrailAmount > 0.0) {
-        vec2 screen = gl_FragCoord.xy / uResolution;
-        vec2 texel = TRAIL_SPREAD / vec2(textureSize(uTrail, 0));
-        float hx = texture2D(uTrail, screen + vec2(texel.x, 0.0)).r - texture2D(uTrail, screen - vec2(texel.x, 0.0)).r;
-        float hy = texture2D(uTrail, screen + vec2(0.0, texel.y)).r - texture2D(uTrail, screen - vec2(0.0, texel.y)).r;
-        trailSlope = vec2(hx, hy) * uTrailAmount;
-        st += trailSlope * TRAIL_SLOPE;
-      }
+      vec2 trailSlope = wakeSlope();
+      st += trailSlope * WAKE_SLOPE;
 
       float offsetX = 0.0;
       float offsetY = 0.0;
@@ -413,8 +398,7 @@ export const VideoMaterial = shaderMaterial(
 
       image = mix(image, white, fadeAmount);
 
-      // Light catching the wake's slopes, as if from above-left.
-      image.rgb += (trailSlope.x - trailSlope.y) * TRAIL_GLINT;
+      image.rgb += wakeGlint(trailSlope);
 
       // Developing: a blank milky print, then the tones come up, then the
       // colour — the way an instant photo develops.

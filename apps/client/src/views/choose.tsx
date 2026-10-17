@@ -5,6 +5,8 @@ import { Euler, MathUtils, Mesh, MeshBasicMaterial, Vector3 } from 'three'
 import type { Dream } from '../utils/types'
 import Polaroid from '../models/polaroid'
 import { PolaroidMaterial } from '../materials/polaroid-material'
+import { wakeShader } from '../materials/wake'
+import { trailResolution, trailTexture } from '../utils/liquid-trail'
 import {
   useCursor,
   useIntersect,
@@ -52,6 +54,11 @@ const CAROUSEL_FORWARD = 0.25
 
 // Frames between nudges while arriving at the player (see useFrame).
 const NUDGE_EVERY = 4
+
+// How strongly the cursor's liquid wake (materials/wake.ts) moves the
+// title video and the carousel's photos.
+const titleWake = wakeShader(1)
+const CARD_WAKE = 1
 
 const CAROUSEL_REFERENCE_HEIGHT = 900
 const CAROUSEL_MIN_SCALE = 0.6
@@ -283,7 +290,12 @@ function Choose(props: ThreeElements['group']) {
       {/* Title */}
       <mesh ref={titleRef} position={[0, 0, -0.75]} scale={1.5}>
         <planeGeometry />
-        <meshBasicMaterial transparent alphaMap={titleMask} map={titleImage} />
+        <meshBasicMaterial
+          transparent
+          alphaMap={titleMask}
+          map={titleImage}
+          onBeforeCompile={titleWake}
+        />
       </mesh>
 
       {/* Action Scroll */}
@@ -398,6 +410,9 @@ function Choose(props: ThreeElements['group']) {
                       uSize={size}
                       uAspect={aspect}
                       uHover={hoverAmount}
+                      uTrail={trailTexture}
+                      uResolution={trailResolution}
+                      uTrailAmount={CARD_WAKE}
                     />
                   }
                 />

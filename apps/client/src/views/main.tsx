@@ -18,7 +18,11 @@ import { useIntersect } from '@react-three/drei'
 import { SwapPhase, useStore } from '../store'
 import { commitSwap, fadeOutAudio } from '../utils/swap-dream'
 import { SWAP_ANIMATIONS } from '../utils/swap-poses'
-import { trailTexture, updateTrail } from '../utils/liquid-trail'
+import {
+  trailResolution,
+  trailTexture,
+  updateTrail,
+} from '../utils/liquid-trail'
 import { readPulse } from '../utils/audio'
 import {
   commitDistance,
@@ -392,7 +396,7 @@ function Main(
     }
 
     // The cursor's liquid wake, and the music's pulse.
-    updateTrail(state.size.width, state.size.height)
+    updateTrail(state.size.width, state.size.height, state.viewport.dpr)
     const pulse = readPulse()
     for (const [material, amount] of [
       [polaroidMaterial.current, TRAIL_POLAROID],
@@ -402,10 +406,7 @@ function Main(
       if (!material) continue
       material.uTrail = trailTexture
       material.uTrailAmount = amount
-      material.uResolution.set(
-        state.size.width * state.viewport.dpr,
-        state.size.height * state.viewport.dpr
-      )
+      material.uResolution = trailResolution
       material.uPulse = pulse
     }
 
