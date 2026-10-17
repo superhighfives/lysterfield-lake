@@ -1,16 +1,48 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
 import ThemeToggle from '../components/theme-toggle.tsx'
 import { api } from './admin-api.ts'
 
 // Dev-only page for recording a 5-second webcam clip and making a pipeline job from it, for the polaroid
 // prototype (plans/backlog/user-polaroid-loops.md). The dev server saves the clip and runs `init` on it,
-// which crops it to the same centred square this page shows, so what's inside the frame is what the job gets.
+// with the square picked here (drag to move it, scroll or the slider to zoom), so what's inside the frame is what
+// the job gets.
 
 /** Recorded a little longer than the 5 seconds `init` keeps, since MediaRecorder takes a moment to start. */
 const RECORD_MS = 5400
 const COUNTDOWN = 3
 /** Formats MediaRecorder can write, best first. ffmpeg reads any of them. */
 const MIME_TYPES = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9', 'video/webm']
+
+/** The square kept: its centre as a fraction of the video's width and height, and a zoom (1 = the largest square). The same shape as the pipeline's Crop (job.ts). */
+type Crop = { x: number; y: number; zoom: number }
+type Size = { w: number; h: number }
+const CENTRED: Crop = { x: 0.5, y: 0.5, zoom: 1 }
+const MAX_ZOOM = 4
+
+/** Keeps the square inside the video. */
+function clampCrop(crop: Crop, size: Size | null): Crop {
+  const zoom = Math.min(MAX_ZOOM, Math.max(1, crop.zoom))
+  if (!size) return { ...crop, zoom }
+  const side = Math.min(size.w, size.h) / zoom
+  const clamp = (v: number, length: number) => Math.min(1 - side / 2 / length, Math.max(side / 2 / length, v))
+  return { x: clamp(crop.x, size.w), y: clamp(crop.y, size.h), zoom }
+}
+
+/** Places a video inside the square frame so that exactly the crop shows (as percentages of the frame). */
+function cropStyle(crop: Crop, size: Size | null): CSSProperties {
+  if (!size) return { inset: 0, width: '100%', height: '100%', objectFit: 'cover' }
+  const { x, y, zoom } = clampCrop(crop, size)
+  const side = Math.min(size.w, size.h) / zoom
+  return {
+    width: `${(size.w / side) * 100}%`,
+    height: `${(size.h / side) * 100}%`,
+    left: `${(-(x * size.w - side / 2) / side) * 100}%`,
+    top: `${(-(y * size.h - side / 2) / side) * 100}%`,
+    maxWidth: 'none',
+  }
+}
+
+const sizeOf = (v: HTMLVideoElement): Size | null => (v.videoWidth && v.videoHeight ? { w: v.videoWidth, h: v.videoHeight } : null)
 
 type Stage = { kind: 'idle' } | { kind: 'countdown'; n: number } | { kind: 'recording'; started: number } | { kind: 'review'; blob: Blob; url: string } | { kind: 'saving'; blob: Blob; url: string } | { kind: 'saved'; job: string; url: string }
 
@@ -66,9 +98,16 @@ export default function AdminRecord() {
   const [stage, setStage] = useState<Stage>({ kind: 'idle' })
   const [name, setName] = useState(defaultName)
   const [error, setError] = useState('')
-  const [size, setSize] = useState('')
+  const [cameraInfo, setCameraInfo] = useState('')
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([])
   const [camera, setCamera] = useState(savedCamera)
+  const [crop, setCrop] = useState<Crop>(CENTRED)
+  const [liveSize, setLiveSize] = useState<Size | null>(null)
+  const [reviewSize, setReviewSize] = useState<Size | null>(null)
+  /** A chosen file isn't mirrored: only the camera (and what it recorded) is shown like a mirror. */
+  const [fromFile, setFromFile] = useState(false)
+  const frame = useRef<HTMLDivElement>(null)
+  const drag = useRef<{ x: number; y: number } | null>(null)
 
   // Camera names only show once the page has been allowed a camera, so the list is read after each one opens,
   // and again when one is plugged in or out.
@@ -84,7 +123,7 @@ export default function AdminRecord() {
 
   useEffect(() => {
     let cancelled = false
-    setSize('')
+    setCameraInfo('')
     navigator.mediaDevices
       .getUserMedia({ video: { deviceId: camera ? { exact: camera } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } }, audio: false })
       .then((s) => {
@@ -92,7 +131,7 @@ export default function AdminRecord() {
         stream.current = s
         if (live.current) live.current.srcObject = s
         const settings = s.getVideoTracks()[0]?.getSettings()
-        if (settings) setSize(`${settings.width}×${settings.height} at ${Math.round(settings.frameRate ?? 0)}fps`)
+        if (settings) setCameraInfo(`${settings.width}×${settings.height} at ${Math.round(settings.frameRate ?? 0)}fps`)
         listCameras().catch(() => {})
       })
       .catch((e: Error) => {
@@ -149,6 +188,9 @@ export default function AdminRecord() {
   const chooseFile = (file: File | undefined) => {
     if (!file) return
     setError('')
+    setFromFile(true)
+    setReviewSize(null)
+    setCrop(CENTRED)
     setStage({ kind: 'review', blob: file, url: URL.createObjectURL(file) })
   }
 
@@ -156,6 +198,9 @@ export default function AdminRecord() {
     if ('url' in stage) URL.revokeObjectURL(stage.url)
     setStage({ kind: 'idle' })
     setName(defaultName())
+    setReviewSize(null)
+    if (fromFile) setCrop(CENTRED)
+    setFromFile(false)
   }
 
   const save = async () => {
@@ -163,7 +208,7 @@ export default function AdminRecord() {
     setError('')
     setStage({ ...stage, kind: 'saving' })
     try {
-      const { job } = await api<{ job: string }>('/__admin/api/recordings', { name, type: stage.blob.type, data: await toBase64(stage.blob) })
+      const { job } = await api<{ job: string }>('/__admin/api/recordings', { name, type: stage.blob.type, crop: clampCrop(crop, size), data: await toBase64(stage.blob) })
       setStage({ kind: 'saved', job, url: stage.url })
     } catch (e) {
       setError((e as Error).message)
@@ -172,6 +217,34 @@ export default function AdminRecord() {
   }
 
   const reviewing = stage.kind === 'review' || stage.kind === 'saving' || stage.kind === 'saved'
+  const size = reviewing ? reviewSize : liveSize
+  const mirrored = !(reviewing && fromFile)
+  const framing = stage.kind !== 'saving' && stage.kind !== 'saved'
+
+  // Dragging moves the picture under the frame, so the crop's centre moves the other way (unless it's mirrored).
+  const onPointerMove = (e: PointerEvent) => {
+    const start = drag.current
+    const box = frame.current?.getBoundingClientRect()
+    if (!start || !box || !size) return
+    drag.current = { x: e.clientX, y: e.clientY }
+    const side = Math.min(size.w, size.h) / crop.zoom
+    const dx = ((e.clientX - start.x) / box.width) * (side / size.w)
+    const dy = ((e.clientY - start.y) / box.height) * (side / size.h)
+    setCrop((c) => clampCrop({ ...c, x: c.x + (mirrored ? dx : -dx), y: c.y - dy }, size))
+  }
+
+  // Scrolling zooms. A native listener, since React's wheel events can't stop the page scrolling.
+  useEffect(() => {
+    const el = frame.current
+    if (!el || !framing) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      setCrop((c) => clampCrop({ ...c, zoom: c.zoom * Math.exp(-e.deltaY * 0.002) }, size))
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [framing, size])
 
   return (
     <div className="fixed inset-0 overflow-y-auto bg-stone-100 dark:bg-stone-950 font-sans text-stone-900 dark:text-stone-100 [color-scheme:light] dark:[color-scheme:dark] [touch-action:auto]">
@@ -183,10 +256,24 @@ export default function AdminRecord() {
 
         {error && <p className="mb-6 rounded bg-red-50 dark:bg-red-950/50 p-3 text-sm text-red-800 dark:text-red-200">{error}</p>}
 
-        <div className="relative mb-4 aspect-square overflow-hidden rounded-lg bg-black">
-          {/* Mirrored like a mirror while framing; the recording itself isn't. object-cover crops the same centred square init does. */}
-          <video ref={live} autoPlay muted playsInline className={`h-full w-full -scale-x-100 object-cover ${reviewing ? 'invisible' : ''}`} />
-          {'url' in stage && <video src={stage.url} autoPlay muted loop playsInline className="absolute inset-0 h-full w-full -scale-x-100 object-cover" />}
+        <div
+          ref={frame}
+          onPointerDown={(e) => {
+            if (!framing) return
+            e.currentTarget.setPointerCapture(e.pointerId)
+            drag.current = { x: e.clientX, y: e.clientY }
+          }}
+          onPointerMove={onPointerMove}
+          onPointerUp={() => (drag.current = null)}
+          onPointerCancel={() => (drag.current = null)}
+          onDoubleClick={() => framing && setCrop(CENTRED)}
+          className={`relative mb-3 aspect-square touch-none select-none overflow-hidden rounded-lg bg-black ${framing ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        >
+          {/* The camera is mirrored like a mirror while framing; the recording itself isn't. */}
+          <div className={`absolute inset-0 ${mirrored ? '-scale-x-100' : ''}`}>
+            <video ref={live} autoPlay muted playsInline onLoadedMetadata={(e) => setLiveSize(sizeOf(e.currentTarget))} onResize={(e) => setLiveSize(sizeOf(e.currentTarget))} style={cropStyle(crop, liveSize)} className={`absolute ${reviewing ? 'invisible' : ''}`} />
+            {'url' in stage && <video src={stage.url} autoPlay muted loop playsInline onLoadedMetadata={(e) => setReviewSize(sizeOf(e.currentTarget))} style={cropStyle(crop, reviewSize)} className="absolute" />}
+          </div>
           {stage.kind === 'countdown' && <div className="absolute inset-0 grid place-items-center font-serif text-8xl text-white drop-shadow">{stage.n}</div>}
           {stage.kind === 'recording' && (
             <>
@@ -197,6 +284,17 @@ export default function AdminRecord() {
             </>
           )}
         </div>
+        <div className="mb-3 flex items-center gap-3 text-sm text-stone-600 dark:text-stone-400">
+          <label className="flex flex-1 items-center gap-2">
+            Zoom
+            <input type="range" min={1} max={MAX_ZOOM} step={0.01} value={crop.zoom} disabled={!framing} onChange={(e) => setCrop((c) => clampCrop({ ...c, zoom: Number(e.target.value) }, size))} className="flex-1 accent-stone-900 disabled:opacity-40 dark:accent-stone-100" />
+            <span className="w-10 text-right tabular-nums">{crop.zoom.toFixed(1)}×</span>
+          </label>
+          <button onClick={() => setCrop(CENTRED)} disabled={!framing} className="rounded border border-stone-300 dark:border-stone-700 px-2 py-1 disabled:opacity-40">
+            Centre
+          </button>
+        </div>
+        <p className="mb-4 text-xs text-stone-500 dark:text-stone-400">Drag the picture to move it, scroll or use the slider to zoom, double-click to reset.</p>
         <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-stone-600 dark:text-stone-400">
           {cameras.length > 0 && (
             <label>
@@ -211,12 +309,12 @@ export default function AdminRecord() {
               </select>
             </label>
           )}
-          {size && <span className="text-xs text-stone-500 dark:text-stone-400">{size}</span>}
+          {cameraInfo && <span className="text-xs text-stone-500 dark:text-stone-400">{cameraInfo}</span>}
         </div>
 
         {stage.kind === 'idle' && (
           <div className="flex flex-wrap items-center gap-3">
-            <button onClick={record} disabled={!size} className="rounded bg-stone-900 px-4 py-2 text-white disabled:opacity-40 dark:bg-stone-100 dark:text-stone-900">
+            <button onClick={record} disabled={!cameraInfo} className="rounded bg-stone-900 px-4 py-2 text-white disabled:opacity-40 dark:bg-stone-100 dark:text-stone-900">
               Record 5 seconds
             </button>
             {/* A clip from elsewhere (a phone, say): its first 5 seconds are used. */}

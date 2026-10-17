@@ -62,6 +62,12 @@ function requireFlag(name: string): string {
   return value
 }
 
+function parseCrop(value: string) {
+  const [x, y, zoom] = value.split(',').map(Number)
+  if ([x, y, zoom].some((n) => !Number.isFinite(n))) throw new Error('--crop must be x,y,zoom, e.g. 0.5,0.4,1.5')
+  return { x, y, zoom }
+}
+
 /** Resolves a step's input frame directory: `--<flag>` overrides `defaultRelativePath`, both relative to the job root. */
 function frameDirFlag(job: Job, defaultRelativePath: string, flag = 'input'): string {
   return path.join(job.dir, flags[flag] ?? defaultRelativePath)
@@ -93,6 +99,8 @@ switch (step) {
       fps: flags.fps ? Number(flags.fps) : undefined,
       offset: flags.offset ? Number(flags.offset) : undefined,
       length: flags.length ? Number(flags.length) : undefined,
+      // --crop x,y,zoom: the square's centre (fractions of the frame) and zoom; see job.ts's Crop.
+      crop: flags.crop ? parseCrop(flags.crop) : undefined,
     })
     console.log(JSON.stringify(result, null, 2))
     break

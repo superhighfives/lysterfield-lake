@@ -6,6 +6,16 @@ import { promisify } from 'node:util'
 const execFileAsync = promisify(execFile)
 
 /** Everything persisted in `<dir>/job.json`: the job's settings plus a record of how it was made. */
+/**
+ * A square crop of the source, picked by hand (e.g. in /admin/record) instead of `init`'s default centred one:
+ * its centre as a fraction of the source's width and height, and a zoom, where 1 is the largest square that fits.
+ */
+export interface Crop {
+  x: number
+  y: number
+  zoom: number
+}
+
 export interface JobConfig {
   /** Frame rate used throughout this job — matches the source video's extraction rate. */
   fps: number
@@ -14,7 +24,7 @@ export interface JobConfig {
    * `path` is the job's local copy of the original (relative to the job
    * root, under `0-source/original/`), `from` is where it was copied from.
    */
-  source?: { path: string; from?: string; offset?: number; length?: number }
+  source?: { path: string; from?: string; offset?: number; length?: number; crop?: Crop }
   /** Default keyframe rate for stepped steps (`background-plate`, `background-stabilize`, `dream`); `--step-fps` overrides it. */
   stepFps?: number
   /** Free-text note per panel folder on where its frames came from, for jobs that mix reused and generated panels. */

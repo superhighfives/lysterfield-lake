@@ -307,19 +307,26 @@ function deleteTake(job: string, take: string) {
  * frames at 24fps). `init` makes no Replicate calls, so it runs straight away rather than through the queue.
  */
 async function createRecordingJob(body: Record<string, unknown>): Promise<{ job: string }> {
-  const { name, data, type } = body
+  const { name, data, type, crop } = body
   if (typeof name !== 'string' || !/^[a-z0-9][\w-]*$/.test(name) || name === 'spikes') throw new Error('name must be letters, numbers and dashes')
   if (existsSync(path.join(JOBS_DIR, name))) throw new Error(`There's already a job called "${name}"`)
   if (typeof data !== 'string' || !/^[A-Za-z0-9+/]+=*$/.test(data)) throw new Error('data must be base64')
   if (data.length > MAX_RECORDING_UPLOAD * 1.4) throw new Error('recording is too large (max 150MB)')
   // MediaRecorder writes mp4 or webm; a chosen file may also be a phone's .mov. ffmpeg reads all three.
   const ext = typeof type !== 'string' ? 'webm' : type.startsWith('video/mp4') ? 'mp4' : type.startsWith('video/quicktime') ? 'mov' : 'webm'
+  // The square picked on the page: { x, y, zoom }, as init's --crop takes it. init checks the ranges.
+  const cropArgs: string[] = []
+  if (crop !== undefined) {
+    const { x, y, zoom } = (crop ?? {}) as Record<string, unknown>
+    if (![x, y, zoom].every((n) => typeof n === 'number' && Number.isFinite(n))) throw new Error('crop must be { x, y, zoom }')
+    cropArgs.push('--crop', `${x},${y},${zoom}`)
+  }
   mkdirSync(RECORDINGS_DIR, { recursive: true })
   // The real path: .jobs is a symlink in a worktree, and job.json records where the source came from.
   const source = path.join(realpathSync(RECORDINGS_DIR), `${name}.${ext}`)
   writeFileSync(source, Buffer.from(data, 'base64'))
   try {
-    await promisify(execFile)('bun', ['run', 'src/cli.ts', 'init', '--job', path.join(JOBS_DIR, name), '--source', source, '--length', '5'], { cwd: PIPELINE_DIR, env: pipelineEnv() })
+    await promisify(execFile)('bun', ['run', 'src/cli.ts', 'init', '--job', path.join(JOBS_DIR, name), '--source', source, '--length', '5', ...cropArgs], { cwd: PIPELINE_DIR, env: pipelineEnv() })
   } catch (error) {
     throw new Error(`init failed: ${(error as { stderr?: string }).stderr?.trim() || (error as Error).message}`)
   }
