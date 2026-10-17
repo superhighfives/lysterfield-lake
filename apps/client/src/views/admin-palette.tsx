@@ -65,7 +65,14 @@ function usePalette(src: string): Band[] | null {
   useEffect(() => {
     let current = true
     if (!cache.has(src)) cache.set(src, extract(src))
-    cache.get(src)!.then((b) => current && setBands(b), () => current && setBands([]))
+    cache.get(src)!.then(
+      (b) => current && setBands(b),
+      (error: unknown) => {
+        // An empty swatch is the fallback; the picture still shows on hover.
+        console.warn(`Couldn't read the palette of ${src}`, error)
+        if (current) setBands([])
+      }
+    )
     return () => {
       current = false
     }

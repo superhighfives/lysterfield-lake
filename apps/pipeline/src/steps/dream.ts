@@ -33,6 +33,7 @@ export type TakeStatus = (typeof TAKE_STATUSES)[number]
 
 /** A take's settings and review state, saved to `7-dreams/<take>/take.json` so the take always remembers what made it. */
 export interface TakeConfig {
+  /** The caller's prompt, or `STYLE_ONLY_PROMPT` for a Deforum take made from a style image alone. */
   prompt: string
   seed: number
   stepFps: number
