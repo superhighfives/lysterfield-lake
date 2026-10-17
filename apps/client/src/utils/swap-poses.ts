@@ -7,8 +7,9 @@ import type { SwapDirection, SwapStyle } from '../store'
 // 1 -> 0 as the new one arrives: `exit(1)` is held while the next video
 // loads, and `enter(0)` (like `exit(0)`) is the resting pose.
 //
-// `w` and `h` are the viewport's size in world units at the scene's
-// depth, for pushing the polaroid fully off-screen.
+// `w` and `h` are the visible width and height at the polaroid's own
+// depth, with a margin (see OFFSCREEN_MARGIN in main.tsx) — so a pose at
+// `h` is fully off-screen, not just a viewport-at-z=0 away.
 
 export type Pose = {
   x: number

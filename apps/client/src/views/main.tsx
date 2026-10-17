@@ -52,6 +52,12 @@ const AVATAR_SHARPEN = 1.2
 const POLAROID_Z = -1.0
 // Scale of the group the polaroid, avatar and lyrics sit in.
 const MAIN_SCALE = 1.1
+// Swap poses push the polaroid off-screen by the visible width or height
+// at its depth, times this. Measured, the tossed polaroid's tilt and
+// perspective cost about a third of that distance on screen, and its
+// frame reaches well past the photo, so 1.2 still let a corner peek in
+// while the next dream loaded.
+const OFFSCREEN_MARGIN = 1.8
 const SWAP_REST = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }
 // While dragged, the polaroid follows the pointer 1:1 sideways, tilting
 // into the drag (radians per world unit) and dipping a little, like a
@@ -309,16 +315,27 @@ function Main(
         DRAG_RETURN
       )
 
+    // The visible world per unit of `w`/`h` at the polaroid's depth, inside
+    // its group. `w` and `h` are the viewport at z = 0; the polaroid sits
+    // further back (and inside the 1.1x scaled group below), where more is
+    // in view, and the camera zooms out on narrow screens. Used to keep the
+    // drag 1:1 with the pointer and to push swap poses truly off-screen.
+    const cameraZ = state.camera.position.z
+    const depth = (cameraZ - POLAROID_Z * MAIN_SCALE) / cameraZ
+    const view = depth / MAIN_SCALE / (state.camera.zoom || 1)
+    const poseW = w * view * OFFSCREEN_MARGIN
+    const poseH = h * view * OFFSCREEN_MARGIN
+
     let pose
     if (swapPhase === 'out') {
       swapProgressRef.current = Math.min(
         1,
         swapProgressRef.current + delta / animation.outDuration
       )
-      pose = animation.exit(swapProgressRef.current, swapDirection, w, h)
+      pose = animation.exit(swapProgressRef.current, swapDirection, poseW, poseH)
       if (swapProgressRef.current === 1) commitSwap(video)
     } else if (swapPhase === 'loading') {
-      const held = animation.exit(1, swapDirection, w, h)
+      const held = animation.exit(1, swapDirection, poseW, poseH)
       const hold = animation.hold?.(state.clock.elapsedTime, swapDirection)
       pose = { ...held, ry: held.ry + (hold?.ry ?? 0) }
     } else if (swapPhase === 'in') {
@@ -326,26 +343,24 @@ function Main(
         0,
         swapProgressRef.current - delta / animation.inDuration
       )
-      pose = animation.enter(swapProgressRef.current, swapDirection, w, h)
+      pose = animation.enter(swapProgressRef.current, swapDirection, poseW, poseH)
       if (swapProgressRef.current === 0) setSwapPhase('idle')
     }
 
     if (swapGroup.current) {
       const { x, y, z, rx, ry, rz } = pose ?? SWAP_REST
-      // `w` is the viewport's width at z = 0; the polaroid sits further
-      // back (and inside the 1.1x scaled group below), so a CSS pixel
-      // covers more world there. Scaled by depth so it tracks the pointer
-      // 1:1.
-      const cameraZ = state.camera.position.z
-      const depth = (cameraZ - POLAROID_Z * MAIN_SCALE) / cameraZ
-      const drag =
-        (dragOffsetRef.current * w * depth) / state.size.width / MAIN_SCALE
+      // Drag offset in CSS px, to world units at the polaroid (see `view`).
+      const drag = (dragOffsetRef.current * w * view) / state.size.width
       swapGroup.current.position.set(
         x + drag,
         y - Math.abs(drag) * DRAG_DIP,
         z + POLAROID_Z
       )
       swapGroup.current.rotation.set(rx, ry, rz - drag * DRAG_TILT)
+      // Off-screen while the next dream loads anyway; hidden too, so
+      // nothing can peek in however the screen is shaped. Not for a style
+      // that shows something while it waits (flip rocks face-down).
+      swapGroup.current.visible = swapPhase !== 'loading' || !!animation.hold
 
       const step = (1 / 60 / Math.max(delta, 1e-3)) / PHOTO_WIDTH
       const target = velocityTarget.current
