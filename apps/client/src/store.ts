@@ -10,6 +10,20 @@ import {
 
 export type Resume = { dreamId: string; time: number }
 
+/** Swapping to another dream mid-song (see utils/swap-dream.ts): the
+ *  polaroid animates `out`, waits off-screen (or face-down) while the next
+ *  dream's video loads at the same playback position, then animates `in`. */
+export type SwapPhase = 'idle' | 'out' | 'loading' | 'in'
+/** 1 = next dream, -1 = previous. */
+export type SwapDirection = 1 | -1
+export const SWAP_STYLES = ['slide', 'flip', 'drop'] as const
+export type SwapStyle = (typeof SWAP_STYLES)[number]
+
+function initialSwapStyle(): SwapStyle {
+  const param = new URLSearchParams(location.search).get('swap')
+  return SWAP_STYLES.find((style) => style === param) ?? 'slide'
+}
+
 export interface AppState {
   dream: Dream | null
   resetting: boolean
@@ -41,6 +55,9 @@ export interface AppState {
   /** Playback position to seek to once that dream's video has loaded (set
    *  when restoring from browser history), consumed by Playhead. */
   resume: Resume | null
+  swapPhase: SwapPhase
+  swapDirection: SwapDirection
+  swapStyle: SwapStyle
   setDream: (dream: Dream | null) => void
   setResetting: (resetting: boolean) => void
   setSeeking: (seeking: boolean) => void
@@ -60,6 +77,10 @@ export interface AppState {
   setThemePreference: (themePreference: ThemePreference) => void
   setColorScheme: (colorScheme: ColorScheme) => void
   setResume: (resume: Resume | null) => void
+  /** Starts a swap, unless one is already running or nothing's playing. */
+  requestSwap: (direction: SwapDirection) => void
+  setSwapPhase: (swapPhase: SwapPhase) => void
+  setSwapStyle: (swapStyle: SwapStyle) => void
 }
 
 export const useStore = create<AppState>()((set) => ({
@@ -82,6 +103,9 @@ export const useStore = create<AppState>()((set) => ({
   themePreference: readThemePreference(),
   colorScheme: resolveColorScheme(readThemePreference()),
   resume: null,
+  swapPhase: 'idle',
+  swapDirection: 1,
+  swapStyle: initialSwapStyle(),
   setDream: (dream: Dream | null) => set({ dream }),
   setResetting: (resetting: boolean) => {
     set(() => ({ resetting }))
@@ -114,4 +138,12 @@ export const useStore = create<AppState>()((set) => ({
     set(() => ({ themePreference })),
   setColorScheme: (colorScheme: ColorScheme) => set(() => ({ colorScheme })),
   setResume: (resume: Resume | null) => set(() => ({ resume })),
+  requestSwap: (swapDirection: SwapDirection) =>
+    set((state) =>
+      state.dream && !state.resetting && state.swapPhase === 'idle'
+        ? { swapPhase: 'out', swapDirection }
+        : {}
+    ),
+  setSwapPhase: (swapPhase: SwapPhase) => set(() => ({ swapPhase })),
+  setSwapStyle: (swapStyle: SwapStyle) => set(() => ({ swapStyle })),
 }))

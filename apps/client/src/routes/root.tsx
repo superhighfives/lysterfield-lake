@@ -13,6 +13,8 @@ import { handleDeviceOrientationPermissions, isTouchDevice, shuffle } from '../u
 import dreams from '../dreams.json'
 import { Play, FileText, CircleNotch } from '@phosphor-icons/react'
 import { useHistorySync } from '../utils/use-history-sync'
+import { useSwapInput } from '../utils/swap-dream'
+import SwapStylePicker from '../components/swap-style-picker'
 
 // How long buffering has to last before offering the YouTube escape hatch.
 const TOO_SLOW_DELAY = 8000
@@ -35,6 +37,9 @@ function Root() {
   const setIsTooSlow = useStore((state) => state.setIsTooSlow)
   const seeking = useStore((state) => state.seeking)
   const showPlayhead = useStore((state) => state.showPlayhead)
+  // A swap's load is covered by the polaroid's own animation (see
+  // utils/swap-dream.ts), so it doesn't count as buffering.
+  const swapLoading = useStore((state) => state.swapPhase === 'loading')
 
   useEffect(() => {
     console.log('Loaded!')
@@ -44,12 +49,12 @@ function Root() {
 
   useEffect(() => {
     console.log(`Video state: ${videoState}`)
-    if (dream) {
+    if (dream && !swapLoading) {
       setIsBuffering(videoState < HTMLMediaElement.HAVE_FUTURE_DATA)
     } else {
       setIsBuffering(false)
     }
-  }, [videoState, dream])
+  }, [videoState, dream, swapLoading])
 
   // Each stretch of buffering gets its own timer, and isTooSlow clears as
   // soon as playback recovers — this used to be a counter in Scene's
@@ -68,6 +73,7 @@ function Root() {
   }, [isBuffering])
 
   useHistorySync(video)
+  useSwapInput()
 
   const handleReady = async () => {
     const orientationGranted = (await handleDeviceOrientationPermissions()) as boolean
@@ -87,6 +93,7 @@ function Root() {
   return (
     <>
       <KeyWhiteFilter />
+      <SwapStylePicker />
       <div className="fixed z-10 top-1 right-1 flex items-center gap-1 font-sans text-sm">
         <ThemeToggle />
         <a href="/about" className={linkClassName}>

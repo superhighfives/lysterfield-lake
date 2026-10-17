@@ -1,5 +1,5 @@
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
-import { RefObject, useRef } from 'react'
+import { RefObject, useRef, useState } from 'react'
 import { VideoMaterial, VideoMaterialProps } from '../materials/video-material'
 import Polaroid from '../models/polaroid'
 import { isVideoPlaying } from '../utils'
@@ -13,8 +13,10 @@ import {
   Vector3,
 } from 'three'
 import { suspend } from 'suspend-react'
-import { useIntersect } from '@react-three/drei'
-import { useStore } from '../store'
+import { useCursor, useIntersect } from '@react-three/drei'
+import { SwapPhase, useStore } from '../store'
+import { commitSwap, fadeOutAudio } from '../utils/swap-dream'
+import { SWAP_ANIMATIONS } from '../utils/swap-poses'
 import { animated, config, useSpring } from '@react-spring/three'
 // eslint-disable-next-line import/named -- useIdle is a real export (confirmed at runtime); eslint-plugin-import's static resolver doesn't handle this package's minimal `exports` map correctly
 import { useIdle } from '@uidotdev/usehooks'
@@ -38,6 +40,10 @@ const DEPTH_EDGE_RADIUS = 0.04
 // source, so this firms up edges (hair, necklace) rather than adding
 // detail; 1.5 showed no halos, 1.2 leaves some margin.
 const AVATAR_SHARPEN = 1.2
+// The polaroid sits behind the avatar. Set on the swap group around it,
+// so swap rotations (a flip) turn it about its own centre.
+const POLAROID_Z = -1.0
+const SWAP_REST = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }
 
 function Main(
   props: ThreeElements['group'] & {
@@ -49,6 +55,7 @@ function Main(
   const videoElement = video.current!
 
   const main = useRef<Group>(null)
+  const swapGroup = useRef<Group>(null)
   const polaroidVisible = useRef(false)
   const polaroidIntersect = useIntersect(
     (isVisible) => (polaroidVisible.current = isVisible)
@@ -59,6 +66,9 @@ function Main(
   const isMobile = useStore((state) => state.isMobile)
   const isTouch = useStore((state) => state.isTouch)
   const setGlobalPointer = useStore((state) => state.setGlobalPointer)
+  const requestSwap = useStore((state) => state.requestSwap)
+  const [polaroidHover, setPolaroidHover] = useState(false)
+  useCursor(polaroidHover)
   const colorScheme = useStore((state) => state.colorScheme)
   const dark = colorScheme === 'dark' ? 1 : 0
 
@@ -115,6 +125,11 @@ function Main(
   // satisfy, silently breaking it — that one needs a fresh Vector2.
   const pointerPositionRef = useRef(new Vector2())
 
+  // Swap animation progress (see utils/swap-poses.ts): 0 at rest, 1 fully
+  // out. Read from the store non-reactively, like everything else here.
+  const swapProgressRef = useRef(0)
+  const swapPhaseRef = useRef<SwapPhase>('idle')
+
   const [{ scale }, scaleApi] = useSpring(() => ({
     scale: 0,
     config: config.molasses,
@@ -123,7 +138,7 @@ function Main(
     position: [0, 0.04, -0.85],
   })
 
-  const { height: h } = useThree((state) => state.viewport)
+  const { width: w, height: h } = useThree((state) => state.viewport)
 
   const [{ position: polaroidPosition }, polaroidApi] = useSpring(() => ({
     position: [0, -h * 1.6, 0],
@@ -211,6 +226,41 @@ function Main(
 
     scaleApi.start({ scale: MathUtils.clamp(time / 8.0, 1.05, 1.125) })
 
+    const { swapPhase, swapDirection, swapStyle, setSwapPhase } =
+      useStore.getState()
+    const animation = SWAP_ANIMATIONS[swapStyle]
+    if (swapPhase !== swapPhaseRef.current) {
+      if (swapPhase === 'out') fadeOutAudio(video)
+      swapPhaseRef.current = swapPhase
+    }
+
+    let pose
+    if (swapPhase === 'out') {
+      swapProgressRef.current = Math.min(
+        1,
+        swapProgressRef.current + delta / animation.outDuration
+      )
+      pose = animation.exit(swapProgressRef.current, swapDirection, w, h)
+      if (swapProgressRef.current === 1) commitSwap(video)
+    } else if (swapPhase === 'loading') {
+      const held = animation.exit(1, swapDirection, w, h)
+      const hold = animation.hold?.(state.clock.elapsedTime, swapDirection)
+      pose = { ...held, ry: held.ry + (hold?.ry ?? 0) }
+    } else if (swapPhase === 'in') {
+      swapProgressRef.current = Math.max(
+        0,
+        swapProgressRef.current - delta / animation.inDuration
+      )
+      pose = animation.enter(swapProgressRef.current, swapDirection, w, h)
+      if (swapProgressRef.current === 0) setSwapPhase('idle')
+    }
+
+    if (swapGroup.current) {
+      const { x, y, z, rx, ry, rz } = pose ?? SWAP_REST
+      swapGroup.current.position.set(x, y, z + POLAROID_Z)
+      swapGroup.current.rotation.set(rx, ry, rz)
+    }
+
     if (!isMobile && !isTouch) {
       idleOpacityRef.current = MathUtils.lerp(
         idleOpacityRef.current,
@@ -229,26 +279,35 @@ function Main(
         scale={1.1}
         position={polaroidPosition as unknown as Vector3}
       >
-        {/* Dreaming */}
-        <Polaroid
-          intersectRef={polaroidIntersect as RefObject<Mesh>}
-          name="polaroid"
-          position={[0, 0, -1.0]}
-          scale={0.35}
-          passthroughMaterial={
-            <videoMaterial
-              ref={polaroidMaterial}
-              key={VideoMaterial.key}
-              uTexture={texture}
-              uFrameSelected={7}
-              uFrameTotal={7}
-              uFrameMask={3}
-              uOpacity={1}
-              uFrameOverlay={3}
-              uDark={dark}
-            />
-          }
-        />
+        {/* Dreaming — clicking it swaps to the next dream. The swap
+            animation moves this outer group; the pointer tilt (above)
+            turns the polaroid inside it. */}
+        <group ref={swapGroup} position={[0, 0, POLAROID_Z]}>
+          <Polaroid
+            intersectRef={polaroidIntersect as RefObject<Mesh>}
+            name="polaroid"
+            scale={0.35}
+            onClick={(e) => {
+              e.stopPropagation()
+              requestSwap(1)
+            }}
+            onPointerOver={() => setPolaroidHover(true)}
+            onPointerOut={() => setPolaroidHover(false)}
+            passthroughMaterial={
+              <videoMaterial
+                ref={polaroidMaterial}
+                key={VideoMaterial.key}
+                uTexture={texture}
+                uFrameSelected={7}
+                uFrameTotal={7}
+                uFrameMask={3}
+                uOpacity={1}
+                uFrameOverlay={3}
+                uDark={dark}
+              />
+            }
+          />
+        </group>
 
         {/* Avatar */}
         <animated.mesh
