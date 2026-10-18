@@ -262,7 +262,7 @@ async function compressAll(job: Job, source: string, base: string): Promise<void
 }
 
 /** Makes `out` with `make` unless it exists. Written under a temporary name first, so a stopped run never leaves a half-written file that looks done. */
-async function once(out: string, make: (partial: string) => Promise<void>): Promise<void> {
+export async function once(out: string, make: (partial: string) => Promise<void>): Promise<void> {
   if (await exists(out)) return
   const partial = out.replace(/\.(\w+)$/, '.partial.$1')
   await make(partial)

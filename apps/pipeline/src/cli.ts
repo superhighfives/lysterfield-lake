@@ -423,6 +423,8 @@ switch (step) {
     // --takes a,b,c, or every take with a composed panel video.
     const job = await loadJob(requireFlag('job'))
     const takes = flags.takes ? flags.takes.split(',') : await composedTakes(job)
+    const badTake = takes.find((t) => !t || t !== path.basename(t) || t === '.' || t === '..')
+    if (badTake !== undefined) throw new Error(`--takes "${badTake}" isn't a take folder name under 7-dreams/`)
     console.log(JSON.stringify(await composeSplit(job, takes), null, 2))
     break
   }
