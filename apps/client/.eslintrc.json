@@ -77,6 +77,8 @@
           "uBackgroundMix",
           "uShapeRadius",
           "uEdgeRadius",
+          "uLayer",
+          "uOutline",
           "uSharpen",
           "uHash",
           "onBeforeCompile",

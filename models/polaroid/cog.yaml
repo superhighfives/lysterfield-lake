@@ -1,0 +1,33 @@
+build:
+  # Every per-frame model behind a polaroid's panels 2, 4, 5 and 6 in one image, so a whole loop is one
+  # prediction with one boot (plans/backlog/user-polaroid-loops.md): RVM (matte), DiffusionCLIP + Real-ESRGAN
+  # (portrait), ZoeDepth (depth) and the coarse lineart network (outline). Panel 3 stays on Bria. Run
+  # ./fetch.sh first: it copies DiffusionCLIP's and lineart's code in from their own model folders.
+  #
+  # torch 1.13.1 / CUDA 11.7 to match models/diffusionclip, which produced every portrait so far.
+  gpu: true
+  cuda: "11.7"
+  python_version: "3.10"
+  system_packages:
+    - "ffmpeg"
+    - "git"
+    - "libgl1-mesa-glx"
+    - "libglib2.0-0"
+  python_requirements: requirements.txt
+  run:
+    # Weights and upstream code, each in its own layer (cached by command text), at absolute /src paths,
+    # since these steps run before cog's WORKDIR /src (see models/diffusionclip/cog.yaml).
+    - mkdir -p /src/weights && curl -L -o /src/weights/512x512_diffusion.pt https://openaipublic.blob.core.windows.net/diffusion/jul-2021/512x512_diffusion.pt
+    - pip install gdown && gdown 1l1vLwdL-6kC9jKcStASZ0KtX2OrmrSj6 -O /src/weights/imagenet_watercolor_t601.pth
+    - git clone -q https://github.com/PeterL1n/RobustVideoMatting.git /src/rvm && git -C /src/rvm checkout -q 53d74c6 && curl -L -o /src/weights/rvm_resnet50.pth https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_resnet50.pth
+    # basicsr's setup.py asks for torch at install time, and from requirements.txt pip fetched the newest
+    # (CUDA 13) build to satisfy it, which then conflicted. Installed here instead, after torch, against it,
+    # holding numpy and opencv where they are: left free, they upgraded to numpy 2, which torch 1.13 can't use.
+    - pip install --no-build-isolation basicsr==1.4.2 realesrgan==0.3.0 numpy==1.23.5 opencv-python==4.7.0.72
+    - curl -L -o /src/weights/RealESRGAN_x4plus.pth https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth
+    - curl -L -o /src/weights/sk_model2.pth https://huggingface.co/lllyasviel/Annotators/resolve/main/sk_model2.pth
+    # ZoeDepth's hub entry point fetches the MiDaS repo and its own weights on first load; loading it once here
+    # (on CPU) caches both in the image, so a prediction never downloads anything.
+    - git clone -q https://github.com/isl-org/ZoeDepth.git /src/zoedepth && git -C /src/zoedepth checkout -q d87f17b && cd /src/zoedepth && TORCH_HOME=/src/torch-cache python -c "import torch; torch.hub.load('.', 'ZoeD_N', source='local', pretrained=True)"
+
+predict: "predict.py:Predictor"

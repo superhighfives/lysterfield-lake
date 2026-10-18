@@ -20,6 +20,8 @@ import { dreamDirections } from './steps/dream-directions.ts'
 import { init } from './steps/init.ts'
 import { matte } from './steps/matte.ts'
 import { outline } from './steps/outline.ts'
+import { polaroid } from './steps/polaroid.ts'
+import { polaroidPanels } from './steps/polaroid-panels.ts'
 import { portrait } from './steps/portrait.ts'
 import { upscale } from './steps/upscale.ts'
 import { words } from './steps/words.ts'
@@ -62,6 +64,12 @@ function requireFlag(name: string): string {
   return value
 }
 
+function parseCrop(value: string) {
+  const [x, y, zoom] = value.split(',').map(Number)
+  if ([x, y, zoom].some((n) => !Number.isFinite(n))) throw new Error('--crop must be x,y,zoom, e.g. 0.5,0.4,1.5')
+  return { x, y, zoom }
+}
+
 /** Resolves a step's input frame directory: `--<flag>` overrides `defaultRelativePath`, both relative to the job root. */
 function frameDirFlag(job: Job, defaultRelativePath: string, flag = 'input'): string {
   return path.join(job.dir, flags[flag] ?? defaultRelativePath)
@@ -93,6 +101,8 @@ switch (step) {
       fps: flags.fps ? Number(flags.fps) : undefined,
       offset: flags.offset ? Number(flags.offset) : undefined,
       length: flags.length ? Number(flags.length) : undefined,
+      // --crop x,y,zoom: the square's centre (fractions of the frame) and zoom; see job.ts's Crop.
+      crop: flags.crop ? parseCrop(flags.crop) : undefined,
     })
     console.log(JSON.stringify(result, null, 2))
     break
@@ -193,6 +203,24 @@ switch (step) {
       frameDirFlag(job, '4-matte/frames', 'alpha'),
       concurrency
     )
+    console.log(JSON.stringify(result, null, 2))
+    break
+  }
+
+  case 'polaroid-panels': {
+    // Panels 2, 4, 5 and 6 from a models/polaroid output tar, post-processed as the per-model steps do. No Replicate calls.
+    const job = await loadJob(requireFlag('job'))
+    console.log(JSON.stringify(await polaroidPanels(job, requireFlag('tar'), concurrency), null, 2))
+    break
+  }
+
+  case 'polaroid': {
+    // The polaroid's looping 5-panel atlas (plans/backlog/user-polaroid-loops.md). ffmpeg only.
+    const job = await loadJob(requireFlag('job'))
+    const result = await polaroid(job, {
+      trim: flags.trim ? Number(flags.trim) : undefined,
+      blend: flags.blend ? Number(flags.blend) : undefined,
+    })
     console.log(JSON.stringify(result, null, 2))
     break
   }

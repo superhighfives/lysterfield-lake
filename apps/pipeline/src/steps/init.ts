@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { copyFile, mkdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { createJob, exists, extractFrames, framesDir, hasFiles, videoPath, type Job } from '../job.ts'
+import { createJob, exists, extractFrames, framesDir, hasFiles, videoPath, type Crop, type Job } from '../job.ts'
 
 const execFileAsync = promisify(execFile)
 
@@ -20,6 +20,8 @@ export interface InitOptions {
   offset?: number
   /** ffmpeg `-t` — seconds to process. */
   length?: number
+  /** Where to take the square from; the largest centred square if unset. */
+  crop?: Crop
 }
 
 export interface InitResult {
@@ -28,6 +30,13 @@ export interface InitResult {
   sourceVideoPath: string
   /** `0-source/frames/` — the cropped source extracted at `job.fps`; every per-frame step reads these. */
   sourceFramesDir: string
+}
+
+/** ffmpeg's crop filter for a hand-picked square: `ow` is the square's side, and x/y are clamped so it stays inside the frame. */
+function squareCrop({ x, y, zoom }: Crop): string {
+  const side = `min(iw\\,ih)/${zoom}`
+  const clamp = (centre: number, size: string) => `max(0\\,min(${size}-ow\\,${size}*${centre}-ow/2))`
+  return `crop=w='${side}':h='${side}':x='${clamp(x, 'iw')}':y='${clamp(y, 'ih')}'`
 }
 
 /**
@@ -60,9 +69,14 @@ export async function init(jobDir: string, opts: InitOptions): Promise<InitResul
     )
   }
 
+  const crop = opts.crop
+  if (crop && !(crop.zoom >= 1 && [crop.x, crop.y].every((v) => v >= 0 && v <= 1))) {
+    throw new Error('crop needs x and y between 0 and 1, and a zoom of at least 1')
+  }
+
   const job = await createJob(jobDir, {
     fps,
-    source: { path: originalRelativePath, from: path.resolve(opts.sourceVideoPath), offset: opts.offset, length: opts.length },
+    source: { path: originalRelativePath, from: path.resolve(opts.sourceVideoPath), offset: opts.offset, length: opts.length, crop },
   })
 
   const sourceVideoPath = await videoPath(job, '0-source/video')
@@ -76,7 +90,8 @@ export async function init(jobDir: string, opts: InitOptions): Promise<InitResul
       // Crop to the full centered square first, *then* scale — capping the
       // crop itself at 1280 would take a zoomed-in center crop of any source
       // larger than 1280px (e.g. the legacy 2160px `main-compiled-full.mov`).
-      "crop=w='min(iw\\,ih)':h='min(iw\\,ih)',scale=1280:1280,setsar=1",
+      // A hand-picked crop is a smaller square centred on its x/y, kept inside the frame.
+      `${crop ? squareCrop(crop) : "crop=w='min(iw\\,ih)':h='min(iw\\,ih)'"},scale=1280:1280,setsar=1`,
       sourceVideoPath
     )
     await execFileAsync('ffmpeg', args)

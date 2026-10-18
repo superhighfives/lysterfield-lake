@@ -1,0 +1,8 @@
+torch==1.13.1
+torchvision==0.14.1
+numpy==1.23.5
+Pillow==9.2.0
+PyYAML==6.0
+opencv-python-headless==4.7.0.72
+# ZoeDepth pins timm 0.6.7: newer releases renamed what its BEiT backbone imports.
+timm==0.6.7

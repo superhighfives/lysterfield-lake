@@ -131,6 +131,16 @@ async function compositeOnTransparent(
 }
 
 /**
+ * The post-processing half of `depth()` on its own, for a raw ZoeDepth frame made elsewhere (the polaroid
+ * model, models/polaroid, which writes the same `5-depth/raw/NNNN.png` that `fitToSubject` keeps): the same
+ * gamma rescale and matte mask, with no model call.
+ */
+export async function maskDepth(rawPath: string, alphaPath: string, outputPath: string, opts: { fitToSubject?: boolean } = {}): Promise<void> {
+  const { data: alpha } = await sharp(alphaPath).resize(SIZE, SIZE).greyscale().raw().toBuffer({ resolveWithObject: true })
+  await gammaRescaleAndMask(rawPath, alpha, outputPath, opts)
+}
+
+/**
  * `alpha` is the same `SIZE`x`SIZE` greyscale mask used to build the model's input — see the `depth()` docstring for why it's re-applied here too.
  *
  * The 235-255 band is fixed, so a subject far from the camera (nothing of it gamma-corrected above 235)
