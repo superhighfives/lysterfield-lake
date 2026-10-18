@@ -410,6 +410,8 @@ export default function adminPlugin(): Plugin {
             writeFileSync(file, Buffer.from(data, 'base64'))
             return send(res, 200, { name })
           }
+          // Jobs with a polaroid atlas (the pipeline's `polaroid` step), for /admin/polaroid.
+          if (parts[1] === 'polaroids' && req.method === 'GET') return send(res, 200, listJobs().filter((j) => existsSync(path.join(JOBS_DIR, j, 'polaroid', 'atlas.mp4'))))
           if (parts[1] === 'recordings' && req.method === 'POST') return send(res, 200, await createRecordingJob(await readBody(req, MAX_RECORDING_UPLOAD)))
           if (parts[1] === 'jobs' && parts.length === 2) return send(res, 200, listJobs())
           if (parts[1] === 'jobs' && parts.length === 3 && req.method === 'GET') return send(res, 200, jobDetail(parts[2]))

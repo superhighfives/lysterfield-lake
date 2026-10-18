@@ -167,9 +167,14 @@ stepFps 6, concurrency 4). 122 frames.
       starts (`park-party`, above)
 - [ ] Try Bria video-erase for panel 3 on `park-party`
 - [ ] Time DiffusionCLIP on faster hardware and higher concurrency
-- [ ] Prototype the loop seam on that clip
-- [ ] Prototype the R3F polaroid from that clip's atlas (depth relief,
-      interaction)
+- [x] Prototype the loop seam on that clip: the pipeline's `polaroid` step
+      drops 3 frames (matte settling) and crossfades the last 12 into the
+      start. The wrap scores 19.5dB PSNR, within the 17.6-24dB of ordinary
+      consecutive frames
+- [x] Prototype the R3F polaroid from that clip's atlas: `/admin/polaroid`,
+      the player's polaroid model with the background in the photo and
+      the person as a depth-displaced cut-out in front (`polaroid-loop-
+      material.tsx`), drag to turn
 - [ ] Replace or retire `leak-detection.ts` for polaroids (it failed both
       ways on `park-party`), and check the matte across a range of skin
       tones and lighting

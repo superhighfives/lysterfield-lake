@@ -20,6 +20,7 @@ import { dreamDirections } from './steps/dream-directions.ts'
 import { init } from './steps/init.ts'
 import { matte } from './steps/matte.ts'
 import { outline } from './steps/outline.ts'
+import { polaroid } from './steps/polaroid.ts'
 import { portrait } from './steps/portrait.ts'
 import { upscale } from './steps/upscale.ts'
 import { words } from './steps/words.ts'
@@ -201,6 +202,17 @@ switch (step) {
       frameDirFlag(job, '4-matte/frames', 'alpha'),
       concurrency
     )
+    console.log(JSON.stringify(result, null, 2))
+    break
+  }
+
+  case 'polaroid': {
+    // The polaroid's looping 5-panel atlas (plans/backlog/user-polaroid-loops.md). ffmpeg only.
+    const job = await loadJob(requireFlag('job'))
+    const result = await polaroid(job, {
+      trim: flags.trim ? Number(flags.trim) : undefined,
+      blend: flags.blend ? Number(flags.blend) : undefined,
+    })
     console.log(JSON.stringify(result, null, 2))
     break
   }
