@@ -367,7 +367,22 @@ Make and publish:
 
 - [ ] Try the whole loop on one new take for `full-video` (a real clip, a
       real full song, check, repair)
-- [ ] Compose all ten legacy dreams (re-compose `lush-and-light`)
+- [x] Compose all ten legacy dreams (re-compose `lush-and-light`): done
+      2026-10-16, 24 to 38 minutes each, about 5½ hours in all, one at a
+      time. Videos in `apps/client/dreams/<id>/` (gitignored, for R2);
+      stills, hero and loop in `public/assets/<id>/` (committed). The 2023
+      stills and loops that sat beside the videos, unused by the client,
+      moved to `.jobs/spikes/legacy-client-dream-extras/` so the R2 sync
+      doesn't upload them
+- [x] Blank depth panel, checked 2026-10-17 and left as is (user's call):
+      132 frames (about 5½s, almost all the walk-away at 1:59-2:08, plus
+      15 near 3:30) have a black panel 5 while the matte shows the person.
+      The depth look keeps only the top brightness band (235-255 after
+      gamma), so a subject far from the camera drops out entirely. The 2023
+      depth frames on the HDD are black at the same moments, so the
+      published videos always had it. Fixing it would mean re-running
+      ZoeDepth on those frames with a per-frame range, then composing all
+      ten again
 - [ ] Review: panel 7 timing per dream, plus a full watch of at least one
 - [ ] Sync R2 (`deploy-dreams`), with the user's go-ahead; deploy the client
 - [ ] Optional: review `repairGlitchedFrames`'s 80 flagged matte frames on
