@@ -26,6 +26,11 @@ export interface JobConfig {
    * reuse them.
    */
   samples?: { frame: number; label: string }[]
+  /**
+   * Hard cuts in the source: the first frame (1-based) of each new shot.
+   * `background-video` never lets a chunk cross one.
+   */
+  cuts?: number[]
   /** The stretch `dream-clip` renders as a short test composite: first frame (1-based) and frame count. */
   clip?: { start: number; frames: number }
 }

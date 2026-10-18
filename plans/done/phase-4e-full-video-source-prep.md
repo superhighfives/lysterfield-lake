@@ -64,7 +64,7 @@ regenerated, which kept Replicate spend for the whole song to panel 3:
 `.jobs/spikes/full-video-panel3/`, with old paths): `populate-legacy.ts` +
 `legacy-frame-map.json` (legacy reuse), `bria-plan.ts`/`bria-run.ts`/
 `bria-blend.ts` (panel 3). Porting the Bria approach into the pipeline is
-[`backlog/port-bria-background-step.md`](../backlog/port-bria-background-step.md).
+[`port-bria-background-step.md`](port-bria-background-step.md).
 
 **Legacy frame map.** New 24fps frame *n* (0-based) sits on legacy 60fps
 frame `map[n]` ≈ 2.5n − 3.5, measured rather than computed (see Findings).

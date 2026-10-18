@@ -45,6 +45,14 @@ export const MODELS = {
    */
   backgroundInpaint: 'black-forest-labs/flux-fill-pro:41c767bcbfffe54ef8f05eb4d0100f9314790f7fc43a7b88d73ec06839deddb9',
   /**
+   * Panel 3 as video (`background-video`): Bria's object eraser, given panel 2
+   * and a mask of the person, in clips of up to 5s and 750p. $0.05 per output
+   * second. Picked for `.jobs/full-video` over MiniMax and flux; see
+   * plans/done/phase-4e-full-video-source-prep.md. It only reads public URLs
+   * (r2.ts).
+   */
+  backgroundVideo: 'bria/video-erase-object:cbecc9042f041609a958facb1396732166d03ebf5eddd20738b449d22ab9f463',
+  /**
    * Dream step — replaced `kwaivgi/kling-v3-omni-video` (phase 2's pick
    * over Grok Imagine) after live-testing showed it doesn't actually do
    * what the legacy pipeline's dreaming lane did. Checked the real

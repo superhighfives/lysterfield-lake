@@ -10,6 +10,7 @@ import { loadJob, videoPath, type Job } from './job.ts'
 import { retryFailedPredictions } from './replicate.ts'
 import { backgroundPlate } from './steps/background-plate.ts'
 import { stabilizeBackground } from './steps/background-stabilize.ts'
+import { backgroundVideo } from './steps/background-video.ts'
 import { depth } from './steps/depth.ts'
 import { createTake, dream, dreamSamples, loadTake, saveTake, TAKE_STATUSES, type TakeStatus } from './steps/dream.ts'
 import { dreamCheck, listDreamFrames, type DreamCheck } from './steps/dream-check.ts'
@@ -155,6 +156,20 @@ switch (step) {
     break
   }
 
+  case 'background-video': {
+    // Panel 3 from Bria (the other way to make 3-background/frames). --plan true: free checks and cost only.
+    const job = await loadJob(requireFlag('job'))
+    const result = await backgroundVideo(
+      job,
+      frameDirFlag(job, '2-portrait/upscaled', 'input'),
+      frameDirFlag(job, '4-matte/frames', 'alpha'),
+      outputFlag('3-background/frames'),
+      { concurrency, planOnly: flags.plan === 'true', only: flags.chunks?.split(',') }
+    )
+    console.log(JSON.stringify(result, null, 2))
+    if (result.failed.length > 0) process.exitCode = 1
+    break
+  }
   case 'depth': {
     const job = await loadJob(requireFlag('job'))
     const result = await depth(
@@ -405,7 +420,7 @@ switch (step) {
 
   default:
     console.error(
-      `Usage: bun run src/cli.ts <init|words|matte|portrait|upscale|background-plate|background-stabilize|depth|outline|dream-directions|dream-take|dream-samples|dream-clip|dream-check|dream-repair|take-status|dream|compose> --job <dir> [options]`
+      `Usage: bun run src/cli.ts <init|words|matte|portrait|upscale|background-plate|background-stabilize|background-video|depth|outline|dream-directions|dream-take|dream-samples|dream-clip|dream-check|dream-repair|take-status|dream|compose> --job <dir> [options]`
     )
     process.exit(1)
 }
