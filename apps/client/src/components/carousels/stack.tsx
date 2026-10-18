@@ -26,8 +26,8 @@ const TOSS_PX = 80
 const THROW = 0.62
 const TUCK_MS = 380
 const EASE = 0.14
-// The pile's size, relative to the other layouts' cards: it's the only
-// thing on screen, so it can be bigger.
+// The pile's size, relative to a card's own: it's the only thing on
+// screen, so it can be big.
 const PILE_SCALE = 1.5
 // A pointer press that moves less than this (CSS px) is a click.
 const CLICK_PX = 6
@@ -58,7 +58,6 @@ function Stack({ items, onSelect }: CarouselProps) {
   )
 
   const top = order[order.length - 1]
-  const next = order[order.length - 2]
   const [topHovered, setTopHovered] = useState(false)
   // A new card on top starts unhovered.
   useEffect(() => setTopHovered(false), [top])
@@ -109,13 +108,11 @@ function Stack({ items, onSelect }: CarouselProps) {
     cursorHint.active = !useStore.getState().dream
     cursorHint.near = topHovered && !tossed.current
     cursorHint.dragging = dragging
-    if (dragging && drag.current) {
+    // Just the ring, no preview of what's next: the next card's already in
+    // view underneath, and it's the same either way.
+    cursorHint.dream = null
+    if (dragging && drag.current)
       cursorHint.progress = Math.min(1, Math.abs(drag.current.dx) / TOSS_PX)
-      cursorHint.dream = items[next] ?? null
-      // The next card's revealed in place; shown on the side away from
-      // the drag.
-      cursorHint.side = drag.current.dx < 0 ? 'right' : 'left'
-    }
 
     order.forEach((index, depth) => {
       const card = cards.current[index]

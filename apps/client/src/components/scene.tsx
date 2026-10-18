@@ -95,7 +95,7 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 
 	// These all used to be React state set every frame from useFrame,
 	// re-rendering Scene (and everything under it, including Choose's whole
-	// Slider) 60x/sec — see choose.tsx and main.tsx for the fuller writeup of
+	// stack) 60x/sec — see choose.tsx and main.tsx for the fuller writeup of
 	// this pattern. `globalPointer` in particular used to mirror the store's
 	// per-frame pointer value into local state purely so the dot mesh below
 	// could read it reactively; it's set directly on the mesh ref instead now.
@@ -122,9 +122,7 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 
 		// The spotlight only lights the polaroid frames (the photos are
 		// unlit), and mostly diffusely — a frame is brightest when it faces
-		// the light. In the carousel's fan, right-hand cards face left, so a
-		// light anywhere to the right lit the *left* half of the row
-		// brightest, wherever the pointer was. On the choose screen the
+		// the light. On the choose screen the
 		// light instead sits at the camera and aims at the point under the
 		// pointer, with a soft-edged cone: brightness follows a pool of light
 		// under the mouse rather than which way each card happens to face.
@@ -179,10 +177,9 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 		}
 
 		if (cameraRef && !isMobile && !isTouch) {
-			// Halved on the choose screen (pan and dolly both): there, the
-			// carousel's cards float toward the pointer individually (see
-			// slider.tsx), and full camera parallax on top made the whole row
-			// swing and zoom as one rigid object.
+			// Halved on the choose screen (pan and dolly both): full camera
+			// parallax there made the whole stack swing and zoom as one
+			// rigid object.
 			const parallax = dream ? 1 : 0.5;
 			cameraRef.position.x = MathUtils.lerp(
 				cameraRef.position.x,

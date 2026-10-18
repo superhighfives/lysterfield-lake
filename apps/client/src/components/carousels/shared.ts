@@ -1,14 +1,10 @@
 import { MathUtils, Object3D } from 'three'
 import type { Dream } from '../../utils/types'
 
-// Shared by the experimental carousel layouts (stack, scatter, lake,
-// hand), each an alternative to the fan in components/slider.tsx, picked
-// with ?carousel= or the dev picker. Each lays its cards out so they never
-// pass through one another (flat, or apart in depth), so plain depth
-// sorting draws them right without the fan's per-card layering. Cards that
-// overlap need to sit apart in depth by more than the photo's depth bias
-// (polaroid-material.tsx, ~0.02 here), or a photo shows through the card
-// in front of it.
+// For the choose screen's stack (stack.tsx). Its cards sit apart in depth,
+// so plain depth sorting draws them right. Cards that overlap need to sit
+// apart by more than the photo's depth bias (polaroid-material.tsx, ~0.02
+// here), or a photo shows through the card in front of it.
 
 export type CarouselProps = {
   items: Dream[]

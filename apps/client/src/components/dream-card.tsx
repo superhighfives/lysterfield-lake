@@ -11,8 +11,8 @@ import type { Dream } from '../utils/types'
 
 // One dream's card on the choose screen: its polaroid, with the dream's
 // hero image, and its title and prompt beneath. It lifts and tilts toward
-// the viewer on hover. Shared by every carousel layout (the fan in
-// components/slider.tsx, and the experiments in components/carousels/).
+// the viewer on hover. The cards of the choose screen's stack
+// (components/carousels/stack.tsx).
 
 const PolaroidShaderWrapper = a(({ ...props }) => (
   <polaroidMaterial {...props} />

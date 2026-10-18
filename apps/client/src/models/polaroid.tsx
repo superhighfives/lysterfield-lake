@@ -65,13 +65,11 @@ const FRAME_DARK_ROUGHNESS = 0.75
 // spread from washing the frame grey.
 const PLAYER_DARK_ROUGHNESS = 0.5
 
-// Carousel cards are drawn as layers, one at a time, each into its own
-// cleared depth buffer (see slider.tsx). That only works if every part of
-// a card lands in three.js's transparent pass — opaque objects all draw
-// first, in a pass of their own — so the carousel gets its own
-// transparent copies of the frame materials. The player's polaroid keeps
-// the shared originals. One copy per material is enough: draw order comes
-// from each mesh's renderOrder, not its material.
+// Carousel cards draw entirely in three.js's transparent pass (opaque
+// objects all draw first, in a pass of their own), sorted back to front
+// with the rest of the stack, so the carousel gets its own transparent
+// copies of the frame materials. The player's polaroid keeps the shared
+// originals. One copy per material is enough.
 const layeredCopies = new Map<MeshStandardMaterial, MeshStandardMaterial>()
 function layeredCopy(material: MeshStandardMaterial) {
   let copy = layeredCopies.get(material)

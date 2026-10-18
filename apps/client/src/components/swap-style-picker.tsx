@@ -1,12 +1,10 @@
-import { CAROUSEL_STYLES, SWAP_STYLES, useStore } from '../store'
+import { SWAP_STYLES, useStore } from '../store'
 
 // Prototype only: switches between the polaroid swap animations (see
-// utils/swap-poses.ts) in the player, and between the carousel layouts
-// (components/carousels/) on the choose screen, to compare them. Shown in
-// dev, or anywhere with `?swap=` or `?carousel=` in the URL. The carousel
-// choice is written back to the URL, so a reload keeps it.
-const params = new URLSearchParams(location.search)
-const enabled = import.meta.env.DEV || params.has('swap') || params.has('carousel')
+// utils/swap-poses.ts) in the player, to compare them. Shown in dev, or
+// anywhere with `?swap=` in the URL.
+const enabled =
+  import.meta.env.DEV || new URLSearchParams(location.search).has('swap')
 
 function Row<T extends string>({
   label,
@@ -42,35 +40,17 @@ function Row<T extends string>({
 function SwapStylePicker() {
   const swapStyle = useStore((state) => state.swapStyle)
   const setSwapStyle = useStore((state) => state.setSwapStyle)
-  const carouselStyle = useStore((state) => state.carouselStyle)
-  const setCarouselStyle = useStore((state) => state.setCarouselStyle)
   const showPlayhead = useStore((state) => state.showPlayhead)
   const ready = useStore((state) => state.ready)
-  const dream = useStore((state) => state.dream)
   if (!enabled || !ready) return null
 
-  if (showPlayhead)
-    return (
-      <Row
-        label="Swap"
-        options={SWAP_STYLES}
-        value={swapStyle}
-        onChange={setSwapStyle}
-      />
-    )
-
-  if (dream) return null
+  if (!showPlayhead) return null
   return (
     <Row
-      label="Carousel"
-      options={CAROUSEL_STYLES}
-      value={carouselStyle}
-      onChange={(style) => {
-        setCarouselStyle(style)
-        const url = new URL(location.href)
-        url.searchParams.set('carousel', style)
-        history.replaceState(history.state, '', url.pathname + url.search + url.hash)
-      }}
+      label="Swap"
+      options={SWAP_STYLES}
+      value={swapStyle}
+      onChange={setSwapStyle}
     />
   )
 }

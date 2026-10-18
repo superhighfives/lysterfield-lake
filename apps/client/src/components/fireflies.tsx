@@ -19,8 +19,7 @@ import { useStore } from '../store'
 //
 // Two layers, so they sit *in* the scene rather than on top of it:
 // - `back`: depth-tested, so anything genuinely in front (the player's
-//   polaroid) hides them, and drawn before the carousel, whose cards draw as
-//   layers over everything (see slider.tsx) and so cover them.
+//   polaroid, the carousel's cards) hides them.
 // - `front`: a few, closer to the camera, drawn after everything with no
 //   depth test.
 // three.js sorts transparent objects by their nearest group's renderOrder
@@ -46,7 +45,7 @@ const SPREAD_Y = 1.3
 const BACK_COUNT = 70
 const FRONT_COUNT = 12
 // renderOrder for each layer: before anything else in the scene, and after
-// the carousel's card layers (1000+, see slider.tsx).
+// everything.
 const BACK_RENDER_ORDER = -1
 const FRONT_RENDER_ORDER = 3000
 
