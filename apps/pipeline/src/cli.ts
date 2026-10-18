@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 // Bun loads .env from the cwd automatically — no dotenv package needed.
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeClientAssets } from './client-manifest.ts'
-import { compose, composePreview } from './compose.ts'
+import { compose, composePreview, composeSplit } from './compose.ts'
 import { gpuServerUrl } from './gpu-server.ts'
 import { loadJob, videoPath, type Job } from './job.ts'
 import { retryFailedPredictions } from './replicate.ts'
@@ -418,9 +418,20 @@ switch (step) {
     break
   }
 
+  case 'compose-split': {
+    // The shared main video (panels 1-6 + audio) and each take's silent dream clip. Takes from
+    // --takes a,b,c, or every take with a composed panel video.
+    const job = await loadJob(requireFlag('job'))
+    const takes = flags.takes ? flags.takes.split(',') : await composedTakes(job)
+    const badTake = takes.find((t) => !t || t !== path.basename(t) || t === '.' || t === '..')
+    if (badTake !== undefined) throw new Error(`--takes "${badTake}" isn't a take folder name under 7-dreams/`)
+    console.log(JSON.stringify(await composeSplit(job, takes), null, 2))
+    break
+  }
+
   default:
     console.error(
-      `Usage: bun run src/cli.ts <init|words|matte|portrait|upscale|background-plate|background-stabilize|background-video|depth|outline|dream-directions|dream-take|dream-samples|dream-clip|dream-check|dream-repair|take-status|dream|compose> --job <dir> [options]`
+      `Usage: bun run src/cli.ts <init|words|matte|portrait|upscale|background-plate|background-stabilize|background-video|depth|outline|dream-directions|dream-take|dream-samples|dream-clip|dream-check|dream-repair|take-status|dream|compose|compose-split> --job <dir> [options]`
     )
     process.exit(1)
 }
@@ -458,6 +469,15 @@ async function composeAndPublish(
     await writeClientAssets(clientDir, id, result)
     console.log(`Wrote client assets for "${id}" to ${clientDir}`)
   }
+}
+
+/** Every take whose dream panel `compose` has compiled (`7-dreams/<take>/video/panel.mov`). */
+async function composedTakes(job: Job): Promise<string[]> {
+  const takes = await readdir(path.join(job.dir, '7-dreams'), { withFileTypes: true })
+  const composed = await Promise.all(
+    takes.filter((t) => t.isDirectory() && !t.name.startsWith('_')).map(async (t) => ((await stat(path.join(job.dir, '7-dreams', t.name, 'video/panel.mov')).catch(() => null)) ? t.name : null))
+  )
+  return composed.filter((t): t is string => t !== null).sort()
 }
 
 function parseFlags(args: string[]): Record<string, string> {
