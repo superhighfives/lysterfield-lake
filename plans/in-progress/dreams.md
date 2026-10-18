@@ -2,7 +2,7 @@
 title: "Dreams: make, check, repair and publish panel 7 takes"
 status: In Progress
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-18
 ---
 
 # Dreams: make, check, repair and publish panel 7 takes
@@ -227,10 +227,15 @@ From phase 4f, for a new take and for the ten legacy dreams alike:
    stills to `apps/client/public/assets/<id>/`.
 2. Review: panel 7 against the old video at exact frame numbers, and one
    full watch for stray frames in matte, depth or outline.
-3. `bun run --cwd apps/client deploy-dreams` (an `rclone sync` to the
-   `lysterfield-lake-dreams` R2 bucket; uploads the readable-id folders and
-   deletes the datestamp ones). **Needs the user's go-ahead.**
+3. Upload the readable-id folders to the `lysterfield-lake-dreams` R2
+   bucket **without deleting** (`rclone copy`, not `deploy-dreams`'s
+   `rclone sync`). The live client still loads the datestamp folders, so
+   deleting them first would break it until the new client is up.
+   **Needs the user's go-ahead.**
 4. Deploy the client.
+5. `bun run --cwd apps/client deploy-dreams` to delete the datestamp
+   folders. No old-id lookup is needed: `?dream=<id>` links were never
+   deployed (user, 2026-10-18).
 
 The ten legacy dreams still need this: R2 holds them under datestamp ids,
 and `lush-and-light`'s one composite predates the stray-frame fixes.
@@ -383,8 +388,11 @@ Make and publish:
       published videos always had it. Fixing it would mean re-running
       ZoeDepth on those frames with a per-frame range, then composing all
       ten again
-- [ ] Review: panel 7 timing per dream, plus a full watch of at least one
-- [ ] Sync R2 (`deploy-dreams`), with the user's go-ahead; deploy the client
+- [x] Review: the user watched the walk-away (1:52-2:16) in the new
+      composite, 2026-10-18
+- [ ] Publish in the order under 7. Publish (copy to R2, deploy the client,
+      then delete the datestamp folders), once the client plays the split
+      videos (`plans/ready/split-dream-video-client.md`)
 - [ ] Optional: review `repairGlitchedFrames`'s 80 flagged matte frames on
       this job (see phase 4e's Other fixes)
 
@@ -401,8 +409,6 @@ Other methods:
 - Is the cut from a re-rendered stretch back to the next good frame
   invisible, or does it need the stretch run a few frames longer? Answered
   by the first repair.
-- Do old shared links with datestamp ids matter? If so, add an old-id →
-  new-id lookup in `use-history-sync.ts`.
 - Keep the 2023 originals anywhere besides the HDD's `output/final/`?
 - Where to run ComfyUI workflows for the other methods: a runner on
   Replicate, our own Cog image, or a rented GPU?
