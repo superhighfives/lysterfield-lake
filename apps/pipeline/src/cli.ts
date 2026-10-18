@@ -21,6 +21,7 @@ import { init } from './steps/init.ts'
 import { matte } from './steps/matte.ts'
 import { outline } from './steps/outline.ts'
 import { polaroid } from './steps/polaroid.ts'
+import { polaroidPanels } from './steps/polaroid-panels.ts'
 import { portrait } from './steps/portrait.ts'
 import { upscale } from './steps/upscale.ts'
 import { words } from './steps/words.ts'
@@ -203,6 +204,13 @@ switch (step) {
       concurrency
     )
     console.log(JSON.stringify(result, null, 2))
+    break
+  }
+
+  case 'polaroid-panels': {
+    // Panels 2, 4, 5 and 6 from a models/polaroid output tar, post-processed as the per-model steps do. No Replicate calls.
+    const job = await loadJob(requireFlag('job'))
+    console.log(JSON.stringify(await polaroidPanels(job, requireFlag('tar'), concurrency), null, 2))
     break
   }
 

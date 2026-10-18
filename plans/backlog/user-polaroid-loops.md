@@ -150,6 +150,31 @@ deleted straight after along with the bucket.
   (`frames-bria`). The flux-fill frames are kept in `frames-flux`, and
   their atlas in `polaroid/atlas-flux.mp4`.
 
+### Faster portrait, and one model for panels 2, 4, 5 and 6 (2026-10-18)
+
+- **Where the portrait's 72s went:** DiffusionCLIP rebuilt both multi-GB models from disk on every frame,
+  then ran 51 fp32 U-Net passes at 512px on a T4. `models/diffusionclip/run.py` now loads them once per
+  boot (same output: 72dB PSNR from the old model's frame) and takes `n_inv_step` and `fp16` as inputs.
+- **Per portrait frame:** old model on T4 72s; on an L40S 20.5s; optimised on the 4090 11.9s at 40
+  inversion steps, 7.9s at 20 (35.7dB over the whole clip, no visible change), 7.0s at 10 (a softer, visibly
+  different brush). fp16 was slower (autocast overhead). Use 20.
+- **`models/polaroid`:** one Cog image with RVM, DiffusionCLIP + Real-ESRGAN, ZoeDepth and the lineart
+  network, so a loop is one prediction with one boot. Each panel's raw output feeds the pipeline's existing
+  post-processing (`polaroid-panels`). It takes a frame range, so a job can split across several
+  predictions at once, with one of them doing the matte.
+- **Measured on the 4090 (free):** all 122 frames of `park-party`, every panel, 20 inversion steps:
+  1,015s (8.3s a frame), plus 24s setup. Against the earlier per-model run: matte 45.9dB, depth 45.1dB,
+  portrait 35.7dB, outline 26.7dB (thin lines; the same by eye).
+- **The PC is a free test bench and build machine:** 891GB free, `cog` 0.23, models in
+  `~/lysterfield-models`. Under WSL, cuDNN 8.5 can't find the driver and segfaults; `run-local.py` there
+  mounts a `libcuda.so` link. Deforum holds 8GB of VRAM, so the portrait runs one frame at a time there.
+- **Estimate on Replicate (L40S, $0.000975/s):** ~1,000 GPU-seconds a loop is about **$1** plus boot and
+  idle (private models bill those too), against the per-model run's ~$4. Split four ways, a loop takes
+  ~4-5 minutes of wall clock. Bria adds $0.25.
+- **Lost and rebuilt:** `park-party` was deleted from `.jobs` while freeing disk space (2026-10-17). Its
+  source was rebuilt from `_recordings/park-party.mov` with the same crop (38.7dB from the original), and
+  panels 2, 4, 5 and 6 now come from the polaroid model. Panel 3 (Bria) and the atlas are gone.
+
 ## Approach (rough, still being scoped)
 
 1. **Capture** (client): sign in with Clerk, then record 5s from the camera
