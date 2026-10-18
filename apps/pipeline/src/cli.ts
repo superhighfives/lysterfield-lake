@@ -176,7 +176,10 @@ switch (step) {
       job,
       frameDirFlag(job, '0-source/frames', 'source'),
       frameDirFlag(job, '4-matte/frames', 'alpha'),
-      concurrency
+      concurrency,
+      // --frames 736-756,2846-3125 redoes just those (the old ones move to 5-depth/replaced/);
+      // --fit-to-subject true scales each to the subject's own depth (plans/in-progress/depth-walk-away-gaps.md).
+      { frames: flags.frames ? parseFrameRanges(flags.frames) : undefined, fitToSubject: flags['fit-to-subject'] === 'true' }
     )
     console.log(JSON.stringify(result, null, 2))
     break
@@ -458,6 +461,15 @@ async function composeAndPublish(
     await writeClientAssets(clientDir, id, result)
     console.log(`Wrote client assets for "${id}" to ${clientDir}`)
   }
+}
+
+/** `736-756,2900` → every frame number in those ranges. */
+function parseFrameRanges(value: string): number[] {
+  return value.split(',').flatMap((part) => {
+    const [from, to = from] = part.split('-').map(Number)
+    if (!Number.isInteger(from) || !Number.isInteger(to) || to < from) throw new Error(`--frames: can't read "${part}"`)
+    return Array.from({ length: to - from + 1 }, (_, i) => from + i)
+  })
 }
 
 function parseFlags(args: string[]): Record<string, string> {
