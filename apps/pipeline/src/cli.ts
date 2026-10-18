@@ -11,7 +11,7 @@ import { retryFailedPredictions } from './replicate.ts'
 import { backgroundPlate } from './steps/background-plate.ts'
 import { stabilizeBackground } from './steps/background-stabilize.ts'
 import { backgroundVideo } from './steps/background-video.ts'
-import { depth } from './steps/depth.ts'
+import { depth, parseFrameRanges } from './steps/depth.ts'
 import { createTake, dream, dreamSamples, loadTake, saveTake, TAKE_STATUSES, type TakeStatus } from './steps/dream.ts'
 import { dreamCheck, listDreamFrames, type DreamCheck } from './steps/dream-check.ts'
 import { deforumFrames } from './steps/dream-deforum.ts'
@@ -461,15 +461,6 @@ async function composeAndPublish(
     await writeClientAssets(clientDir, id, result)
     console.log(`Wrote client assets for "${id}" to ${clientDir}`)
   }
-}
-
-/** `736-756,2900` → every frame number in those ranges. */
-function parseFrameRanges(value: string): number[] {
-  return value.split(',').flatMap((part) => {
-    const [from, to = from] = part.split('-').map(Number)
-    if (!Number.isInteger(from) || !Number.isInteger(to) || to < from) throw new Error(`--frames: can't read "${part}"`)
-    return Array.from({ length: to - from + 1 }, (_, i) => from + i)
-  })
 }
 
 function parseFlags(args: string[]): Record<string, string> {

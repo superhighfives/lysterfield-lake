@@ -1,8 +1,8 @@
-import { access, rename, unlink } from 'node:fs/promises'
+import { rename, unlink } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
 import { loadImageAndMaskRaw } from '../composite.ts'
-import { forEachFrame, framesDir, siblingFramePath, type Job } from '../job.ts'
+import { exists, forEachFrame, framesDir, siblingFramePath, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
 import { runModelToFile } from '../replicate.ts'
 
@@ -54,13 +54,16 @@ export async function depth(
   const frameNumber = (file: string) => Number(path.basename(file, path.extname(file)))
 
   // Redoing frames that already exist: move each one aside first, so the redo can be undone and
-  // `forEachFrame` doesn't skip it. A frame already moved aside keeps its first original.
+  // `forEachFrame` doesn't skip it. A frame already moved aside keeps its first original, and its
+  // later redo is just deleted.
   if (only) {
     const replacedDir = await framesDir(job, '5-depth/replaced')
     for (const n of only) {
       const file = `${String(n).padStart(4, '0')}.jpg`
       const [current, original] = [path.join(outputDir, file), path.join(replacedDir, file)]
-      if ((await exists(current)) && !(await exists(original))) await rename(current, original)
+      if (!(await exists(current))) continue
+      if (await exists(original)) await unlink(current)
+      else await rename(current, original)
     }
   }
   const rawDir = opts.fitToSubject ? await framesDir(job, '5-depth/raw') : undefined
@@ -99,11 +102,14 @@ export interface DepthOptions {
   fitToSubject?: boolean
 }
 
-async function exists(p: string): Promise<boolean> {
-  return access(p).then(
-    () => true,
-    () => false
-  )
+/** `736-756,2900` → every frame number in those ranges (1-based). */
+export function parseFrameRanges(value: string): number[] {
+  return value.split(',').flatMap((part) => {
+    const match = /^(\d+)(?:-(\d+))?$/.exec(part.trim())
+    const [from, to] = match ? [Number(match[1]), Number(match[2] ?? match[1])] : [0, 0]
+    if (from < 1 || to < from) throw new Error(`--frames: can't read "${part}"`)
+    return Array.from({ length: to - from + 1 }, (_, i) => from + i)
+  })
 }
 
 async function compositeOnTransparent(
