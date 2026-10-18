@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { access, rename } from 'node:fs/promises'
+import { access, rename, unlink } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
 import path from 'node:path'
@@ -241,14 +241,19 @@ export async function composeSplit(job: Job, takes: string[]): Promise<ComposeSp
   const dreamDirs: string[] = []
   for (const take of takes) {
     const dir = `7-dreams/${take}/split`
+    dreamDirs.push(path.join(job.dir, dir))
+    const outputs = ['dream.mov', 'dream.webm', 'dream-small.mov', 'dream-small.webm'].map((f) => path.join(job.dir, dir, f))
+    if ((await Promise.all(outputs.map(exists))).every(Boolean)) continue
+
     const dreamPanel = await panelVideo(`7-dreams/${take}`)
     // Trimmed to the song and resampled to the job's rate exactly as the main video is, without audio.
+    // Only needed until the four clips are made (about 250MB a take), so it's deleted after.
     const trimmed = await videoPath(job, `${dir}/dream-full`)
     await once(trimmed, (out) =>
       execFileAsync('ffmpeg', ['-y', '-i', dreamPanel, '-t', String(duration), '-r', String(job.fps), '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '14', out]).then(() => undefined)
     )
     await compressAll(job, trimmed, `${dir}/dream`)
-    dreamDirs.push(path.join(job.dir, dir))
+    await unlink(trimmed)
   }
 
   return { mainDir: path.join(job.dir, mainDir), dreamDirs }
