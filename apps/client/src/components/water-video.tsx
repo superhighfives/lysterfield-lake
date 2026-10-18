@@ -14,14 +14,16 @@ import { MutableRefObject, useEffect, useRef, useState } from 'react'
 // isolating the blend from the page.
 
 // Ripples: at most MAX_DROPS rings at once; a new drop every DROP_SPACING
-// CSS px of pointer travel. Each ring spreads at SPEED (UV/s), with this
+// CSS px of pointer travel, at POINTER_STRENGTH — faint, next to the
+// button's splashes, which a stroke never pushes out early. Each ring spreads at SPEED (UV/s), with this
 // wavelength (FREQUENCY) and width at strength 1 — stronger rings are
 // longer and wider — displaces by up to AMOUNT (UV) per unit of strength,
 // and fades out over DROP_SECONDS. SHADE is how much a ring darkens and
 // lightens the paper; kept faint, as dark mode's key turns near-white
 // transparent and anything darker shows strongly against the dark page.
 const MAX_DROPS = 12
-const DROP_SPACING = 28
+const DROP_SPACING = 40
+const POINTER_STRENGTH = 0.2
 const SPEED = 0.35
 const FREQUENCY = 60
 const WIDTH = 0.06
@@ -161,7 +163,10 @@ function WaterVideo({
     const drops: Drop[] = []
     const addDrop = (x: number, y: number, strength: number) => {
       drops.push({ x, y, born: performance.now(), strength })
-      if (drops.length > MAX_DROPS) drops.shift()
+      if (drops.length <= MAX_DROPS) return
+      // Make room by the oldest pointer drop, keeping the button's.
+      const oldest = drops.findIndex((drop) => drop.strength <= POINTER_STRENGTH)
+      drops.splice(oldest === -1 ? 0 : oldest, 1)
     }
 
     if (handle)
@@ -190,7 +195,7 @@ function WaterVideo({
         Math.hypot(event.clientX - last.x, event.clientY - last.y) >=
           DROP_SPACING
       ) {
-        addDrop(x, y, 1)
+        addDrop(x, y, POINTER_STRENGTH)
         last = { x: event.clientX, y: event.clientY }
       }
     }

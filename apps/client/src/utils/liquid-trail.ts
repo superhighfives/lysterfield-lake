@@ -42,6 +42,9 @@ let activeFrames = 0
 // (REPLACE_AFTER of its life) rather than cutting it off mid-ripple —
 // which a long stroke used to do, ending earlier rings abruptly.
 export const MAX_DROPS = 16
+/** The camera layer polaroids join, so the wake pass can tell them from
+ *  everything else. */
+export const WAKE_MASK_LAYER = 5
 const DROP_SPACING = 110
 export const DROP_SECONDS = 3.2
 const REPLACE_AFTER = 0.8

@@ -1,6 +1,6 @@
 import { useGLTF } from '@react-three/drei'
 import { Euler, ThreeElements, Vector3 } from '@react-three/fiber'
-import { forwardRef, JSX, RefObject, useEffect, useMemo } from 'react'
+import { forwardRef, JSX, RefObject, useEffect, useMemo, useRef } from 'react'
 import { GLTF } from 'three-stdlib'
 import {
   BufferGeometry,
@@ -14,6 +14,7 @@ import {
 import { TessellateModifier } from 'three/examples/jsm/modifiers/TessellateModifier.js'
 import { animated } from '@react-spring/three'
 import { useStore } from '../store'
+import { WAKE_MASK_LAYER } from '../utils/liquid-trail'
 
 // A soft-edged rectangle used as the drop shadow's alpha map — built once
 // at module load (up to ~20 Polaroids share this one texture) rather than
@@ -223,6 +224,14 @@ const Polaroid = forwardRef<
     }
   }, [dark, materials, layered])
 
+  // The card itself (not its drop shadow) joins the wake's mask layer, so
+  // the wake pass blurs polaroids and ripples everything else (see
+  // components/wake-pass.tsx).
+  const card = useRef<Group>(null)
+  useEffect(() => {
+    card.current?.traverse((object) => object.layers.enable(WAKE_MASK_LAYER))
+  }, [player])
+
   return (
     <animated.group ref={ref} {...props} dispose={null}>
       {/* Drop shadow, so a card in front reads as resting on the one
@@ -250,47 +259,49 @@ const Polaroid = forwardRef<
         />
       </mesh>
 
-      {/* Overlay */}
-      <mesh
-        castShadow={!layered}
-        receiveShadow={!layered}
-        geometry={player?.overlayGeometry ?? nodes.Object_3001.geometry}
-        material={player?.overlay ?? materials['Material.001']}
-        position={[0, 0, 0.001]}
-      />
+      <group ref={card}>
+        {/* Overlay */}
+        <mesh
+          castShadow={!layered}
+          receiveShadow={!layered}
+          geometry={player?.overlayGeometry ?? nodes.Object_3001.geometry}
+          material={player?.overlay ?? materials['Material.001']}
+          position={[0, 0, 0.001]}
+        />
 
-      {/* Inside */}
-      <mesh
-        ref={intersectRef}
-        castShadow={!layered}
-        receiveShadow={!layered}
-        geometry={player?.inside ?? nodes.Object_3.geometry}
-        rotation={rotation as Euler}
-        position={position as Vector3}
-        scale={scale as Vector3}
-      >
-        {passthroughMaterial}
-      </mesh>
-      {/* Back */}
-      <mesh
-        castShadow={!layered}
-        receiveShadow={!layered}
-        geometry={player?.back ?? nodes.Object_4.geometry}
-        material={frame(materials.Framelambert79SG)}
-        rotation={rotation as Euler}
-        position={position as Vector3}
-        scale={scale as Vector3}
-      />
-      {/* Front */}
-      <mesh
-        castShadow={!layered}
-        receiveShadow={!layered}
-        geometry={player?.front ?? nodes.Object_5.geometry}
-        material={frame(materials.initialShadingGroup)}
-        rotation={rotation as Euler}
-        position={position as Vector3}
-        scale={scale as Vector3}
-      />
+        {/* Inside */}
+        <mesh
+          ref={intersectRef}
+          castShadow={!layered}
+          receiveShadow={!layered}
+          geometry={player?.inside ?? nodes.Object_3.geometry}
+          rotation={rotation as Euler}
+          position={position as Vector3}
+          scale={scale as Vector3}
+        >
+          {passthroughMaterial}
+        </mesh>
+        {/* Back */}
+        <mesh
+          castShadow={!layered}
+          receiveShadow={!layered}
+          geometry={player?.back ?? nodes.Object_4.geometry}
+          material={frame(materials.Framelambert79SG)}
+          rotation={rotation as Euler}
+          position={position as Vector3}
+          scale={scale as Vector3}
+        />
+        {/* Front */}
+        <mesh
+          castShadow={!layered}
+          receiveShadow={!layered}
+          geometry={player?.front ?? nodes.Object_5.geometry}
+          material={frame(materials.initialShadingGroup)}
+          rotation={rotation as Euler}
+          position={position as Vector3}
+          scale={scale as Vector3}
+        />
+      </group>
     </animated.group>
   )
 })
