@@ -28,6 +28,15 @@ const SPEED_CURVE = 1.6
 const STROKE_ALPHA_SLOW = 0.2
 const STROKE_ALPHA_FAST = 0.65
 const NEUTRAL = 'rgb(128, 128, 0)'
+// Frames for a full-strength stroke to wash out to (8-bit) nothing at
+// SETTLE per frame, plus a margin; the trail counts as active that long
+// after its last stroke.
+const ACTIVE_FRAMES = Math.ceil(Math.log(1 / 255) / Math.log(1 - SETTLE)) + 30
+let activeFrames = 0
+
+/** Whether the trail has anything in it worth drawing — if not, the wake
+ *  pass can skip itself and the scene draw straight to the screen. */
+export const trailActive = () => activeFrames > 0
 
 const canvas = document.createElement('canvas')
 const context = canvas.getContext('2d')!
@@ -71,6 +80,7 @@ export function updateTrail(width: number, height: number) {
     const distance = Math.hypot(dx, dy)
     const speed = Math.min(distance / FULL_SPEED, 1) ** SPEED_CURVE
     if (speed > 0.005) {
+      activeFrames = ACTIVE_FRAMES
       const radius = canvas.width * (RADIUS + (RADIUS_FAST - RADIUS) * speed)
       const r = Math.round(128 + 127 * (dx / distance) * speed)
       const g = Math.round(128 + 127 * (dy / distance) * speed)
@@ -94,5 +104,8 @@ export function updateTrail(width: number, height: number) {
 
   last.x = pointer.x
   last.y = pointer.y
-  trailTexture.needsUpdate = true
+  if (activeFrames > 0) {
+    activeFrames--
+    trailTexture.needsUpdate = true
+  }
 }

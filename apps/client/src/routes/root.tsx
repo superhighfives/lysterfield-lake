@@ -41,7 +41,15 @@ function Root() {
   const setIsTooSlow = useStore((state) => state.setIsTooSlow)
   const seeking = useStore((state) => state.seeking)
   const showPlayhead = useStore((state) => state.showPlayhead)
-  const dprCap = useStore((state) => state.dprCap)
+  // The canvas's pixel ratio: the device's, capped (dprCap), and stepped
+  // down further by the performance monitor on a machine that can't keep up.
+  const dpr = useStore((state) =>
+    Math.min(
+      window.devicePixelRatio || 1,
+      state.dprCap ?? 2,
+      state.autoDpr ? state.dprAuto : Infinity
+    )
+  )
   const water = useWater()
   const [diving, setDiving] = useState(false)
   // A swap's load is covered by the polaroid's own animation (see
@@ -160,7 +168,7 @@ function Root() {
               data-swap-surface
               className={`${isBuffering ? 'grayscale' : ''} fixed inset-0`}
             >
-              <Canvas shadows dpr={dprCap ? [1, dprCap] : [1, 2]}>
+              <Canvas shadows dpr={dpr}>
                 <Suspense fallback={<Loading />}>
                   <Preload all />
                   <Scene video={video} />

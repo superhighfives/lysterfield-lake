@@ -76,6 +76,11 @@ export interface AppState {
   debug: boolean
   wakeEnabled: boolean
   dprCap: number | null
+  /** The pixel ratio the performance monitor has settled on (see
+   *  components/scene.tsx), between 1 and the cap; and whether it's
+   *  allowed to (debug mode can turn it off). */
+  dprAuto: number
+  autoDpr: boolean
   setDream: (dream: Dream | null) => void
   setResetting: (resetting: boolean) => void
   setSeeking: (seeking: boolean) => void
@@ -103,6 +108,8 @@ export interface AppState {
   setDebug: (debug: boolean) => void
   setWakeEnabled: (wakeEnabled: boolean) => void
   setDprCap: (dprCap: number | null) => void
+  setDprAuto: (dprAuto: number) => void
+  setAutoDpr: (autoDpr: boolean) => void
 }
 
 export const useStore = create<AppState>()((set) => ({
@@ -131,7 +138,12 @@ export const useStore = create<AppState>()((set) => ({
   carouselStyle: initialCarouselStyle(),
   debug: new URLSearchParams(location.search).has('debug'),
   wakeEnabled: true,
-  dprCap: null,
+  // 1.5 rather than native: at 2x on a big display the canvas is ~12M
+  // pixels, rendered twice a frame while the wake runs (debug mode's
+  // numbers: ~31ms a frame at 2x, ~22ms at 1.5x, ~17.5ms at 1x).
+  dprCap: 1.5,
+  dprAuto: 2,
+  autoDpr: true,
   setDream: (dream: Dream | null) => set({ dream }),
   setResetting: (resetting: boolean) => {
     set(() => ({ resetting }))
@@ -177,4 +189,6 @@ export const useStore = create<AppState>()((set) => ({
   setDebug: (debug: boolean) => set(() => ({ debug })),
   setWakeEnabled: (wakeEnabled: boolean) => set(() => ({ wakeEnabled })),
   setDprCap: (dprCap: number | null) => set(() => ({ dprCap })),
+  setDprAuto: (dprAuto: number) => set(() => ({ dprAuto })),
+  setAutoDpr: (autoDpr: boolean) => set(() => ({ autoDpr })),
 }))

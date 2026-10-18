@@ -8,6 +8,7 @@ import {
 import { REVISION } from 'three'
 import { useStore } from '../store'
 import { debugStats, HISTORY } from '../utils/debug-stats'
+import { trailActive } from '../utils/liquid-trail'
 
 // Debug mode: Shift+D (or ?debug) toggles a diagnostics panel — frame rate
 // and a frame-time graph to spot spikes, three.js's renderer stats, the
@@ -24,6 +25,7 @@ const BAD_MS = 34
 // How often (ms) the text refreshes; the graph redraws every frame.
 const TEXT_MS = 250
 
+// Caps on the pixel ratio; 1.5x is the default.
 const DPR_CAPS: { label: string; value: number | null }[] = [
   { label: '1×', value: 1 },
   { label: '1.5×', value: 1.5 },
@@ -74,6 +76,9 @@ function DebugOverlay() {
   const setWakeEnabled = useStore((state) => state.setWakeEnabled)
   const dprCap = useStore((state) => state.dprCap)
   const setDprCap = useStore((state) => state.setDprCap)
+  const dprAuto = useStore((state) => state.dprAuto)
+  const autoDpr = useStore((state) => state.autoDpr)
+  const setAutoDpr = useStore((state) => state.setAutoDpr)
   const dream = useStore((state) => state.dream)
   const swapPhase = useStore((state) => state.swapPhase)
   const carouselStyle = useStore((state) => state.carouselStyle)
@@ -159,6 +164,8 @@ function DebugOverlay() {
     ['shaders', `${debugStats.programs}`],
     ['objects', `${debugStats.objects}`],
     ['buffer', `${debugStats.width}×${debugStats.height} @ ${debugStats.dpr}x`],
+    ['auto dpr', autoDpr ? `${dprAuto}x (monitor)` : 'off'],
+    ['wake pass', !wakeEnabled ? 'off' : trailActive() ? 'running' : 'idle (skipped)'],
     ['gpu', debugStats.gpu || 'unknown'],
     ...(memory
       ? [['js heap', `${(memory.usedJSHeapSize / 1048576).toFixed(0)} / ${(memory.jsHeapSizeLimit / 1048576).toFixed(0)} MB`] as [string, string]]
@@ -197,6 +204,11 @@ function DebugOverlay() {
           <span className="text-stone-400 w-16">wake</span>
           <Toggle active={wakeEnabled} onClick={() => setWakeEnabled(true)}>on</Toggle>
           <Toggle active={!wakeEnabled} onClick={() => setWakeEnabled(false)}>off</Toggle>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-stone-400 w-16">auto</span>
+          <Toggle active={autoDpr} onClick={() => setAutoDpr(true)}>on</Toggle>
+          <Toggle active={!autoDpr} onClick={() => setAutoDpr(false)}>off</Toggle>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-stone-400 w-16">pixels</span>

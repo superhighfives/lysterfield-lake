@@ -11,7 +11,7 @@ import {
   Vector2,
   WebGLRenderTarget,
 } from 'three'
-import { trailTexture, updateTrail } from '../utils/liquid-trail'
+import { trailActive, trailTexture, updateTrail } from '../utils/liquid-trail'
 
 // The cursor's liquid wake, over everything the canvas draws: the scene is
 // rendered to a texture, then drawn to the screen pulled along the
@@ -45,8 +45,9 @@ const BLOOM_TAPS = 8
 const BLOOM_PX = 10
 const BLOOM_STRENGTH = 0.28
 const TRAIL_PX = 6
-// MSAA for the offscreen render, matching the canvas's own antialiasing.
-const SAMPLES = 4
+// No MSAA for the offscreen render: it only runs while the wake is moving
+// (see the frame loop), when the image is warped and bloomed anyway, and
+// 4x at a big display's size was a real share of the frame.
 
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
@@ -111,11 +112,12 @@ function WakePass() {
   const size = useThree((state) => state.size)
 
   const target = useMemo(() => {
-    const renderTarget = new WebGLRenderTarget(1, 1, { samples: SAMPLES })
+    const renderTarget = new WebGLRenderTarget(1, 1)
     renderTarget.texture.colorSpace = SRGBColorSpace
-    // The flag also stores the multisampled buffer as plain RGBA8 (the
-    // values are already sRGB-encoded); the texture it resolves into has to
-    // match, or the resolve fails and the screen goes blank.
+    // Plain RGBA8, not an sRGB format: the values written are already
+    // sRGB-encoded (see the flag below), so the texture must store them as
+    // they are — and if MSAA comes back, its multisampled buffer is RGBA8
+    // under the flag, and a mismatched resolve blanks the screen.
     renderTarget.texture.internalFormat = 'RGBA8'
     // See above: renders into this get the screen's own colour handling.
     ;(renderTarget as WebGLRenderTarget & { isXRRenderTarget: boolean }).isXRRenderTarget = true
@@ -159,6 +161,15 @@ function WakePass() {
   // every other frame callback.
   useFrame((state) => {
     updateTrail(state.size.width, state.size.height)
+    // Nothing moving: the pass would copy the scene across unchanged, so
+    // skip it and draw the scene straight to the screen, as it was before
+    // the wake existed. Only a stroke's worth of frames pay for two passes.
+    if (!trailActive()) {
+      gl.setRenderTarget(null)
+      gl.render(state.scene, state.camera)
+      return
+    }
+
     gl.setRenderTarget(target)
     gl.clear()
     gl.render(state.scene, state.camera)
