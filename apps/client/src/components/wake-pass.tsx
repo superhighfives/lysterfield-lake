@@ -67,9 +67,12 @@ const TRAIL_PX = 6
 // soft swells — no ripples — RING_SPEED_PX per second, RING_WIDTH_PX wide,
 // fading out over the drop's life. Over everything but the polaroids they
 // bend the image (up to RING_PUSH_PX) and catch the light on their crests
-// (RING_GLINT); on the page behind, they're a faint lift of light in dark
-// mode and a shade in light mode (RING_LIGHT / RING_SHADE at full
-// strength), dithered by RING_NOISE so the faint gradient doesn't band.
+// (RING_GLINT). In dark mode they're a faint lift of light on the page
+// behind (RING_LIGHT at full strength, only where the scene leaves the
+// page showing); in light mode a shade (RING_SHADE) over everything but
+// the polaroids — the page and the dream's screen behind alike — so the
+// water is the darker element. Dithered by RING_NOISE so the faint
+// gradient doesn't band.
 const RING_SPEED_PX = 150
 const RING_WIDTH_PX = 80
 const RING_PUSH_PX = 9
@@ -175,15 +178,21 @@ const fragmentShader = /* glsl */ `
       color.rgb = min(straight, vec3(1.0)) * color.a;
     }
 
-    // The swells on the page, only where the scene leaves it showing,
-    // with a little grain.
-    float behind = (1.0 - color.a) * swell;
+    // The swells' light (dark mode, on the bare page) or shade (light
+    // mode, over all but the polaroids), with a little grain.
+    float behind = swell * mix(1.0 - polaroid, 1.0 - color.a, uDark);
     if (behind > 0.0005) {
       float grain = (hash(gl_FragCoord.xy) - 0.5) * ${RING_NOISE.toFixed(3)} * smoothstep(0.0, 0.15, behind);
       float amount = max(0.0, behind * mix(${RING_SHADE.toFixed(3)}, ${RING_LIGHT.toFixed(3)}, uDark) + grain);
-      // Premultiplied: light adds white, shade adds black.
-      color.rgb += vec3(amount * uDark);
-      color.a += amount;
+      if (uDark > 0.5) {
+        // Premultiplied: light adds white.
+        color.rgb += vec3(amount);
+        color.a += amount;
+      } else {
+        // Black laid over what's here.
+        color.rgb *= 1.0 - amount;
+        color.a += amount * (1.0 - color.a);
+      }
     }
 
     gl_FragColor = color;

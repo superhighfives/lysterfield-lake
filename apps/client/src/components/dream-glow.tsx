@@ -40,7 +40,11 @@ const GREY_FAR = 0.65
 // The screen fades to nothing over this much (short-side units) at all
 // four edges.
 const EDGE_FADE = 0.3
-const GLOW_OPACITY = { light: 0.4, dark: 0.4 }
+const GLOW_OPACITY = { light: 0.3, dark: 0.4 }
+// In light mode the dream is lifted this far toward white first, so the
+// wash stays light rather than greying the page; the wake's swells are
+// the darker element there (components/wake-pass.tsx).
+const LIGHT_LIFT = { light: 0.45, dark: 0 }
 // The page tint's strength per scheme. Its colour is pushed toward full
 // saturation first, so a pale dream still tints.
 const TINT_ALPHA = { light: 0.15, dark: 0.1 }
@@ -75,6 +79,7 @@ const fragmentShader = /* glsl */ `
   uniform sampler2D uTexture;
   uniform float uOpacity;
   uniform float uAspect;
+  uniform float uLift;
   uniform vec2 uPointerRelative;
 
   vec3 panelAt(float panel, vec2 uv) {
@@ -106,6 +111,7 @@ const fragmentShader = /* glsl */ `
     float grey = smoothstep(${GREY_NEAR.toFixed(2)}, ${GREY_FAR.toFixed(2)}, distance(p, pointer));
     vec3 dream = panelAt(${DREAM_PANEL.toFixed(1)}, dreamUv);
     vec3 color = mix(dream, vec3(dot(dream, vec3(0.299, 0.587, 0.114))), grey);
+    color = mix(color, vec3(1.0), uLift);
     // Fading out toward every edge, the same width on all four.
     vec2 edge = extent * 0.5 - abs(p);
     float fade = smoothstep(0.0, ${EDGE_FADE.toFixed(2)}, edge.x) * smoothstep(0.0, ${EDGE_FADE.toFixed(2)}, edge.y);
@@ -154,6 +160,7 @@ function DreamGlow({
           uTexture: { value: texture },
           uOpacity: { value: 0 },
           uAspect: { value: 1 },
+          uLift: { value: 0 },
           uPointerRelative: { value: new Vector2(1, 1) },
         },
         // Not in the transparent pass, so with the lowest renderOrder it
@@ -186,6 +193,7 @@ function DreamGlow({
     material.blendDst = OneMinusSrcAlphaFactor
     material.blendSrcAlpha = OneFactor
     material.blendDstAlpha = OneMinusSrcAlphaFactor
+    material.uniforms.uLift.value = LIGHT_LIFT[scheme]
     material.needsUpdate = true
   }, [material, scheme])
 
