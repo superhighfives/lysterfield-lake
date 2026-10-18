@@ -13,6 +13,12 @@ import { handleDeviceOrientationPermissions, isTouchDevice, shuffle } from '../u
 import dreams from '../dreams.json'
 import { Play, FileText, CircleNotch } from '@phosphor-icons/react'
 import { useHistorySync } from '../utils/use-history-sync'
+import { useSwapInput } from '../utils/swap-gesture'
+import { startAudio } from '../utils/audio'
+import WaterVideo, { DIVE_MS, useWater } from '../components/water-video'
+import Cursor from '../components/cursor'
+import DebugOverlay from '../components/debug-overlay'
+import SwapStylePicker from '../components/swap-style-picker'
 
 // How long buffering has to last before offering the YouTube escape hatch.
 const TOO_SLOW_DELAY = 8000
@@ -35,6 +41,23 @@ function Root() {
   const setIsTooSlow = useStore((state) => state.setIsTooSlow)
   const seeking = useStore((state) => state.seeking)
   const showPlayhead = useStore((state) => state.showPlayhead)
+  // The canvas's pixel ratio: the device's, capped (dprCap), and stepped
+  // down further by the performance monitor on a machine that can't keep up.
+  const dpr = useStore((state) =>
+    Math.min(
+      window.devicePixelRatio || 1,
+      state.dprCap ?? 2,
+      state.autoDpr ? state.dprAuto : Infinity
+    )
+  )
+  const water = useWater()
+  const [diving, setDiving] = useState(false)
+  // Set on the first click, before the permission await, so a second click
+  // (or Enter) during that await or the dive can't start it twice.
+  const started = useRef(false)
+  // A swap's load is covered by the polaroid's own animation (see
+  // utils/swap-dream.ts), so it doesn't count as buffering.
+  const swapLoading = useStore((state) => state.swapPhase === 'loading')
 
   useEffect(() => {
     console.log('Loaded!')
@@ -44,12 +67,12 @@ function Root() {
 
   useEffect(() => {
     console.log(`Video state: ${videoState}`)
-    if (dream) {
+    if (dream && !swapLoading) {
       setIsBuffering(videoState < HTMLMediaElement.HAVE_FUTURE_DATA)
     } else {
       setIsBuffering(false)
     }
-  }, [videoState, dream])
+  }, [videoState, dream, swapLoading])
 
   // Each stretch of buffering gets its own timer, and isTooSlow clears as
   // soon as playback recovers — this used to be a counter in Scene's
@@ -68,8 +91,13 @@ function Root() {
   }, [isBuffering])
 
   useHistorySync(video)
+  useSwapInput()
 
   const handleReady = async () => {
+    if (started.current) return
+    started.current = true
+    // Inside the click, so Safari lets the audio context start.
+    startAudio()
     const orientationGranted = (await handleDeviceOrientationPermissions()) as boolean
     const isTouch = isTouchDevice() as boolean
     // macOS Safari also implements DeviceOrientationEvent.requestPermission
@@ -81,12 +109,25 @@ function Root() {
     setIsMobile(isMobile)
     setIsTouch(isTouch)
     console.log(`Accelerometer: ${isMobile} | Touch: ${isTouch}`)
-    setReady(true)
+    // Dive into the lake first (see components/water-video.tsx): the
+    // permission request and audio above had to happen inside the click,
+    // but the scene can wait for the splash.
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setReady(true)
+      return
+    }
+
+    setDiving(true)
+    water.current?.dive()
+    window.setTimeout(() => setReady(true), DIVE_MS)
   }
 
   return (
     <>
       <KeyWhiteFilter />
+      <SwapStylePicker />
+      <Cursor />
+      <DebugOverlay />
       <div className="fixed z-10 top-1 right-1 flex items-center gap-1 font-sans text-sm">
         <ThemeToggle />
         <a href="/about" className={linkClassName}>
@@ -126,8 +167,13 @@ function Root() {
                 Watch on YouTube?
               </a>
             </div>
-            <div className={`${isBuffering ? 'grayscale' : ''} fixed inset-0`}>
-              <Canvas shadows>
+            {/* data-swap-surface: drags that swap dreams start in here
+                (see utils/swap-gesture.ts), not on the page's own UI. */}
+            <div
+              data-swap-surface
+              className={`${isBuffering ? 'grayscale' : ''} fixed inset-0`}
+            >
+              <Canvas shadows dpr={dpr}>
                 <Suspense fallback={<Loading />}>
                   <Preload all />
                   <Scene video={video} />
@@ -138,25 +184,31 @@ function Root() {
           </Viewport>
         ) : hasLoaded ? (
           <div className="relative h-screen grid place-content-center space-y-2 text-center p-4">
-            <video
-              // multiply drops the loop's white background against the
-              // light page, but against a dark page it'd take the letters
-              // down with it — so dark mode keys the white out to
-              // transparency instead (see components/key-white-filter.tsx).
-              className="mix-blend-multiply dark:mix-blend-normal dark:[filter:url(#key-white)]"
-              width={512}
-              height={512}
-              autoPlay
-              playsInline
-              loop
-              muted
-            >
-              <source src="video/loop.webm" type="video/webm" />
-              <source src="video/loop.mov" type="video/mp4" />
-            </video>
+            {/* multiply drops the loop's white background against the
+                light page, but against a dark page it'd take the letters
+                down with it — so dark mode keys the white out to
+                transparency instead (see components/key-white-filter.tsx).
+                Drawn through WebGL so the pointer ripples it like water. */}
+            <WaterVideo
+              className="mix-blend-multiply dark:mix-blend-normal"
+              mediaClassName="dark:[filter:url(#key-white)]"
+              size={512}
+              handle={water}
+              sources={[
+                { src: 'video/loop.webm', type: 'video/webm' },
+                { src: 'video/loop.mov', type: 'video/mp4' },
+              ]}
+            />
             <button
-              className={`whitespace-nowrap fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-1 rounded-md px-4 py-2 bg-yellow-400 text-stone-900 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black flex items-center gap-2 shadow`}
+              // Lifts on hover, and drops into the water with the title
+              // when pressed.
+              className={`whitespace-nowrap fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-1 rounded-md px-4 py-2 bg-yellow-400 text-stone-900 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black flex items-center gap-2 shadow hover:shadow-xl transition-[transform,opacity,box-shadow,background-color,color] duration-300 hover:scale-105 motion-reduce:transition-none ${
+                diving ? 'scale-90 opacity-0 pointer-events-none' : ''
+              }`}
+              style={diving ? { transitionDuration: `${DIVE_MS / 2}ms` } : undefined}
               onClick={handleReady}
+              onPointerEnter={() => water.current?.hover(true)}
+              onPointerLeave={() => water.current?.hover(false)}
             >
               <span className="uppercase">Brightly</span>
               <span className="font-serif italic text-2xl sm:text-3xl">

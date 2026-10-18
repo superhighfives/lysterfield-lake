@@ -1,10 +1,20 @@
 import { useGLTF } from '@react-three/drei'
 import { Euler, ThreeElements, Vector3 } from '@react-three/fiber'
-import { forwardRef, JSX, RefObject, useEffect } from 'react'
+import { forwardRef, JSX, RefObject, useEffect, useMemo, useRef } from 'react'
 import { GLTF } from 'three-stdlib'
-import { CanvasTexture, Group, Mesh, MeshStandardMaterial } from 'three'
+import {
+  BufferGeometry,
+  CanvasTexture,
+  Group,
+  Material,
+  Mesh,
+  MeshStandardMaterial,
+  Vector2,
+} from 'three'
+import { TessellateModifier } from 'three/examples/jsm/modifiers/TessellateModifier.js'
 import { animated } from '@react-spring/three'
 import { useStore } from '../store'
+import { WAKE_MASK_LAYER } from '../utils/liquid-trail'
 
 // A soft-edged rectangle used as the drop shadow's alpha map — built once
 // at module load (up to ~20 Polaroids share this one texture) rather than
@@ -48,6 +58,12 @@ type GLTFResult = GLTF & {
 const FRAME_LIGHT = '#ffffff'
 const FRAME_DARK = '#2b2826'
 const FRAME_DARK_ROUGHNESS = 0.75
+// The player's polaroid in dark mode: still a sheen as it tilts, but a
+// broad, soft one. At the glossy paper's own roughness the spotlight
+// focused into a hard white streak across the charcoal frame, even dimmed;
+// rougher spreads it, and the dimmer dark-mode light (scene.tsx) keeps the
+// spread from washing the frame grey.
+const PLAYER_DARK_ROUGHNESS = 0.5
 
 // Carousel cards are drawn as layers, one at a time, each into its own
 // cleared depth buffer (see slider.tsx). That only works if every part of
@@ -66,12 +82,67 @@ function layeredCopy(material: MeshStandardMaterial) {
     // to a muted, slightly olive grey — the carousel's lit frames should
     // read as white (see the choose-screen light levels in scene.tsx).
     copy.toneMapped = false
-    copy.userData.roughness = material.roughness
+    copy.userData.roughness = material.userData.roughness ?? material.roughness
     layeredCopies.set(material, copy)
   }
 
   return copy
 }
+
+// The player's polaroid flexes like card as it moves (see main.tsx, which
+// sets this every frame): z offset per squared normalised x and y, the same
+// as video-material.tsx's vertex shader does for the photo. The model is a
+// few dozen vertices, which can't bend, so the player's copies of its
+// geometry are subdivided once, and its frame materials get the same
+// displacement injected. The overlay material is shared with the
+// carousel, so the player gets its own copy of that one.
+export const polaroidBend = { value: new Vector2() }
+const BEND_EXTENT = 'vec2(1.83, 2.3)'
+const TESSELLATE_EDGE = 0.25
+const TESSELLATE_ITERATIONS = 8
+
+const tessellated = new Map<BufferGeometry, BufferGeometry>()
+function tessellate(geometry: BufferGeometry) {
+  let result = tessellated.get(geometry)
+  if (!result) {
+    result = new TessellateModifier(
+      TESSELLATE_EDGE,
+      TESSELLATE_ITERATIONS
+    ).modify(geometry)
+    tessellated.set(geometry, result)
+  }
+
+  return result
+}
+
+function injectBend(material: Material) {
+  if (material.userData.bend) return
+  material.userData.bend = true
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uBend = polaroidBend
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform vec2 uBend;')
+      // Tilt the normals with the curve too, so the sheen sweeps across
+      // it — face-on, the curl alone barely shows.
+      .replace(
+        '#include <beginnormal_vertex>',
+        `#include <beginnormal_vertex>
+        vec2 bendExtent = ${BEND_EXTENT};
+        vec2 slope = 2.0 * uBend * position.xy / (bendExtent * bendExtent);
+        objectNormal = normalize(objectNormal - vec3(slope, 0.0) * sign(objectNormal.z));`
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        vec2 bendUv = transformed.xy / ${BEND_EXTENT};
+        transformed.z += dot(uBend, bendUv * bendUv);`
+      )
+  }
+
+  material.needsUpdate = true
+}
+
+let playerOverlay: MeshStandardMaterial | null = null
 
 // Every Object_3/Object_4/Object_5 mesh below shares this same identity
 // transform — hoisted so the ~20 on-screen Polaroid instances in the
@@ -101,6 +172,29 @@ const Polaroid = forwardRef<
   const frame = (material: MeshStandardMaterial) =>
     layered ? layeredCopy(material) : material
 
+  // The player's bending copies (see polaroidBend above).
+  const player = useMemo(() => {
+    if (layered) return null
+    if (!playerOverlay) {
+      playerOverlay = materials['Material.001'].clone()
+      playerOverlay.transparent = true
+    }
+
+    for (const material of [
+      playerOverlay,
+      materials.Framelambert79SG,
+      materials.initialShadingGroup,
+    ])
+      injectBend(material)
+    return {
+      overlay: playerOverlay,
+      inside: tessellate(nodes.Object_3.geometry),
+      overlayGeometry: tessellate(nodes.Object_3001.geometry),
+      back: tessellate(nodes.Object_4.geometry),
+      front: tessellate(nodes.Object_5.geometry),
+    }
+  }, [layered, nodes, materials])
+
   materials['Material.001'].transparent = true
 
   // Charcoal frames in dark mode. The frame materials are a white paper
@@ -115,6 +209,10 @@ const Polaroid = forwardRef<
       materials.initialShadingGroup,
     ]) {
       material.color.set(dark ? FRAME_DARK : FRAME_LIGHT)
+      material.userData.roughness ??= material.roughness
+      material.roughness = dark
+        ? PLAYER_DARK_ROUGHNESS
+        : material.userData.roughness
       const copy = layeredCopies.get(material)
       if (copy) {
         copy.color.set(dark ? FRAME_DARK : FRAME_LIGHT)
@@ -125,6 +223,14 @@ const Polaroid = forwardRef<
       }
     }
   }, [dark, materials, layered])
+
+  // The card itself (not its drop shadow) joins the wake's mask layer, so
+  // the wake pass blurs polaroids and ripples everything else (see
+  // components/wake-pass.tsx).
+  const card = useRef<Group>(null)
+  useEffect(() => {
+    card.current?.traverse((object) => object.layers.enable(WAKE_MASK_LAYER))
+  }, [player])
 
   return (
     <animated.group ref={ref} {...props} dispose={null}>
@@ -153,47 +259,49 @@ const Polaroid = forwardRef<
         />
       </mesh>
 
-      {/* Overlay */}
-      <mesh
-        castShadow={!layered}
-        receiveShadow={!layered}
-        geometry={nodes.Object_3001.geometry}
-        material={materials['Material.001']}
-        position={[0, 0, 0.001]}
-      />
+      <group ref={card}>
+        {/* Overlay */}
+        <mesh
+          castShadow={!layered}
+          receiveShadow={!layered}
+          geometry={player?.overlayGeometry ?? nodes.Object_3001.geometry}
+          material={player?.overlay ?? materials['Material.001']}
+          position={[0, 0, 0.001]}
+        />
 
-      {/* Inside */}
-      <mesh
-        ref={intersectRef}
-        castShadow={!layered}
-        receiveShadow={!layered}
-        geometry={nodes.Object_3.geometry}
-        rotation={rotation as Euler}
-        position={position as Vector3}
-        scale={scale as Vector3}
-      >
-        {passthroughMaterial}
-      </mesh>
-      {/* Back */}
-      <mesh
-        castShadow={!layered}
-        receiveShadow={!layered}
-        geometry={nodes.Object_4.geometry}
-        material={frame(materials.Framelambert79SG)}
-        rotation={rotation as Euler}
-        position={position as Vector3}
-        scale={scale as Vector3}
-      />
-      {/* Front */}
-      <mesh
-        castShadow={!layered}
-        receiveShadow={!layered}
-        geometry={nodes.Object_5.geometry}
-        material={frame(materials.initialShadingGroup)}
-        rotation={rotation as Euler}
-        position={position as Vector3}
-        scale={scale as Vector3}
-      />
+        {/* Inside */}
+        <mesh
+          ref={intersectRef}
+          castShadow={!layered}
+          receiveShadow={!layered}
+          geometry={player?.inside ?? nodes.Object_3.geometry}
+          rotation={rotation as Euler}
+          position={position as Vector3}
+          scale={scale as Vector3}
+        >
+          {passthroughMaterial}
+        </mesh>
+        {/* Back */}
+        <mesh
+          castShadow={!layered}
+          receiveShadow={!layered}
+          geometry={player?.back ?? nodes.Object_4.geometry}
+          material={frame(materials.Framelambert79SG)}
+          rotation={rotation as Euler}
+          position={position as Vector3}
+          scale={scale as Vector3}
+        />
+        {/* Front */}
+        <mesh
+          castShadow={!layered}
+          receiveShadow={!layered}
+          geometry={player?.front ?? nodes.Object_5.geometry}
+          material={frame(materials.initialShadingGroup)}
+          rotation={rotation as Euler}
+          position={position as Vector3}
+          scale={scale as Vector3}
+        />
+      </group>
     </animated.group>
   )
 })

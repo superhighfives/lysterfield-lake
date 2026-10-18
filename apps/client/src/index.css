@@ -56,13 +56,27 @@ body {
   overscroll-behavior-x: none;
 }
 
+/* While a dream plays, a faint wash of its colour pools in the bowl
+   (set from components/dream-glow.tsx, which samples the dream video):
+   --dream-tint is "r g b", --dream-tint-alpha its strength, 0 otherwise. */
+:root {
+  --dream-tint: 128 128 128;
+  --dream-tint-alpha: 0;
+}
+
 body {
   background-color: var(--bowl-edge);
-  background-image: radial-gradient(
-    ellipse 120% 90% at 50% 45%,
-    var(--bowl-centre),
-    var(--bowl-edge)
-  );
+  background-image:
+    radial-gradient(
+      ellipse 70% 60% at 50% 45%,
+      rgb(var(--dream-tint) / var(--dream-tint-alpha)),
+      transparent
+    ),
+    radial-gradient(
+      ellipse 120% 90% at 50% 45%,
+      var(--bowl-centre),
+      var(--bowl-edge)
+    );
 }
 
 html,
@@ -76,4 +90,23 @@ body,
 canvas {
   touch-action: none;
   overflow: hidden;
+}
+
+/* The custom cursor (components/cursor.tsx) replaces the native one on
+   devices with a precise, hovering pointer. media-chrome's controls set
+   their own cursor inside shadow DOM, so it needs its own variable. */
+.custom-cursor,
+.custom-cursor * {
+  cursor: none !important;
+  --media-cursor: none;
+}
+
+@keyframes cursor-nudge-left {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-3px); }
+}
+
+@keyframes cursor-nudge-right {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(3px); }
 }

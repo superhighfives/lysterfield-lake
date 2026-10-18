@@ -1,6 +1,6 @@
 import { shaderMaterial } from '@react-three/drei'
 import { extend, ThreeElement } from '@react-three/fiber'
-import { ShaderMaterial, Texture, Vector2 } from 'three'
+import { ShaderMaterial, Texture, Vector2, Vector3 } from 'three'
 
 const uniforms = {
   uOpacity: 0,
@@ -36,6 +36,33 @@ const uniforms = {
   // sampled colour alone. Only the lyrics mesh sets this, so its
   // dream-video fill reads against the page and polaroid in either mode.
   uBackgroundMix: 0,
+  // 1 = fully shown. Below 1 the mesh dissolves through an ordered dither
+  // (the same 8x8 matrix as the sketch) and its UVs ripple, rather than
+  // fading flat — used to clear the avatar and lyrics during a dream swap.
+  uFade: 1,
+  // The mesh's motion, in panel UV per frame-ish (see main.tsx). Smears
+  // the image back along it and splits its colour channels, so a moving
+  // polaroid streaks and a still one is untouched.
+  uVelocity: new Vector2(0, 0),
+  // How much of the avatar's pointer-driven fade (it clears as the pointer
+  // nears it) breaks up through the dissolve's dither rather than fading
+  // smoothly. 0 = smooth, 1 = all stipple.
+  uHash: 0,
+  // 1 = show the avatar at full strength whatever the pointer is doing (its
+  // pointer fade, and so the hashing, held off); eased back to 0. Used
+  // just after a dream swap, so the new dream's avatar arrives whole.
+  uReveal: 0,
+  // The polaroid developing after it lands (see main.tsx): 0 = a blank,
+  // milky print, 1 = fully developed.
+  uDevelop: 1,
+  // A landing ripple through the photo: xy = origin in UV, z = seconds
+  // since it started (negative = none).
+  uRipple: new Vector3(0.5, 0.5, -1),
+  // The polaroid flexing like card as it moves: z offset per squared
+  // normalised x (x) and y (y) of the model. See BEND_* in main.tsx.
+  uBend: new Vector2(0, 0),
+  // The music's low end, 0-1 (see utils/audio.ts).
+  uPulse: 0,
 }
 
 export const VideoMaterial = shaderMaterial(
@@ -57,6 +84,9 @@ export const VideoMaterial = shaderMaterial(
     uniform float uDepthStrength;
     uniform float uShapeRadius;
     uniform float uEdgeRadius;
+    uniform vec2 uBend;
+    // Half the polaroid model's width and height, to normalise the bend.
+    const vec2 BEND_EXTENT = vec2(1.83, 2.3);
 
     // Samples one panel of the 7-panel atlas, clamped (like the fragment
     // shader's localX) so a lookup never bleeds into the neighbouring panel.
@@ -113,7 +143,9 @@ export const VideoMaterial = shaderMaterial(
           intensity = lean + relief;
         }
 
-        vec3 newPosition = vec3(position.x, position.y, position.z + intensity);
+        vec2 bendUv = position.xy / BEND_EXTENT;
+        float bend = dot(uBend, bendUv * bendUv);
+        vec3 newPosition = vec3(position.x, position.y, position.z + intensity + bend);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
     }
   `,
@@ -134,10 +166,35 @@ export const VideoMaterial = shaderMaterial(
     uniform float uTime;
     uniform float uAvatar;
     uniform float uIdle;
+    uniform float uReveal;
     uniform float uDark;
     uniform float uBackgroundMix;
     uniform float uSharpen;
+    uniform float uFade;
+    uniform vec2 uVelocity;
     const float SHARPEN_TEXELS = 1.5;
+    // Pixel size of the dissolve's dither cells.
+    const float DISSOLVE_CELL = 2.0;
+    // Ripple while dissolving: UV amplitude at fully dissolved, and its
+    // spatial frequency and speed.
+    const float RIPPLE_AMOUNT = 0.02;
+    const float RIPPLE_FREQUENCY = 18.0;
+    const float RIPPLE_SPEED = 5.0;
+    // Motion smear: taps along the velocity, and how far the red and blue
+    // channels split either side of it.
+    const int SMEAR_TAPS = 10;
+    const float SPLIT_AMOUNT = 0.15;
+    uniform float uHash;
+    uniform float uDevelop;
+    uniform vec3 uRipple;
+    uniform float uPulse;
+    // Landing ripple: ring speed (UV/s), wavelength, peak UV displacement,
+    // ring width and how long it rings for (s).
+    const float LANDING_SPEED = 0.9;
+    const float LANDING_FREQUENCY = 40.0;
+    const float LANDING_AMOUNT = 0.012;
+    const float LANDING_WIDTH = 0.12;
+    const float LANDING_SECONDS = 1.4;
 
     vec3 blendMultiply(vec3 base, vec3 blend) {
       return base*blend;
@@ -181,7 +238,34 @@ export const VideoMaterial = shaderMaterial(
       return luma < limit ? 0.0 : 1.0;
     }
 
-    void main() {      
+    // The ordered-dither threshold (0-1) for this pixel's cell.
+    float ditherLimit() {
+      vec2 cell = gl_FragCoord.xy / DISSOLVE_CELL;
+      int index = int(mod(cell.x, 8.0)) + int(mod(cell.y, 8.0)) * 8;
+      return (float(dither_matrix_8x8[index]) + 1.0) / 65.0;
+    }
+
+    void main() {
+      // Rippling UVs while dissolving (uFade < 1); untouched otherwise.
+      // The music's pulse adds a breath of the same ripple.
+      float dissolve = 1.0 - uFade;
+      float rippleAmount = dissolve * RIPPLE_AMOUNT + uPulse * RIPPLE_AMOUNT * 0.15;
+      vec2 st = vUv + rippleAmount * vec2(
+        sin(vUv.y * RIPPLE_FREQUENCY + uTime * RIPPLE_SPEED),
+        cos(vUv.x * RIPPLE_FREQUENCY + uTime * RIPPLE_SPEED * 0.8)
+      );
+
+      // Landing ripple: one ring spreading out from where it landed,
+      // pushing the image outward along it, dying away as it goes.
+      if(uRipple.z >= 0.0 && uRipple.z < LANDING_SECONDS) {
+        vec2 fromOrigin = vUv - uRipple.xy;
+        float dist = length(fromOrigin);
+        float front = dist - uRipple.z * LANDING_SPEED;
+        float ring = exp(-(front * front) / (LANDING_WIDTH * LANDING_WIDTH));
+        float decay = 1.0 - uRipple.z / LANDING_SECONDS;
+        st += normalize(fromOrigin + 1e-5) * sin(front * LANDING_FREQUENCY) * ring * decay * LANDING_AMOUNT;
+      }
+
       float offsetX = 0.0;
       float offsetY = 0.0;
       if(uFrameSelected == 7.0) {
@@ -189,7 +273,7 @@ export const VideoMaterial = shaderMaterial(
         offsetY = -uPointerRelative.y / 40.0;
       }
 
-      // vUv.x - offsetX can land outside [0, 1] once offsetX (the pointer
+      // st.x - offsetX can land outside [0, 1] once offsetX (the pointer
       // parallax nudge, up to +/-0.05) pushes it past this frame's own
       // sub-range within the 7-frame atlas — clamped here so a frame lookup
       // never crosses into the neighbouring frame's pixels. Unclamped, that
@@ -203,16 +287,16 @@ export const VideoMaterial = shaderMaterial(
       // 1/512 is one texel of the touch devices' video-small atlas (512px
       // frames); desktop's full-size atlas has 1024px frames, where it's a
       // conservative two.
-      float localX = clamp(vUv.x - offsetX, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
+      float localX = clamp(st.x - offsetX, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
 
-      vec4 image = texture2D(uTexture, vec2((localX + (uFrameSelected - 1.0)) / uFrameTotal, uInvert == 1.0 ? 1.0 - vUv.y : vUv.y - offsetY));
+      vec4 image = texture2D(uTexture, vec2((localX + (uFrameSelected - 1.0)) / uFrameTotal, uInvert == 1.0 ? 1.0 - st.y : st.y - offsetY));
 
       // Unsharp mask: push each pixel away from the average of its four
       // neighbours (SHARPEN_TEXELS atlas texels away). The portrait panel
       // is soft at source — stylised, then VP9-compressed — so this
       // recovers some edge definition rather than adding real detail.
       if(uSharpen != 0.0) {
-        vec2 uv = vec2((localX + (uFrameSelected - 1.0)) / uFrameTotal, vUv.y - offsetY);
+        vec2 uv = vec2((localX + (uFrameSelected - 1.0)) / uFrameTotal, st.y - offsetY);
         vec2 texel = SHARPEN_TEXELS / vec2(textureSize(uTexture, 0));
         vec3 blur = (
           texture2D(uTexture, uv + vec2(texel.x, 0.0)).rgb +
@@ -222,7 +306,23 @@ export const VideoMaterial = shaderMaterial(
         ) / 4.0;
         image.rgb = clamp(image.rgb + (image.rgb - blur) * uSharpen, 0.0, 1.0);
       }
-      vec4 mask = texture2D(uTexture, vec2((localX + (uFrameMask - 1.0)) / uFrameTotal, vUv.y - offsetY));
+      // Motion smear and colour split, along uVelocity. Each tap is
+      // clamped inside this panel, like localX above.
+      if(uVelocity != vec2(0.0)) {
+        vec2 local = vec2(localX, st.y - offsetY);
+        vec3 smear = vec3(0.0);
+        for (int i = 0; i < SMEAR_TAPS; i++) {
+          float t = float(i) / float(SMEAR_TAPS - 1);
+          vec2 tap = local - uVelocity * t;
+          float r = texture2D(uTexture, vec2((clamp(tap.x + uVelocity.x * SPLIT_AMOUNT, 1.0 / 512.0, 1.0 - 1.0 / 512.0) + (uFrameSelected - 1.0)) / uFrameTotal, clamp(tap.y + uVelocity.y * SPLIT_AMOUNT, 0.0, 1.0))).r;
+          float g = texture2D(uTexture, vec2((clamp(tap.x, 1.0 / 512.0, 1.0 - 1.0 / 512.0) + (uFrameSelected - 1.0)) / uFrameTotal, clamp(tap.y, 0.0, 1.0))).g;
+          float b = texture2D(uTexture, vec2((clamp(tap.x - uVelocity.x * SPLIT_AMOUNT, 1.0 / 512.0, 1.0 - 1.0 / 512.0) + (uFrameSelected - 1.0)) / uFrameTotal, clamp(tap.y - uVelocity.y * SPLIT_AMOUNT, 0.0, 1.0))).b;
+          smear += vec3(r, g, b);
+        }
+        image.rgb = smear / float(SMEAR_TAPS);
+      }
+
+      vec4 mask = texture2D(uTexture, vec2((localX + (uFrameMask - 1.0)) / uFrameTotal, st.y - offsetY));
 
       float mixValue = uMaskIntensity;
       float shortenedFadeAmount = 1.0 - clamp((uTime / 4.0) - 0.75, 0.0, 1.0);
@@ -235,7 +335,7 @@ export const VideoMaterial = shaderMaterial(
       // "white" since that's what it is in the light-mode default.
       vec3 colorA = mix(vec3(0.912, 0.921, 0.929), vec3(0.047, 0.039, 0.035), uDark);
       vec3 colorB = mix(vec3(0.95, 0.95, 0.92), vec3(0.11, 0.098, 0.09), uDark);
-      vec3 color = mix(colorA, colorB, vUv.y);
+      vec3 color = mix(colorA, colorB, st.y);
       vec4 white = vec4(vec3(color), 1.0);
 
       if(uBackgroundMix != 0.0) {
@@ -246,11 +346,11 @@ export const VideoMaterial = shaderMaterial(
       if(uFrameOverlay != 0.0) {
         fadeAmount = extendedFadeAmount;
 
-        vec4 overlay = texture2D(uTexture, vec2((localX + (uFrameOverlay - 1.0)) / uFrameTotal, vUv.y - offsetY));
+        vec4 overlay = texture2D(uTexture, vec2((localX + (uFrameOverlay - 1.0)) / uFrameTotal, st.y - offsetY));
 
         float minRadius = 0.15;
         float maxRadius = 0.5;
-        float dist = distance(clamp(uPointerRelative / 2.0, 0.15, 0.85), vUv.xy);
+        float dist = distance(clamp(uPointerRelative / 2.0, 0.15, 0.85), st.xy);
         float range = maxRadius - minRadius;
         float mixAmount = clamp((dist - minRadius) / range, 0.0, 1.0);
         
@@ -267,7 +367,7 @@ export const VideoMaterial = shaderMaterial(
       if(uAvatar == 1.0) {
         fadeAmount = extendedFadeAmount;
 
-        vec4 sketch = texture2D(uTexture, vec2((localX + (uFrameSketch - 1.0)) / uFrameTotal, vUv.y - offsetY));
+        vec4 sketch = texture2D(uTexture, vec2((localX + (uFrameSketch - 1.0)) / uFrameTotal, st.y - offsetY));
 
         vec4 luma = vec4(0.299, 0.587, 0.114, 0.0);
         float grayscale = dot(sketch, luma);
@@ -282,15 +382,28 @@ export const VideoMaterial = shaderMaterial(
         float range = maxRadius - minRadius;
         float mixAmount = clamp((dist - minRadius) / range, 0.15, 1.0);
         float fadeIn = clamp(uTime / 4.0 - 1.5, 0.0, 1.0);
-        float radial = clamp((0.5 - vUv.y) * 1.0 - mixAmount, 0.0, 1.0);
+        float radial = clamp((0.5 - st.y) * 1.0 - mixAmount, 0.0, 1.0);
 
         opacityOverride = ((1.0 - (mixAmount - radial + (mask.r * uIdle))) * fadeIn);
+        // Held off while revealed (see uReveal): as if the pointer were
+        // well away from the avatar.
+        opacityOverride *= 1.0 - uReveal;
       }
 
       image = mix(image, white, fadeAmount);
 
+
+      // Developing: a blank milky print, then the tones come up, then the
+      // colour — the way an instant photo develops.
+      if(uDevelop < 1.0) {
+        float luma = dot(image.rgb, vec3(0.299, 0.587, 0.114));
+        vec3 milky = mix(vec3(0.80, 0.82, 0.79), vec3(0.20, 0.21, 0.20), uDark);
+        vec3 tone = mix(milky, vec3(luma) * 0.85 + milky * 0.15, smoothstep(0.0, 0.55, uDevelop));
+        image.rgb = mix(tone, image.rgb, smoothstep(0.35, 1.0, uDevelop));
+      }
+
       //Calculate edge curvature
-      vec2 curve = pow(abs(vUv * 2.0 - 1.0), vec2(1.0 / 0.005));
+      vec2 curve = pow(abs(st * 2.0 - 1.0), vec2(1.0 / 0.005));
       //Compute distance to edge
       float edge = pow(length(curve), 1.0);
       //Compute vignette gradient and intensity
@@ -307,6 +420,19 @@ export const VideoMaterial = shaderMaterial(
 
       //Add vignette to the resulting texture
       gl_FragColor.a *= vignette;
+
+      // Dissolve: each dither cell drops out once uFade falls below its
+      // threshold, so the mesh breaks up into the sketch's own stipple.
+      if(uFade < 1.0) {
+        gl_FragColor.a *= uFade >= ditherLimit() ? 1.0 : 0.0;
+      }
+
+      // The avatar's pointer fade, partly broken into the same stipple:
+      // where it's half-faded, cells snap to shown or gone.
+      if(uHash > 0.0 && uAvatar == 1.0) {
+        float a = gl_FragColor.a;
+        gl_FragColor.a = mix(a, a >= ditherLimit() ? 1.0 : 0.0, uHash);
+      }
     }
   `,
   (material) => {

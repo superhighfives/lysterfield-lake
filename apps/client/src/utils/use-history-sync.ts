@@ -17,13 +17,13 @@ const PARAM = 'dream'
 // times per 30s, so this is kept well under that.
 const SAVE_INTERVAL = 1000
 
-type HistoryState = { dream: string; t: number } | null
+export type HistoryState = { dream: string; t: number } | null
 
 export function dreamIdFromLocation() {
   return new URLSearchParams(location.search).get(PARAM)
 }
 
-function urlFor(dreamId: string | null) {
+export function urlFor(dreamId: string | null) {
   const url = new URL(location.href)
   if (dreamId) url.searchParams.set(PARAM, dreamId)
   else url.searchParams.delete(PARAM)

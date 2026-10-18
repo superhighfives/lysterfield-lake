@@ -1,4 +1,5 @@
 import {
+	PerformanceMonitor,
 	DeviceOrientationControls,
 	OrbitControls,
 	PerspectiveCamera,
@@ -22,6 +23,8 @@ import { getRotation } from "../utils";
 import Choose from "../views/choose";
 import Main from "../views/main";
 import Fireflies from "./fireflies";
+import WakePass from "./wake-pass";
+import DebugProbe from "./debug-probe";
 
 // Half-angle of the choose screen's pointer-following light cone. With a
 // full penumbra, brightness falls off smoothly from the centre to this edge.
@@ -31,10 +34,40 @@ const SPOT_ANGLE_CHOOSING = 0.85;
 // (untone-mapped, see polaroid.tsx) carousel frames to near-white; the spot
 // pool on top then clips the highlighted cards to full white. Dark mode's
 // charcoal frames need far less spot, or the pool reads as a glare.
+// How far below its scroll page the player sits, as a share of the viewport
+// height: enough to centre the polaroid on screen (it sits further back
+// than z = 0, so it moves less than this on screen), rather than riding
+// high above the controls.
+const PLAYER_DROP = 0.1;
+// The range the performance monitor steps the pixel ratio through (in
+// quarters); the cap (store's dprCap) still applies on top.
+const DPR_FLOOR = 1;
+// Below PERF_LOW_FPS the monitor steps the pixel ratio down; above
+// PERF_HIGH_FPS, back up.
+const PERF_LOW_FPS = 45;
+const PERF_HIGH_FPS = 55;
+
+/** The monitor's factor (0-1) as a pixel ratio, in quarters, across what
+ *  can actually change: from the floor up to the device's ratio or the
+ *  cap, whichever's lower — so every step it takes does something. */
+function dprForFactor(factor: number) {
+	const cap = useStore.getState().dprCap ?? DPR_CEILING;
+	const ceiling = Math.max(
+		DPR_FLOOR,
+		Math.min(cap, window.devicePixelRatio || 1),
+	);
+	return Math.round((DPR_FLOOR + factor * (ceiling - DPR_FLOOR)) * 4) / 4;
+}
+
+const DPR_CEILING = 2;
 const CHOOSING_LIGHT = {
 	light: { ambient: 2.6, spot: 2.5 },
 	dark: { ambient: 2.6, spot: 0.6 },
 };
+// The player's spotlight, per colour scheme. On the glossy charcoal frame
+// in dark mode, the full-strength light made a hard white streak — it's
+// meant to be a faint sheen as the polaroid tilts.
+const PLAYER_SPOT = { light: 5, dark: 1.2 };
 
 function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const camera = useRef<PerspectiveCameraType>(null);
@@ -51,6 +84,14 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const setShowPlayhead = useStore((state) => state.setShowPlayhead);
 	const initialRotation = useStore((state) => state.initialRotation);
 	const resetting = useStore((state) => state.resetting);
+	const wakeEnabled = useStore((state) => state.wakeEnabled);
+	const debug = useStore((state) => state.debug);
+	const setDprAuto = useStore((state) => state.setDprAuto);
+	// The monitor starts at the top (factor 1) and only reports changes, so
+	// the store starts there with it — or a remount (a hot reload, say)
+	// leaves a stepped-down ratio that the monitor, already at the top,
+	// never raises again.
+	useEffect(() => setDprAuto(dprForFactor(1)), [setDprAuto]);
 
 	// These all used to be React state set every frame from useFrame,
 	// re-rendering Scene (and everything under it, including Choose's whole
@@ -117,10 +158,11 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 		// right). On the choose screen the ambient fill comes up and the
 		// spot comes down, so the pool still reads but the falloff is
 		// gentle. The player keeps the original balance.
-		const levels = CHOOSING_LIGHT[useStore.getState().colorScheme];
+		const scheme = useStore.getState().colorScheme;
+		const levels = CHOOSING_LIGHT[scheme];
 		spotlight.intensity = MathUtils.lerp(
 			spotlight.intensity,
-			choosing ? levels.spot : 5,
+			choosing ? levels.spot : PLAYER_SPOT[scheme],
 			0.08,
 		);
 		if (ambient.current) {
@@ -204,9 +246,34 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 					onChange={onOrientationChange}
 				/>
 			) : null}
+			{/* Pan off too: nothing uses it, and a right- or modifier-drag
+			    (or a two-finger drag) panned the camera's target, which
+			    nothing ever reset — the scene stayed skewed. */}
 			{!isMobile && !isTouch ? (
-				<OrbitControls enableRotate={false} enableZoom={false} />
+				<OrbitControls
+					enableRotate={false}
+					enableZoom={false}
+					enablePan={false}
+				/>
 			) : null}
+			{/* The wake pass can be switched off in debug mode, to measure
+			    what it costs; R3F then renders the scene itself. */}
+			{wakeEnabled ? <WakePass /> : null}
+			{/* Steps the pixel ratio down (toward 1) on a machine that can't
+			    hold the frame rate, and back up (to the cap) when it can,
+			    from the top. Gradually only: its flip-flop fallback (drop
+			    to the floor for good after a few up-and-downs) tripped on
+			    brief dips — the wake starting, a swap — and parked a smooth
+			    60fps at 1x. Fixed fps bounds: the default scales with the
+			    display's refresh rate, so on a 120Hz screen anything under
+			    90fps read as struggling. */}
+			<PerformanceMonitor
+				factor={1}
+				flipflops={Infinity}
+				bounds={() => [PERF_LOW_FPS, PERF_HIGH_FPS]}
+				onChange={({ factor }) => setDprAuto(dprForFactor(factor))}
+			/>
+			{debug ? <DebugProbe /> : null}
 			<ambientLight ref={ambient} intensity={0.5} />
 			<group>
 				{/* decay={0} — three.js dropped the legacy (non-physically-correct)
@@ -235,7 +302,11 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 				<Fireflies />
 				<Scroll>
 					<Choose position={[0, 0, 0]} />
-					<Main video={video} position={[0, -h * 1.6, 0]} tilt={rotation} />
+					<Main
+						video={video}
+						position={[0, -h * (1.6 + PLAYER_DROP), 0]}
+						tilt={rotation}
+					/>
 				</Scroll>
 			</ScrollControls>
 
