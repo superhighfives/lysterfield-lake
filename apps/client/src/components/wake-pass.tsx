@@ -11,13 +11,22 @@ import {
   Vector2,
   WebGLRenderTarget,
 } from 'three'
-import { trailActive, trailTexture, updateTrail } from '../utils/liquid-trail'
+import {
+  DROP_SECONDS,
+  MAX_DROPS,
+  dropUniform,
+  trailActive,
+  trailTexture,
+  updateTrail,
+  writeDrops,
+} from '../utils/liquid-trail'
 
 // The cursor's liquid wake, over everything the canvas draws: the scene is
-// rendered to a texture, then drawn to the screen pulled along the
-// pointer's recent path (utils/liquid-trail.ts) — photos, frames, text and
-// the polaroid's own outline alike. HTML on top (the cursor, the controls)
-// is untouched.
+// rendered to a texture, then drawn to the screen through the water — the
+// image pulled along the pointer's recent path, crisp rings spreading from
+// where it's been, and colours blooming where the water moves
+// (utils/liquid-trail.ts) — photos, frames, text and the polaroid's own
+// outline alike. HTML on top (the cursor, the controls) is untouched.
 //
 // The render target is flagged as an XR one, which in three.js r170 makes
 // a render into it apply each material's own tone mapping and output colour
@@ -30,24 +39,19 @@ import { trailActive, trailTexture, updateTrail } from '../utils/liquid-trail'
 // How far (CSS px) the image is pulled at full flow — a fast flick; the
 // trail's speed curve (utils/liquid-trail.ts) keeps slower moves well
 // under it — and the catch of light on the wake's leading edge.
-const WAKE_PX = 16
-// Where there's wake, it reads as light on water rather than a blur:
-// - glass: the wake's surface (its presence, as a height) catches the
-//   light, as thin bright highlights — GLINT_STRENGTH, sharpened by
-//   GLINT_SHARPNESS, its slope measured GLINT_SPREAD px apart;
-// - bloom: a soft glow (a disc of BLOOM_TAPS samples, BLOOM_PX across)
-//   laid over it, BLOOM_STRENGTH at full wake;
-// - a short trail back along the flow (TRAIL_PX, no colour split).
-const GLINT_STRENGTH = 0.55
-const GLINT_SHARPNESS = 6.0
-const GLINT_SPREAD = 4.0
-const BLOOM_TAPS = 8
-const BLOOM_PX = 10
-const BLOOM_STRENGTH = 0.28
-const TRAIL_PX = 6
-// No MSAA for the offscreen render: it only runs while the wake is moving
-// (see the frame loop), when the image is warped and bloomed anyway, and
-// 4x at a big display's size was a real share of the frame.
+const WAKE_PX = 10
+// The water, crisp like the welcome screen's (no blur): rings dropped by
+// the pointer (utils/liquid-trail.ts) spread at RING_SPEED_PX per second,
+// RING_WAVELENGTH_PX apart, in a band RING_WIDTH_PX wide, pushing the image
+// by up to RING_PUSH_PX and catching the light on their crests
+// (RING_GLINT). Where there's water, colours bloom: lifted by a gamma of
+// up to BLOOM_GAMMA (1 = none), rather than blurred.
+const RING_SPEED_PX = 200
+const RING_WAVELENGTH_PX = 46
+const RING_WIDTH_PX = 34
+const RING_PUSH_PX = 7
+const RING_GLINT = 0.07
+const BLOOM_GAMMA = 0.7
 
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
@@ -62,6 +66,8 @@ const fragmentShader = /* glsl */ `
   uniform sampler2D uScene;
   uniform sampler2D uTrail;
   uniform vec2 uSize;
+  // xy = CSS px from the bottom-left, z = age (s), w = strength.
+  uniform vec4 uDrops[${MAX_DROPS}];
 
   // The trail's flow here, in screen space (y up), and how much wake.
   vec3 wakeAt(vec2 uv) {
@@ -72,35 +78,37 @@ const fragmentShader = /* glsl */ `
   void main() {
     vec3 wake = wakeAt(vUv);
     vec2 offset = wake.xy * ${WAKE_PX.toFixed(1)} / uSize;
-    vec2 uv = vUv - offset;
-    vec4 color = texture2D(uScene, uv);
 
-    if (wake.z > 0.002) {
-      // A short trail back along the flow.
-      vec2 trail = normalize(wake.xy + 1e-5) * ${TRAIL_PX.toFixed(1)} * wake.z / uSize;
-      color = (color + texture2D(uScene, uv - trail * 0.5) + texture2D(uScene, uv - trail)) / 3.0;
+    // Rings: each drop's ring pushes the image outward along it as it
+    // spreads, and fades as it goes.
+    vec2 here = vUv * uSize;
+    vec2 push = vec2(0.0);
+    float crest = 0.0;
+    float energy = 0.0;
+    for (int i = 0; i < ${MAX_DROPS}; i++) {
+      vec4 drop = uDrops[i];
+      if (drop.w <= 0.0) continue;
+      vec2 away = here - drop.xy;
+      float front = length(away) - drop.z * ${RING_SPEED_PX.toFixed(1)};
+      float ring = exp(-(front * front) / ${(RING_WIDTH_PX * RING_WIDTH_PX).toFixed(1)});
+      float fade = max(0.0, 1.0 - drop.z / ${DROP_SECONDS.toFixed(2)});
+      float wave = sin(front * 6.2832 / ${RING_WAVELENGTH_PX.toFixed(1)}) * ring * fade * fade * drop.w;
+      push += normalize(away + 1e-5) * wave;
+      crest += max(wave, 0.0);
+      energy += ring * fade * drop.w;
+    }
+    offset += push * ${RING_PUSH_PX.toFixed(1)} / uSize;
 
-      // Bloom: a soft disc of the image around here, laid over it.
-      vec4 bloom = vec4(0.0);
-      for (int i = 0; i < ${BLOOM_TAPS}; i++) {
-        float angle = float(i) / float(${BLOOM_TAPS}) * 6.2832;
-        bloom += texture2D(uScene, uv + vec2(cos(angle), sin(angle)) * ${(BLOOM_PX / 2).toFixed(1)} / uSize);
-      }
-      bloom /= float(${BLOOM_TAPS});
-      color.rgb += bloom.rgb * ${BLOOM_STRENGTH.toFixed(2)} * wake.z;
+    vec4 color = texture2D(uScene, vUv - offset);
 
-      // Glass: the wake's presence as a surface, lit from above-left. Its
-      // slope picks out thin highlights where it rises toward the light.
-      // Premultiplied, so the light is scaled by alpha.
-      vec2 spread = ${GLINT_SPREAD.toFixed(1)} / uSize;
-      vec2 slope = vec2(
-        wakeAt(vUv + vec2(spread.x, 0.0)).z - wakeAt(vUv - vec2(spread.x, 0.0)).z,
-        wakeAt(vUv + vec2(0.0, spread.y)).z - wakeAt(vUv - vec2(0.0, spread.y)).z
-      );
-      vec3 normal = normalize(vec3(-slope * 6.0, 1.0));
-      float light = pow(max(dot(normal, normalize(vec3(-0.5, 0.6, 0.6))), 0.0), ${GLINT_SHARPNESS.toFixed(1)});
-      color.rgb += light * ${GLINT_STRENGTH.toFixed(2)} * length(slope) * 4.0 * color.a;
-      color.rgb = min(color.rgb, vec3(color.a));
+    // Light on the crests, and colours blooming where the water moves.
+    // Premultiplied, so both work on colour over alpha.
+    float water = clamp(max(wake.z, energy), 0.0, 1.0);
+    if (color.a > 0.001 && water > 0.002) {
+      vec3 straight = color.rgb / color.a;
+      straight = pow(straight, vec3(mix(1.0, ${BLOOM_GAMMA.toFixed(2)}, water)));
+      straight += crest * ${RING_GLINT.toFixed(3)};
+      color.rgb = min(straight, vec3(1.0)) * color.a;
     }
 
     gl_FragColor = color;
@@ -132,6 +140,7 @@ function WakePass() {
         uScene: { value: target.texture },
         uTrail: { value: trailTexture },
         uSize: { value: new Vector2(1, 1) },
+        uDrops: { value: dropUniform },
       },
       blending: NoBlending,
       depthTest: false,
@@ -161,6 +170,7 @@ function WakePass() {
   // every other frame callback.
   useFrame((state) => {
     updateTrail(state.size.width, state.size.height)
+    writeDrops(state.size.height)
     // Nothing moving: the pass would copy the scene across unchanged, so
     // skip it and draw the scene straight to the screen, as it was before
     // the wake existed. Only a stroke's worth of frames pay for two passes.

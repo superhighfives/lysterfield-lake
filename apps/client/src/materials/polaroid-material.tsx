@@ -7,6 +7,8 @@ const uniforms = {
   uSize: new Vector2(),
   uAspect: new Vector2(),
   uHover: 0,
+  // 1 = full colour, 0 = grayscale (a stacked card that isn't on top).
+  uSaturation: 1,
 }
 
 export const PolaroidMaterial = shaderMaterial(
@@ -32,6 +34,7 @@ export const PolaroidMaterial = shaderMaterial(
     uniform vec2 uAspect;
     varying vec2 vVertCoord;
     uniform float uHover;
+    uniform float uSaturation;
 
     void main() {      
       // The photo is inset 10% on each side (vUv * 0.8 + 0.1) to leave room
@@ -44,6 +47,8 @@ export const PolaroidMaterial = shaderMaterial(
       vec2 parallax = clamp(vVertCoord - 0.5, -0.1, 0.1);
       vec2 position = (vUv.xy * 0.8) + 0.1 + parallax;
       vec4 image = texture2D(uTexture, position);
+      float luma = dot(image.rgb, vec3(0.299, 0.587, 0.114));
+      image.rgb = mix(vec3(luma), image.rgb, uSaturation);
       gl_FragColor = image;
 
       #include <colorspace_fragment>

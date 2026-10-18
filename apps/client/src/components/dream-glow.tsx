@@ -6,6 +6,7 @@ import {
   NormalBlending,
   ShaderMaterial,
   Texture,
+  Vector2,
 } from 'three'
 import { useStore } from '../store'
 
@@ -27,8 +28,12 @@ const EASE = 0.04
 // gone FADE_FEATHER beyond. Its strength per scheme — additive in dark
 // mode, so it lights the dark page; a plain wash in light mode, where
 // adding would just clip to white.
-const GLOW_SIZE: [number, number] = [3.1, 3.1]
-const GLOW_Z = -1.7
+const GLOW_SIZE: [number, number] = [4.0, 4.0]
+const GLOW_Z = -2.4
+// How many photo-widths the spill spans on screen (it's larger, and much
+// further back, than the polaroid's photo) — to map its pixels onto the
+// photo, so its colour-or-grey follows the photo's (below).
+const SPILL_TO_PHOTO = 2.3
 const FADE_INNER: [number, number] = [0.14, 0.16]
 const FADE_FEATHER = 0.34
 const GLOW_OPACITY = { light: 0.5, dark: 0.45 }
@@ -57,19 +62,29 @@ const vertexShader = /* glsl */ `
   }
 `
 
-// The dream panel, sharp, faded out through a soft rounded rectangle.
+// The dream panel, sharp, faded out through a soft rounded rectangle — in
+// colour or grey just as the polaroid's photo is (video-material.tsx's
+// overlay): colour near the pointer, grey further away, by the same radii,
+// measured in photo space. Its own grey, not the photo's grey portrait
+// background (panel 3), which has hard-edged regions that showed as sharp
+// rectangles behind the polaroid.
 const fragmentShader = /* glsl */ `
   varying vec2 vUv;
   uniform sampler2D uTexture;
   uniform float uOpacity;
+  uniform vec2 uPointerRelative;
 
-  vec3 dreamAt(vec2 uv) {
+  vec3 panelAt(float panel, vec2 uv) {
     float x = clamp(uv.x, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
-    return texture2D(uTexture, vec2((x + ${(DREAM_PANEL - 1).toFixed(1)}) / ${PANELS.toFixed(1)}, clamp(uv.y, 0.0, 1.0))).rgb;
+    return texture2D(uTexture, vec2((x + panel - 1.0) / ${PANELS.toFixed(1)}, clamp(uv.y, 0.0, 1.0))).rgb;
   }
 
   void main() {
-    vec3 color = dreamAt(vUv);
+    vec2 photoUv = (vUv - 0.5) * ${SPILL_TO_PHOTO.toFixed(2)} + 0.5;
+    float dist = distance(clamp(uPointerRelative / 2.0, 0.15, 0.85), photoUv);
+    float grey = clamp((dist - 0.15) / 0.35, 0.0, 1.0);
+    vec3 dream = panelAt(${DREAM_PANEL.toFixed(1)}, vUv);
+    vec3 color = mix(dream, vec3(dot(dream, vec3(0.299, 0.587, 0.114))), grey);
     vec2 outside = max(abs(vUv - 0.5) - vec2(${FADE_INNER[0].toFixed(2)}, ${FADE_INNER[1].toFixed(2)}), 0.0);
     float fade = 1.0 - smoothstep(0.0, ${FADE_FEATHER.toFixed(2)}, length(outside));
     gl_FragColor = vec4(color, fade * fade * uOpacity);
@@ -111,7 +126,11 @@ function DreamGlow({
       new ShaderMaterial({
         vertexShader,
         fragmentShader,
-        uniforms: { uTexture: { value: texture }, uOpacity: { value: 0 } },
+        uniforms: {
+          uTexture: { value: texture },
+          uOpacity: { value: 0 },
+          uPointerRelative: { value: new Vector2(1, 1) },
+        },
         transparent: true,
         depthWrite: false,
         toneMapped: false,
@@ -187,6 +206,8 @@ function DreamGlow({
     const presence = presenceRef.current
 
     material.uniforms.uOpacity.value = GLOW_OPACITY[scheme] * presence
+    // The pointer as the polaroid's photo sees it (set by main.tsx).
+    material.uniforms.uPointerRelative.value = useStore.getState().globalPointer
 
     // The page tint: the shown colour, a little more saturated, at a
     // gentle alpha. Only written when it changes (it repaints the page).

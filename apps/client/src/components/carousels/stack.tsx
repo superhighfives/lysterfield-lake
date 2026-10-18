@@ -157,6 +157,8 @@ function Stack({ items, onSelect }: CarouselProps) {
             dream={dream}
             tilt={false}
             interactive={i === top}
+            // Grayscale until it reaches the top of the pile.
+            saturation={i === top ? 1 : 0}
             onHoverChange={(hover) => i === top && setTopHovered(hover)}
             onSelect={(e) => {
               e.stopPropagation()

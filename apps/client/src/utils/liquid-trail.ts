@@ -1,4 +1,4 @@
-import { CanvasTexture, LinearFilter } from 'three'
+import { CanvasTexture, LinearFilter, Vector4 } from 'three'
 
 // The cursor's wake, as if it were dragged through water: a small
 // screen-shaped map of which way the pointer has been moving, fading as it
@@ -34,9 +34,25 @@ const NEUTRAL = 'rgb(128, 128, 0)'
 const ACTIVE_FRAMES = Math.ceil(Math.log(1 / 255) / Math.log(1 - SETTLE)) + 30
 let activeFrames = 0
 
-/** Whether the trail has anything in it worth drawing — if not, the wake
- *  pass can skip itself and the scene draw straight to the screen. */
-export const trailActive = () => activeFrames > 0
+// Ripple drops, like the welcome screen's water (components/water-video):
+// the pointer drops a ring every DROP_SPACING CSS px it travels, which the
+// wake pass spreads out across the screen. At most MAX_DROPS at once, each
+// gone after DROP_SECONDS (keep in step with the wake pass's shader).
+export const MAX_DROPS = 12
+const DROP_SPACING = 36
+export const DROP_SECONDS = 2.2
+const drops: { x: number; y: number; born: number; strength: number }[] = []
+let lastDrop: { x: number; y: number } | null = null
+let lastDropBorn = -Infinity
+
+/** The drops as the wake pass takes them: xy = CSS px from the canvas's
+ *  bottom-left, z = age (s), w = strength (0 = none). One shared array. */
+export const dropUniform = Array.from({ length: MAX_DROPS }, () => new Vector4())
+
+/** Whether there's anything worth drawing — trail or rings. If not, the
+ *  wake pass skips itself and the scene draws straight to the screen. */
+export const trailActive = () =>
+  activeFrames > 0 || performance.now() - lastDropBorn < DROP_SECONDS * 1000
 
 const canvas = document.createElement('canvas')
 const context = canvas.getContext('2d')!
@@ -49,7 +65,28 @@ const last = { x: -1, y: -1 }
 window.addEventListener('pointermove', (event) => {
   pointer.x = event.clientX
   pointer.y = event.clientY
+  const distance = lastDrop
+    ? Math.hypot(event.clientX - lastDrop.x, event.clientY - lastDrop.y)
+    : Infinity
+  if (distance < DROP_SPACING) return
+  // Faster strokes make stronger rings (a first drop, mid-strength).
+  const strength =
+    distance === Infinity ? 0.6 : Math.min(1, 0.4 + distance / 120)
+  lastDrop = { x: event.clientX, y: event.clientY }
+  lastDropBorn = performance.now()
+  drops.push({ x: event.clientX, y: event.clientY, born: lastDropBorn, strength })
+  if (drops.length > MAX_DROPS) drops.shift()
 })
+
+/** Writes the drops into dropUniform, for a canvas this many CSS px tall. */
+export function writeDrops(height: number) {
+  const now = performance.now()
+  dropUniform.forEach((drop, i) => {
+    const source = drops[i]
+    if (!source) return drop.set(0, 0, 0, 0)
+    drop.set(source.x, height - source.y, (now - source.born) / 1000, source.strength)
+  })
+}
 
 function resize(width: number, height: number) {
   const aspect = width / height

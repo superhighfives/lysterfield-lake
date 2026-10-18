@@ -28,6 +28,7 @@ function DreamCard({
   tilt = true,
   showText = true,
   interactive = true,
+  saturation = 1,
 }: {
   dream: Dream
   onSelect: (event: ThreeEvent<MouseEvent>) => void
@@ -38,6 +39,8 @@ function DreamCard({
   /** Off for a card that shouldn't react to hover or clicks (a stacked
    *  card that isn't on top). */
   interactive?: boolean
+  /** 1 = full colour, 0 = grayscale; eases between. */
+  saturation?: number
 }) {
   const dark = useStore((state) => state.colorScheme === 'dark')
   const textureImage = useTexture(`/assets/${dream.id}/hero.jpg`)
@@ -58,6 +61,10 @@ function DreamCard({
   const { uHover: hoverAmount } = useSpring({
     uHover: hover ? 1.0 : 0.0,
     config: { ...config.molasses, precision: 0.0000001 },
+  })
+  const { uSaturation: saturationAmount } = useSpring({
+    uSaturation: saturation,
+    config: { ...config.slow, precision: 0.0001 },
   })
   const { scale: scaleAmount } = useSpring({
     scale: hover ? CARD_SCALE_HOVER : CARD_SCALE,
@@ -104,6 +111,7 @@ function DreamCard({
             uSize={size}
             uAspect={aspect}
             uHover={hoverAmount}
+            uSaturation={saturationAmount}
           />
         }
       />
