@@ -11,7 +11,7 @@ import { retryFailedPredictions } from './replicate.ts'
 import { backgroundPlate } from './steps/background-plate.ts'
 import { stabilizeBackground } from './steps/background-stabilize.ts'
 import { backgroundVideo } from './steps/background-video.ts'
-import { depth } from './steps/depth.ts'
+import { depth, parseFrameRanges } from './steps/depth.ts'
 import { createTake, dream, dreamSamples, loadTake, saveTake, TAKE_STATUSES, type TakeStatus } from './steps/dream.ts'
 import { dreamCheck, listDreamFrames, type DreamCheck } from './steps/dream-check.ts'
 import { deforumFrames } from './steps/dream-deforum.ts'
@@ -176,7 +176,10 @@ switch (step) {
       job,
       frameDirFlag(job, '0-source/frames', 'source'),
       frameDirFlag(job, '4-matte/frames', 'alpha'),
-      concurrency
+      concurrency,
+      // --frames 736-756,2846-3125 redoes just those (the old ones move to 5-depth/replaced/);
+      // --fit-to-subject true scales each to the subject's own depth (plans/in-progress/depth-walk-away-gaps.md).
+      { frames: flags.frames ? parseFrameRanges(flags.frames) : undefined, fitToSubject: flags['fit-to-subject'] === 'true' }
     )
     console.log(JSON.stringify(result, null, 2))
     break

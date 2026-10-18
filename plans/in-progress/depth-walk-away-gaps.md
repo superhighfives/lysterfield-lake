@@ -1,8 +1,8 @@
 ---
 title: Redo the depth panel where the walk-away goes black
-status: Backlog
+status: In progress
 created: 2026-10-17
-updated: 2026-10-17
+updated: 2026-10-18
 ---
 
 # Redo the depth panel where the walk-away goes black
@@ -74,3 +74,27 @@ The scan compared each depth frame's brightest pixel with the matte's: depth
 under 8 while the matte is over 128 (both on a 64×64 thumbnail) marks a
 blank depth panel with a person present. It takes about 15 minutes over
 the whole song, mostly reading the 2160px matte PNGs.
+
+## Done (2026-10-18)
+
+- `depth --frames <ranges> --fit-to-subject true` (`depth.ts`): redoes just
+  those frames, moving the old ones to `5-depth/replaced/` first, and keeps
+  ZoeDepth's raw output in `5-depth/raw/` so the post-processing can be
+  re-tuned for free.
+- Fitting: each frame is shifted so the subject's nearest point (99.5th
+  percentile under the matte) sits at 255, then cut to a 14-level band rather
+  than the fixed 20. A far subject spans fewer levels, and 20 left it a flat
+  white silhouette; 14 gives about the shading of the 2023 near frames
+  (lower quartile ~165, median ~195-203).
+- Redone: 736-756, 2846-3125 and 5050-5073, 325 frames. The walk-away was
+  wider than the black frames: from 2846 to 3125 the old panel flickered
+  between full, dim and black frame to frame as the subject crossed the
+  band, so the whole stretch was redone, and it is now steady (8-10% of the
+  frame lit throughout). The short windows are the subject entering or
+  leaving the frame, where only an arm or shoulder shows.
+- The joins with the 2023 frames either side show a small change in
+  character (the 2023 torso is brighter and blurrier); the 2023 frames just
+  before 2846 already flickered.
+
+Still to do: re-compose the ten dreams and the split main video, review in
+motion, R2 sync.
