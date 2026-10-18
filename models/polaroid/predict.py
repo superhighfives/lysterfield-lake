@@ -79,7 +79,7 @@ class Predictor(BasePredictor):
         video: Path = Input(description="The job's cropped square source video (0-source/video.mov)."),
         fps: int = Input(default=24, ge=1, le=60, description="Frame rate the per-frame panels run at."),
         panels: str = Input(default="matte,portrait,depth,outline", description="Comma-separated: matte, portrait, depth, outline."),
-        start_frame: int = Input(default=1, ge=1, description="First frame (1-based) for the per-frame panels. A job can be split across several predictions by frame range, with only one of them asking for the matte."),
+        start_frame: int = Input(default=1, ge=1, description="First frame (1-based) for the per-frame panels. A job can be split across several predictions by frame range, with only one of them asking for the matte, which always covers the whole clip."),
         max_frames: int = Input(default=0, ge=0, description="At most N frames from start_frame (0 = to the end)."),
         portrait_inv_steps: int = Input(default=40, ge=5, le=100, description="DiffusionCLIP inversion steps (40 as before)."),
         portrait_gen_steps: int = Input(default=12, ge=5, le=100, description="DiffusionCLIP generative steps (12 as before)."),
@@ -104,9 +104,10 @@ class Predictor(BasePredictor):
         paths = [os.path.join(frames_dir, f) for f in keep]
 
         if "matte" in wanted:
-            # Always from the clip's start: RVM carries state from frame to frame. Limited only when the range ends early.
-            end = start_frame - 1 + max_frames if max_frames else 0
-            self.matte(str(video), os.path.join(out, "4-matte", "raw.mp4"), end and round(end / fps * self.video_fps(str(video))) + 1)
+            # Always the whole clip, whatever the frame range: RVM carries state from frame to frame, and the
+            # prediction that does the matte does it for every range of a split job. (It used to stop at the
+            # range's end, which left a split job's later ranges with no matte.) RVM takes ~35s for 5s.
+            self.matte(str(video), os.path.join(out, "4-matte", "raw.mp4"))
         if "portrait" in wanted:
             self.portrait(paths, out, portrait_inv_steps, portrait_gen_steps, portrait_fp16, portrait_batch)
         if "depth" in wanted:
@@ -120,22 +121,13 @@ class Predictor(BasePredictor):
                 tar.add(os.path.join(out, name), arcname=name)
         return tar_path
 
-    @staticmethod
-    def video_fps(video):
-        rate = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=r_frame_rate", "-of", "csv=p=0", video], capture_output=True, text=True, check=True).stdout.strip()
-        num, den = rate.split("/")
-        return float(num) / float(den)
-
-    def matte(self, video, out_path, max_frames):
+    def matte(self, video, out_path):
         """RVM over the whole video, as arielreplicate's wrapper: resnet50, automatic downsample ratio, 12-frame chunks."""
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", video], capture_output=True, text=True, check=True).stdout.strip()
         w, h = (int(v) for v in probe.split(",")[:2])
         rate = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=r_frame_rate", "-of", "csv=p=0", video], capture_output=True, text=True, check=True).stdout.strip()
-        decode = ["ffmpeg", "-loglevel", "error", "-i", video]
-        if max_frames:
-            decode += ["-frames:v", str(max_frames)]
-        reader = subprocess.Popen(decode + ["-f", "rawvideo", "-pix_fmt", "rgb24", "-"], stdout=subprocess.PIPE)
+        reader = subprocess.Popen(["ffmpeg", "-loglevel", "error", "-i", video, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], stdout=subprocess.PIPE)
         writer = subprocess.Popen(
             ["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "gray", "-s", f"{w}x{h}", "-r", rate, "-i", "-", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "12", out_path],
             stdin=subprocess.PIPE,

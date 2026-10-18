@@ -168,9 +168,18 @@ deleted straight after along with the bucket.
 - **The PC is a free test bench and build machine:** 891GB free, `cog` 0.23, models in
   `~/lysterfield-models`. Under WSL, cuDNN 8.5 can't find the driver and segfaults; `run-local.py` there
   mounts a `libcuda.so` link. Deforum holds 8GB of VRAM, so the portrait runs one frame at a time there.
-- **Estimate on Replicate (L40S, $0.000975/s):** ~1,000 GPU-seconds a loop is about **$1** plus boot and
-  idle (private models bill those too), against the per-model run's ~$4. Split four ways, a loop takes
-  ~4-5 minutes of wall clock. Bria adds $0.25.
+- **Measured on Replicate (2026-10-18):** `lysterfield-polaroid` deployment (L40S, 0-4 instances), the
+  clip split four ways (31 frames each, `portrait_batch` 4, 20 inversion steps), from cold: **9 minutes**
+  wall clock. Each range took 130-207s to queue and boot (a 33GB image) and ~322s to run (10.4s a frame:
+  batching 4 on the L40S was no faster than the 4090 one at a time). GPU time 1,288s ≈ $1.26, plus the four
+  boots (~650s, billed on a private model) ≈ $0.65, plus idle until scale-down: about **$2 a loop cold**,
+  ~$1.25 with warm instances, against the per-model run's ~$4. Bria adds $0.25. The output matches the
+  PC's (portrait 51dB, depth 54-56dB). Boot is now the biggest share of the wait, which a warm instance or
+  a smaller image would cut.
+- **Split-job bugs found by that test, fixed in `polaroid-split-fixes`:** the model stopped the matte at
+  its own range's end, so a split job's later ranges had none, and `polaroid-panels` assumed every frame
+  had arrived. Now the matte always covers the whole clip, and each range post-processes as it's unpacked
+  (checked out of order: 94, 32, 63, 1).
 - **Lost and rebuilt:** `park-party` was deleted from `.jobs` while freeing disk space (2026-10-17). Its
   source was rebuilt from `_recordings/park-party.mov` with the same crop (38.7dB from the original), and
   panels 2, 4, 5 and 6 now come from the polaroid model. Panel 3 (Bria) and the atlas are gone.
