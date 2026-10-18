@@ -327,7 +327,7 @@ function Main(
     }
 
     if (swapDrag.active) dragOffsetRef.current = swapDrag.dx
-    else if (!swapDrag.committed)
+    else if (!swapDrag.committed || animation.inPlace)
       dragOffsetRef.current = MathUtils.lerp(
         dragOffsetRef.current,
         0,
@@ -392,7 +392,8 @@ function Main(
       // Off-screen while the next dream loads anyway; hidden too, so
       // nothing can peek in however the screen is shaped. Not for a style
       // that shows something while it waits (flip rocks face-down).
-      swapGroup.current.visible = swapPhase !== 'loading' || !!animation.hold
+      swapGroup.current.visible =
+        swapPhase !== 'loading' || !!animation.hold || !!animation.inPlace
 
       const step = (1 / 60 / Math.max(delta, 1e-3)) / PHOTO_WIDTH
       const target = velocityTarget.current
@@ -427,8 +428,16 @@ function Main(
       rippleRef.current = 0
     else if (rippleRef.current >= 0) rippleRef.current += delta
     if (polaroidMaterial.current) {
+      // Staying put, the photo fades to a blank print on the way out, and
+      // stays blank until the next develops.
       polaroidMaterial.current.uDevelop =
-        swapPhase === 'in' || swapPhase === 'idle' ? developRef.current : 1
+        swapPhase === 'in' || swapPhase === 'idle'
+          ? developRef.current
+          : animation.inPlace
+            ? swapPhase === 'out'
+              ? 1 - swapProgressRef.current
+              : 0
+            : 1
       rippleUniform.current.z = rippleRef.current
       polaroidMaterial.current.uRipple = rippleUniform.current
     }

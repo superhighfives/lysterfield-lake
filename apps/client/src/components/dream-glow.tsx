@@ -24,8 +24,9 @@ const EASE = 0.04
 // The spill behind the polaroid: its size relative to the polaroid's group
 // (the dream fills it), how far behind it sits — well back, so the
 // polaroid's tilt never swings its edge into it — and its fade to clear: a
-// rounded rectangle, fully there inside FADE_INNER (half-size, in UV) and
-// gone FADE_FEATHER beyond. Its strength per scheme — additive in dark
+// soft round falloff (a gaussian, FADE_FALLOFF steep, reaching nothing at
+// the plane's edge), with no edge or corners to read as a halo. Its
+// strength per scheme — additive in dark
 // mode, so it lights the dark page; a plain wash in light mode, where
 // adding would just clip to white.
 const GLOW_SIZE: [number, number] = [4.0, 4.0]
@@ -34,8 +35,7 @@ const GLOW_Z = -2.4
 // further back, than the polaroid's photo) — to map its pixels onto the
 // photo, so its colour-or-grey follows the photo's (below).
 const SPILL_TO_PHOTO = 2.3
-const FADE_INNER: [number, number] = [0.14, 0.16]
-const FADE_FEATHER = 0.34
+const FADE_FALLOFF = 3.0
 const GLOW_OPACITY = { light: 0.5, dark: 0.45 }
 // The page tint's strength per scheme. Its colour is pushed toward full
 // saturation first, so a pale dream still tints.
@@ -62,7 +62,7 @@ const vertexShader = /* glsl */ `
   }
 `
 
-// The dream panel, sharp, faded out through a soft rounded rectangle — in
+// The dream panel, sharp, faded out softly toward its edges — in
 // colour or grey just as the polaroid's photo is (video-material.tsx's
 // overlay): colour near the pointer, grey further away, by the same radii,
 // measured in photo space. Its own grey, not the photo's grey portrait
@@ -85,9 +85,10 @@ const fragmentShader = /* glsl */ `
     float grey = clamp((dist - 0.15) / 0.35, 0.0, 1.0);
     vec3 dream = panelAt(${DREAM_PANEL.toFixed(1)}, vUv);
     vec3 color = mix(dream, vec3(dot(dream, vec3(0.299, 0.587, 0.114))), grey);
-    vec2 outside = max(abs(vUv - 0.5) - vec2(${FADE_INNER[0].toFixed(2)}, ${FADE_INNER[1].toFixed(2)}), 0.0);
-    float fade = 1.0 - smoothstep(0.0, ${FADE_FEATHER.toFixed(2)}, length(outside));
-    gl_FragColor = vec4(color, fade * fade * uOpacity);
+    float r = length(vUv - 0.5) * 2.0;
+    float floorAt = exp(-${FADE_FALLOFF.toFixed(1)});
+    float fade = max(0.0, (exp(-${FADE_FALLOFF.toFixed(1)} * r * r) - floorAt) / (1.0 - floorAt));
+    gl_FragColor = vec4(color, fade * uOpacity);
   }
 `
 
@@ -100,7 +101,9 @@ function DreamGlow({
   /** The composite video's texture, for the spill. */
   texture: Texture
   /** 0-1: how present the avatar and lyrics are (main.tsx's fadeRef), so
-   *  the glow dips through a swap with them. */
+   *  the spill fades as the polaroid's dragged, and is gone through a
+   *  swap, with them. Followed directly, not through the slow presence
+   *  ease below. */
   fade: MutableRefObject<number>
 }) {
   const scheme = useStore((state) => state.colorScheme)
@@ -201,9 +204,9 @@ function DreamGlow({
     }
 
     shown.current.lerp(target.current, EASE)
-    const goal = dream && hasSample.current ? fade.current : 0
+    const goal = dream && hasSample.current ? 1 : 0
     presenceRef.current += (goal - presenceRef.current) * PRESENCE_EASE
-    const presence = presenceRef.current
+    const presence = presenceRef.current * fade.current
 
     material.uniforms.uOpacity.value = GLOW_OPACITY[scheme] * presence
     // The pointer as the polaroid's photo sees it (set by main.tsx).

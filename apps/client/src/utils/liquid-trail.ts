@@ -34,13 +34,17 @@ const NEUTRAL = 'rgb(128, 128, 0)'
 const ACTIVE_FRAMES = Math.ceil(Math.log(1 / 255) / Math.log(1 - SETTLE)) + 30
 let activeFrames = 0
 
-// Ripple drops, like the welcome screen's water (components/water-video):
-// the pointer drops a ring every DROP_SPACING CSS px it travels, which the
-// wake pass spreads out across the screen. At most MAX_DROPS at once, each
-// gone after DROP_SECONDS (keep in step with the wake pass's shader).
-export const MAX_DROPS = 12
-const DROP_SPACING = 36
-export const DROP_SECONDS = 2.2
+// Ripple drops: the pointer drops a ring every DROP_SPACING CSS px it
+// travels, which the wake pass spreads out behind the scene as a soft
+// swell. At most MAX_DROPS at once, each gone after DROP_SECONDS (the
+// wake pass's shader fades it over the same time). When they're all in
+// use, a new drop waits for the oldest to have nearly faded
+// (REPLACE_AFTER of its life) rather than cutting it off mid-ripple —
+// which a long stroke used to do, ending earlier rings abruptly.
+export const MAX_DROPS = 16
+const DROP_SPACING = 110
+export const DROP_SECONDS = 3.2
+const REPLACE_AFTER = 0.8
 const drops: { x: number; y: number; born: number; strength: number }[] = []
 let lastDrop: { x: number; y: number } | null = null
 let lastDropBorn = -Infinity
@@ -69,13 +73,21 @@ window.addEventListener('pointermove', (event) => {
     ? Math.hypot(event.clientX - lastDrop.x, event.clientY - lastDrop.y)
     : Infinity
   if (distance < DROP_SPACING) return
-  // Faster strokes make stronger rings (a first drop, mid-strength).
+  const now = performance.now()
+  // Drop the dead; when full, only make room once the oldest has nearly
+  // faded.
+  while (drops.length && now - drops[0].born > DROP_SECONDS * 1000) drops.shift()
+  if (drops.length >= MAX_DROPS) {
+    if (now - drops[0].born < DROP_SECONDS * 1000 * REPLACE_AFTER) return
+    drops.shift()
+  }
+
+  // Faster strokes make stronger swells (a first drop, mid-strength).
   const strength =
-    distance === Infinity ? 0.6 : Math.min(1, 0.4 + distance / 120)
+    distance === Infinity ? 0.6 : Math.min(1, 0.4 + distance / 300)
   lastDrop = { x: event.clientX, y: event.clientY }
-  lastDropBorn = performance.now()
-  drops.push({ x: event.clientX, y: event.clientY, born: lastDropBorn, strength })
-  if (drops.length > MAX_DROPS) drops.shift()
+  lastDropBorn = now
+  drops.push({ x: event.clientX, y: event.clientY, born: now, strength })
 })
 
 /** Writes the drops into dropUniform, for a canvas this many CSS px tall. */

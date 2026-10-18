@@ -16,7 +16,7 @@ export type Resume = { dreamId: string; time: number }
 export type SwapPhase = 'idle' | 'out' | 'loading' | 'in'
 /** 1 = next dream, -1 = previous. */
 export type SwapDirection = 1 | -1
-export const SWAP_STYLES = ['drop', 'slide', 'flip'] as const
+export const SWAP_STYLES = ['snap', 'drop', 'slide', 'flip'] as const
 export type SwapStyle = (typeof SWAP_STYLES)[number]
 
 // The choose screen's carousel: the fan (components/slider.tsx), or one
@@ -32,7 +32,7 @@ function initialCarouselStyle(): CarouselStyle {
 
 function initialSwapStyle(): SwapStyle {
   const param = new URLSearchParams(location.search).get('swap')
-  return SWAP_STYLES.find((style) => style === param) ?? 'drop'
+  return SWAP_STYLES.find((style) => style === param) ?? 'snap'
 }
 
 export interface AppState {

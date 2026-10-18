@@ -31,6 +31,10 @@ export type SwapAnimation = {
   /** Optional rocking while waiting on the load: radians added to
    *  `exit(1)`'s y rotation. */
   hold?: (time: number, dir: SwapDirection) => { ry: number }
+  /** Stays put: a let-go drag springs back to rest rather than carrying
+   *  on, the photo fades to a blank print on the way out, stays shown
+   *  while the next dream loads, and the next develops in its place. */
+  inPlace?: boolean
 }
 
 const rest: Pose = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }
@@ -53,6 +57,16 @@ const land = (p: number) => {
 }
 
 export const SWAP_ANIMATIONS: Record<SwapStyle, SwapAnimation> = {
+  // Springs back to where it was, its photo fading to a blank print, and
+  // the next dream develops into the same frame.
+  snap: {
+    outDuration: 0.45,
+    inDuration: 0.6,
+    exit: () => rest,
+    enter: () => rest,
+    inPlace: true,
+  },
+
   // Slides off one side with a slight tilt; the next slides in from the
   // other, like dealing a card. The lyrics and avatar stay put.
   slide: {
