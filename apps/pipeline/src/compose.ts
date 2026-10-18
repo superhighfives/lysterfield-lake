@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { access, rename } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
 import path from 'node:path'
@@ -202,6 +203,77 @@ export async function composePreview(
   await compress(compositePath, videoSmallPath, { half: true })
 
   return { previewDir: path.join(job.dir, previewDir), videoPath: videoPathOut, videoSmallPath }
+}
+
+export interface ComposeSplitResult {
+  /** `main/`: the shared 6-panel video (panels 1-6, the same for every take) with the song's audio. */
+  mainDir: string
+  /** Each take's silent, dream-only clip folder (`7-dreams/<take>/split/`). */
+  dreamDirs: string[]
+}
+
+/**
+ * The composite split in two, so the client can swap dreams mid-song without
+ * reloading the audio:
+ *
+ * - `main/main{,-small}.{mov,webm}`: panels 1-6 in their usual order, with the
+ *   audio. Shared by every take, so made once per job.
+ * - `7-dreams/<take>/split/dream{,-small}.{mov,webm}`: panel 7 alone, silent,
+ *   the same length and frame rate as the main video, so the two stay in step.
+ *
+ * Built from the panel videos `compose` already compiled (`<panel>/video/panel.mov`),
+ * so run `compose` on a take first. Anything already made is skipped.
+ */
+export async function composeSplit(job: Job, takes: string[]): Promise<ComposeSplitResult> {
+  const duration = await probeDuration(AUDIO_PATH)
+  const panelVideo = async (dir: string) => {
+    const p = path.join(job.dir, dir, 'video/panel.mov')
+    if (!(await exists(p))) throw new Error(`${p} is missing: run compose on a take first`)
+    return p
+  }
+
+  const mainDir = 'main'
+  const mainComposite = await videoPath(job, `${mainDir}/composite`)
+  const panels = await Promise.all(['1-words', '2-portrait', '3-background', '4-matte', '5-depth', '6-outline'].map(panelVideo))
+  await once(mainComposite, (out) => hstackWithAudio(panels, out, { fps: job.fps, duration }))
+  await compressAll(job, mainComposite, `${mainDir}/main`)
+
+  const dreamDirs: string[] = []
+  for (const take of takes) {
+    const dir = `7-dreams/${take}/split`
+    const dreamPanel = await panelVideo(`7-dreams/${take}`)
+    // Trimmed to the song and resampled to the job's rate exactly as the main video is, without audio.
+    const trimmed = await videoPath(job, `${dir}/dream-full`)
+    await once(trimmed, (out) =>
+      execFileAsync('ffmpeg', ['-y', '-i', dreamPanel, '-t', String(duration), '-r', String(job.fps), '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '14', out]).then(() => undefined)
+    )
+    await compressAll(job, trimmed, `${dir}/dream`)
+    dreamDirs.push(path.join(job.dir, dir))
+  }
+
+  return { mainDir: path.join(job.dir, mainDir), dreamDirs }
+}
+
+/** `<base>.mov`, `<base>.webm`, `<base>-small.mov` and `<base>-small.webm` from one source, the same passes `compose` makes. Skips any that exist. */
+async function compressAll(job: Job, source: string, base: string): Promise<void> {
+  for (const [suffix, ext, half] of [['', 'mov', false], ['', 'webm', false], ['-small', 'mov', true], ['-small', 'webm', true]] as const) {
+    await once(await videoPath(job, `${base}${suffix}`, ext), (out) => compress(source, out, { half }))
+  }
+}
+
+/** Makes `out` with `make` unless it exists. Written under a temporary name first, so a stopped run never leaves a half-written file that looks done. */
+async function once(out: string, make: (partial: string) => Promise<void>): Promise<void> {
+  if (await exists(out)) return
+  const partial = out.replace(/\.(\w+)$/, '.partial.$1')
+  await make(partial)
+  await rename(partial, out)
+}
+
+async function exists(p: string): Promise<boolean> {
+  return access(p).then(
+    () => true,
+    () => false
+  )
 }
 
 /** Compiles a frame folder into a PANEL_SIZE² square panel video — every frame-based panel is already square, so this is a plain resize, no crop. `panelDir` is the panel's own folder relative to the job root (e.g. `2-portrait`, or `7-dreams/<take>` for the one per-take panel) — its compiled video lands at `<panelDir>/video/panel.mov`. `ext` must match the frame folder's actual format (alpha/matte stays png; everything else is jpg — see init.ts). */
