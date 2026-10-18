@@ -52,6 +52,9 @@ function Root() {
   )
   const water = useWater()
   const [diving, setDiving] = useState(false)
+  // Set on the first click, before the permission await, so a second click
+  // (or Enter) during that await or the dive can't start it twice.
+  const started = useRef(false)
   // A swap's load is covered by the polaroid's own animation (see
   // utils/swap-dream.ts), so it doesn't count as buffering.
   const swapLoading = useStore((state) => state.swapPhase === 'loading')
@@ -91,6 +94,8 @@ function Root() {
   useSwapInput()
 
   const handleReady = async () => {
+    if (started.current) return
+    started.current = true
     // Inside the click, so Safari lets the audio context start.
     startAudio()
     const orientationGranted = (await handleDeviceOrientationPermissions()) as boolean
