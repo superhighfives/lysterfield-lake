@@ -37,6 +37,9 @@ const EASE = 0.04
 const LENS_CORE = 0.3
 const GREY_NEAR = 0.2
 const GREY_FAR = 0.65
+// The screen fades to nothing over this much (short-side units) at all
+// four edges.
+const EDGE_FADE = 0.3
 const GLOW_OPACITY = { light: 0.4, dark: 0.4 }
 // The page tint's strength per scheme. Its colour is pushed toward full
 // saturation first, so a pale dream still tints.
@@ -103,7 +106,10 @@ const fragmentShader = /* glsl */ `
     float grey = smoothstep(${GREY_NEAR.toFixed(2)}, ${GREY_FAR.toFixed(2)}, distance(p, pointer));
     vec3 dream = panelAt(${DREAM_PANEL.toFixed(1)}, dreamUv);
     vec3 color = mix(dream, vec3(dot(dream, vec3(0.299, 0.587, 0.114))), grey);
-    gl_FragColor = vec4(color, uOpacity);
+    // Fading out toward every edge, the same width on all four.
+    vec2 edge = extent * 0.5 - abs(p);
+    float fade = smoothstep(0.0, ${EDGE_FADE.toFixed(2)}, edge.x) * smoothstep(0.0, ${EDGE_FADE.toFixed(2)}, edge.y);
+    gl_FragColor = vec4(color, uOpacity * fade);
   }
 `
 
