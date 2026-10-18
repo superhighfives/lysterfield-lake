@@ -121,6 +121,9 @@ export default function AdminRecord() {
     return () => navigator.mediaDevices.removeEventListener('devicechange', listCameras)
   }, [listCameras])
 
+  // Keeps any camera error already showing: that's the one to act on.
+  const reportListError = (e: Error) => setError((current) => current || `Couldn't list cameras: ${e.message}`)
+
   useEffect(() => {
     let cancelled = false
     setCameraInfo('')
@@ -132,7 +135,7 @@ export default function AdminRecord() {
         if (live.current) live.current.srcObject = s
         const settings = s.getVideoTracks()[0]?.getSettings()
         if (settings) setCameraInfo(`${settings.width}×${settings.height} at ${Math.round(settings.frameRate ?? 0)}fps`)
-        listCameras().catch(() => {})
+        listCameras().catch(reportListError)
       })
       .catch((e: Error) => {
         if (cancelled) return
@@ -143,7 +146,7 @@ export default function AdminRecord() {
             ? 'No camera found. Connect one (or bring an iPhone close for Continuity Camera), or choose a video file below.'
             : `Couldn't open the camera: ${e.message}`
         )
-        listCameras().catch(() => {})
+        listCameras().catch(reportListError)
       })
     return () => {
       cancelled = true

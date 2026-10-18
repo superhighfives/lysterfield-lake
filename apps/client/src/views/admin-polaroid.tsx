@@ -76,6 +76,7 @@ function useAtlas(job: string) {
     if (!job) return
     let cancelled = false
     let url = ''
+    let tex: VideoTexture | null = null
     const video = document.createElement('video')
     Object.assign(video, { muted: true, loop: true, playsInline: true, crossOrigin: 'anonymous' })
     setTexture(null)
@@ -87,15 +88,17 @@ function useAtlas(job: string) {
         url = URL.createObjectURL(blob)
         video.src = url
         await video.play()
-        const tex = new VideoTexture(video)
+        tex = new VideoTexture(video)
         // As the player does: the shader passes the video's sRGB values straight through.
         tex.colorSpace = LinearSRGBColorSpace
-        if (!cancelled) setTexture(tex)
+        if (cancelled) tex.dispose()
+        else setTexture(tex)
       })
       .catch((e: Error) => !cancelled && setError(e.message))
     return () => {
       cancelled = true
       video.pause()
+      tex?.dispose()
       if (url) URL.revokeObjectURL(url)
     }
   }, [job])
@@ -107,7 +110,9 @@ export default function AdminPolaroid() {
   const [job, setJob] = useState(() => new URLSearchParams(location.search).get('job') ?? '')
   const [settings, setSettings] = useState(DEFAULTS)
   const dark = useStore((state) => state.colorScheme === 'dark')
-  const { texture, error } = useAtlas(job)
+  const { texture, error: atlasError } = useAtlas(job)
+  const [listError, setListError] = useState('')
+  const error = listError || atlasError
   const drag = useRef({ x: 0, y: 0, active: false })
 
   useEffect(() => {
@@ -116,7 +121,7 @@ export default function AdminPolaroid() {
         setJobs(list)
         setJob((current) => current || list[0] || '')
       })
-      .catch(() => {})
+      .catch((e: Error) => setListError(`Couldn't list polaroids: ${e.message}`))
   }, [])
 
   const bind = useDrag(({ active, movement: [mx, my], memo }) => {
