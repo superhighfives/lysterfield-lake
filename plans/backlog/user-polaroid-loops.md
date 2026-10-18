@@ -127,6 +127,29 @@ stepFps 6, concurrency 4). 122 frames.
     is temporally consistent, continues the real scene and costs ~$0.25
     for 5s. Or a single still plate held for the whole loop.
 
+### Bria for panel 3 (2026-10-17)
+
+One `bria/video-erase-object` run on `park-party`: 720px portrait clip
+(frames 1-120) plus a mask of the matte (>127) unioned over ±2 frames and
+dilated 24px. 30s of GPU, 33s wall clock, $0.25. Inputs went on a
+temporary public R2 bucket (`lysterfield-polaroid-temp`, random path),
+deleted straight after along with the bucket.
+
+- **Much better than flux-fill:** it continues the visitor's actual scene
+  (grass, sky, the treeline) with a painterly fill that holds together
+  frame to frame. No boardwalk, no mountains, no invented people.
+- One weak spot: the first frames, where the head fills most of the
+  picture, leave a yellow-green smear where Bria had little real
+  background to go on. The `polaroid` step's trim hides some of it.
+- **Cheaper and faster:** $0.25 and half a minute, replacing flux-fill's
+  $1.55 and 2.6m, and no leak detection to get wrong. A loop is now about
+  **$2.70**, most of it the portrait.
+- Hosted, the inputs need public URLs: a short-lived signed R2 URL per
+  job would do, rather than a public bucket.
+- `park-party`'s `3-background/frames` now points at the Bria frames
+  (`frames-bria`). The flux-fill frames are kept in `frames-flux`, and
+  their atlas in `polaroid/atlas-flux.mp4`.
+
 ## Approach (rough, still being scoped)
 
 1. **Capture** (client): sign in with Clerk, then record 5s from the camera
@@ -165,7 +188,7 @@ stepFps 6, concurrency 4). 122 frames.
 - [x] Prototype: run one 5s clip of a new person through panels 2-6 locally
       end to end, measuring cost per step, wall-clock time and cold
       starts (`park-party`, above)
-- [ ] Try Bria video-erase for panel 3 on `park-party`
+- [x] Try Bria video-erase for panel 3 on `park-party`: use it (above)
 - [ ] Time DiffusionCLIP on faster hardware and higher concurrency
 - [x] Prototype the loop seam on that clip: the pipeline's `polaroid` step
       drops 3 frames (matte settling) and crossfades the last 12 into the
