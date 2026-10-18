@@ -23,6 +23,7 @@ import Choose from "../views/choose";
 import Main from "../views/main";
 import Fireflies from "./fireflies";
 import WakePass from "./wake-pass";
+import DebugProbe from "./debug-probe";
 
 // Half-angle of the choose screen's pointer-following light cone. With a
 // full penumbra, brightness falls off smoothly from the centre to this edge.
@@ -61,6 +62,8 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const setShowPlayhead = useStore((state) => state.setShowPlayhead);
 	const initialRotation = useStore((state) => state.initialRotation);
 	const resetting = useStore((state) => state.resetting);
+	const wakeEnabled = useStore((state) => state.wakeEnabled);
+	const debug = useStore((state) => state.debug);
 
 	// These all used to be React state set every frame from useFrame,
 	// re-rendering Scene (and everything under it, including Choose's whole
@@ -225,7 +228,10 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 					enablePan={false}
 				/>
 			) : null}
-			<WakePass />
+			{/* The wake pass can be switched off in debug mode, to measure
+			    what it costs; R3F then renders the scene itself. */}
+			{wakeEnabled ? <WakePass /> : null}
+			{debug ? <DebugProbe /> : null}
 			<ambientLight ref={ambient} intensity={0.5} />
 			<group>
 				{/* decay={0} — three.js dropped the legacy (non-physically-correct)

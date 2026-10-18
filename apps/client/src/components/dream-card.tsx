@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ThreeEvent, useThree } from '@react-three/fiber'
 import { Text, useCursor, useTexture } from '@react-three/drei'
 import { a, animated, config, useSpring } from '@react-spring/three'
@@ -27,6 +27,7 @@ function DreamCard({
   onHoverChange,
   tilt = true,
   showText = true,
+  interactive = true,
 }: {
   dream: Dream
   onSelect: (event: ThreeEvent<MouseEvent>) => void
@@ -34,6 +35,9 @@ function DreamCard({
   /** Tip back toward the viewer on hover (off where a layout turns it). */
   tilt?: boolean
   showText?: boolean
+  /** Off for a card that shouldn't react to hover or clicks (a stacked
+   *  card that isn't on top). */
+  interactive?: boolean
 }) {
   const dark = useStore((state) => state.colorScheme === 'dark')
   const textureImage = useTexture(`/assets/${dream.id}/hero.jpg`)
@@ -65,9 +69,15 @@ function DreamCard({
   })
 
   const setHovered = (value: boolean) => {
+    if (value && !interactive) return
     setHover(value)
     onHoverChange?.(value)
   }
+
+  // Losing interactivity mid-hover (it's no longer on top) lets go of it.
+  useEffect(() => {
+    if (!interactive) setHover(false)
+  }, [interactive])
 
   return (
     <animated.group
@@ -84,7 +94,7 @@ function DreamCard({
           e.stopPropagation()
           setHovered(false)
         }}
-        onClick={(e) => onSelect(e as any)}
+        onClick={(e) => interactive && onSelect(e as any)}
         passthroughMaterial={
           // eslint-disable-next-line @typescript-eslint/ban-ts-comment
           //@ts-ignore: https://github.com/pmndrs/react-spring/issues/1515 */}

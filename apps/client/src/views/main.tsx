@@ -78,7 +78,7 @@ const FADE_EASE = 0.12
 // eased per frame by VELOCITY_EASE and capped at VELOCITY_MAX.
 const PHOTO_WIDTH = 1.05
 const VELOCITY_EASE = 0.3
-const VELOCITY_MAX = 0.06
+const VELOCITY_MAX = 0.035
 // After a swap the new polaroid develops (see uDevelop) over this long,
 // and a ripple rings out through it when it lands — this far through its
 // arrival (swap progress counts 1 -> 0).

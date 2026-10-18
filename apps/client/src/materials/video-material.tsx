@@ -183,7 +183,7 @@ export const VideoMaterial = shaderMaterial(
     // Motion smear: taps along the velocity, and how far the red and blue
     // channels split either side of it.
     const int SMEAR_TAPS = 10;
-    const float SPLIT_AMOUNT = 0.4;
+    const float SPLIT_AMOUNT = 0.15;
     uniform float uHash;
     uniform float uDevelop;
     uniform vec3 uRipple;

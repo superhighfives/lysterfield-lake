@@ -17,6 +17,7 @@ import { useSwapInput } from '../utils/swap-gesture'
 import { startAudio } from '../utils/audio'
 import WaterVideo, { DIVE_MS, useWater } from '../components/water-video'
 import Cursor from '../components/cursor'
+import DebugOverlay from '../components/debug-overlay'
 import SwapStylePicker from '../components/swap-style-picker'
 
 // How long buffering has to last before offering the YouTube escape hatch.
@@ -40,6 +41,7 @@ function Root() {
   const setIsTooSlow = useStore((state) => state.setIsTooSlow)
   const seeking = useStore((state) => state.seeking)
   const showPlayhead = useStore((state) => state.showPlayhead)
+  const dprCap = useStore((state) => state.dprCap)
   const water = useWater()
   const [diving, setDiving] = useState(false)
   // A swap's load is covered by the polaroid's own animation (see
@@ -112,6 +114,7 @@ function Root() {
       <KeyWhiteFilter />
       <SwapStylePicker />
       <Cursor />
+      <DebugOverlay />
       <div className="fixed z-10 top-1 right-1 flex items-center gap-1 font-sans text-sm">
         <ThemeToggle />
         <a href="/about" className={linkClassName}>
@@ -157,7 +160,7 @@ function Root() {
               data-swap-surface
               className={`${isBuffering ? 'grayscale' : ''} fixed inset-0`}
             >
-              <Canvas shadows>
+              <Canvas shadows dpr={dprCap ? [1, dprCap] : [1, 2]}>
                 <Suspense fallback={<Loading />}>
                   <Preload all />
                   <Scene video={video} />

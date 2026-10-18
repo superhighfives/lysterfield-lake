@@ -21,19 +21,26 @@ import { useStore } from '../store'
 const SAMPLE_MS = 250
 const EASE = 0.04
 // The spill behind the polaroid: its size relative to the polaroid's group
-// (the dream fills it), how far behind it sits, how soft it's blurred (UV
-// radius of the dream panel), where its fade to clear starts and ends
-// (radius from the centre), and its strength per scheme — additive in
-// dark mode, so it lights the dark page; a plain wash in light mode, where
+// (the dream fills it), how far behind it sits — well back, so the
+// polaroid's tilt never swings its edge into it — and its fade to clear: a
+// rounded rectangle, fully there inside FADE_INNER (half-size, in UV) and
+// gone FADE_FEATHER beyond. Its strength per scheme — additive in dark
+// mode, so it lights the dark page; a plain wash in light mode, where
 // adding would just clip to white.
-const GLOW_SIZE: [number, number] = [2.3, 2.3]
-const GLOW_Z = -1.15
-const GLOW_BLUR = 0.035
-const GLOW_FADE: [number, number] = [0.12, 0.5]
-const GLOW_OPACITY = { light: 0.55, dark: 0.6 }
+const GLOW_SIZE: [number, number] = [3.1, 3.1]
+const GLOW_Z = -1.7
+const FADE_INNER: [number, number] = [0.14, 0.16]
+const FADE_FEATHER = 0.34
+const GLOW_OPACITY = { light: 0.5, dark: 0.45 }
 // The page tint's strength per scheme. Its colour is pushed toward full
 // saturation first, so a pale dream still tints.
-const TINT_ALPHA = { light: 0.18, dark: 0.22 }
+const TINT_ALPHA = { light: 0.15, dark: 0.1 }
+// The spill and tint fade in (and out) at this much per frame, once the
+// dream's own colour has been sampled — so entering a dream doesn't flash
+// whatever colour was last seen. Samples taken within SETTLE_MS of a new
+// dream are skipped, while its video is still loading or seeking.
+const PRESENCE_EASE = 0.02
+const SETTLE_MS = 400
 // The composite video's panel count, and the dream panel (1-based).
 const PANELS = 7
 const DREAM_PANEL = 7
@@ -50,8 +57,7 @@ const vertexShader = /* glsl */ `
   }
 `
 
-// The dream panel, blurred over a ring of taps around each pixel, faded to
-// clear toward the edge of the plane.
+// The dream panel, sharp, faded out through a soft rounded rectangle.
 const fragmentShader = /* glsl */ `
   varying vec2 vUv;
   uniform sampler2D uTexture;
@@ -63,15 +69,10 @@ const fragmentShader = /* glsl */ `
   }
 
   void main() {
-    vec3 color = dreamAt(vUv) * 0.2;
-    for (int i = 0; i < 12; i++) {
-      float angle = float(i) / 12.0 * 6.2832;
-      vec2 tap = vec2(cos(angle), sin(angle)) * ${GLOW_BLUR.toFixed(3)};
-      color += dreamAt(vUv + tap) * (0.8 / 24.0);
-      color += dreamAt(vUv + tap * 0.5) * (0.8 / 24.0);
-    }
-    float fade = smoothstep(${GLOW_FADE[1].toFixed(2)}, ${GLOW_FADE[0].toFixed(2)}, length(vUv - 0.5));
-    gl_FragColor = vec4(color, fade * uOpacity);
+    vec3 color = dreamAt(vUv);
+    vec2 outside = max(abs(vUv - 0.5) - vec2(${FADE_INNER[0].toFixed(2)}, ${FADE_INNER[1].toFixed(2)}), 0.0);
+    float fade = 1.0 - smoothstep(0.0, ${FADE_FEATHER.toFixed(2)}, length(outside));
+    gl_FragColor = vec4(color, fade * fade * uOpacity);
   }
 `
 
@@ -99,6 +100,12 @@ function DreamGlow({
   const shown = useRef(new Color(0.5, 0.5, 0.5))
   const lastSample = useRef(0)
   const lastTint = useRef('')
+  // The dream the colour was last sampled for, when it changed, and
+  // whether it has a sample yet; and the spill and tint's eased presence.
+  const sampledFor = useRef<string | null>(null)
+  const dreamSince = useRef(0)
+  const hasSample = useRef(false)
+  const presenceRef = useRef(0)
   const material = useMemo(
     () =>
       new ShaderMaterial({
@@ -125,8 +132,16 @@ function DreamGlow({
 
   useFrame(() => {
     const now = performance.now()
+    if ((dream?.id ?? null) !== sampledFor.current) {
+      sampledFor.current = dream?.id ?? null
+      dreamSince.current = now
+      hasSample.current = false
+    }
+
     if (
       sampler &&
+      dream &&
+      now - dreamSince.current > SETTLE_MS &&
       now - lastSample.current > SAMPLE_MS &&
       video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
       video.videoWidth
@@ -157,23 +172,29 @@ function DreamGlow({
 
         const count = data.length / 4
         target.current.setRGB(r / count / 255, g / count / 255, b / count / 255)
+        // A new dream's first sample is its colour straight away, rather
+        // than an ease from the last dream's.
+        if (!hasSample.current) shown.current.copy(target.current)
+        hasSample.current = true
       } catch {
         // A cross-origin video without CORS can't be read; keep the last.
       }
     }
 
     shown.current.lerp(target.current, EASE)
-    const presence = dream ? fade.current : 0
+    const goal = dream && hasSample.current ? fade.current : 0
+    presenceRef.current += (goal - presenceRef.current) * PRESENCE_EASE
+    const presence = presenceRef.current
 
     material.uniforms.uOpacity.value = GLOW_OPACITY[scheme] * presence
 
-    // The page tint: the shown colour pushed to full saturation, at a
+    // The page tint: the shown colour, a little more saturated, at a
     // gentle alpha. Only written when it changes (it repaints the page).
     shown.current.getHSL(scratchHsl)
     const vivid = scratchColor.setHSL(
       scratchHsl.h,
-      Math.min(1, scratchHsl.s * 2 + 0.2),
-      0.55
+      Math.min(1, scratchHsl.s * 1.4 + 0.1),
+      0.5
     )
     const tint = `${Math.round(vivid.r * 255)} ${Math.round(vivid.g * 255)} ${Math.round(vivid.b * 255)}`
     const alpha = (TINT_ALPHA[scheme] * presence).toFixed(3)

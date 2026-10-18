@@ -30,16 +30,21 @@ import { trailTexture, updateTrail } from '../utils/liquid-trail'
 // How far (CSS px) the image is pulled at full flow — a fast flick; the
 // trail's speed curve (utils/liquid-trail.ts) keeps slower moves well
 // under it — and the catch of light on the wake's leading edge.
-const WAKE_PX = 20
-const WAKE_GLINT = 0.12
-// Where there's wake, the image also glows: smeared back along the flow
-// (up to GLOW_SMEAR_PX at full wake, over GLOW_TAPS samples), its colour
-// channels split by up to GLOW_SPLIT_PX, and its colour lifted toward
-// white by up to GLOW_BLOWOUT.
-const GLOW_SMEAR_PX = 12
-const GLOW_TAPS = 10
-const GLOW_SPLIT_PX = 1.5
-const GLOW_BLOWOUT = 0.35
+const WAKE_PX = 16
+// Where there's wake, it reads as light on water rather than a blur:
+// - glass: the wake's surface (its presence, as a height) catches the
+//   light, as thin bright highlights — GLINT_STRENGTH, sharpened by
+//   GLINT_SHARPNESS, its slope measured GLINT_SPREAD px apart;
+// - bloom: a soft glow (a disc of BLOOM_TAPS samples, BLOOM_PX across)
+//   laid over it, BLOOM_STRENGTH at full wake;
+// - a short trail back along the flow (TRAIL_PX, no colour split).
+const GLINT_STRENGTH = 0.55
+const GLINT_SHARPNESS = 6.0
+const GLINT_SPREAD = 4.0
+const BLOOM_TAPS = 8
+const BLOOM_PX = 10
+const BLOOM_STRENGTH = 0.28
+const TRAIL_PX = 6
 // MSAA for the offscreen render, matching the canvas's own antialiasing.
 const SAMPLES = 4
 
@@ -67,38 +72,35 @@ const fragmentShader = /* glsl */ `
     vec3 wake = wakeAt(vUv);
     vec2 offset = wake.xy * ${WAKE_PX.toFixed(1)} / uSize;
     vec2 uv = vUv - offset;
-    vec4 color;
+    vec4 color = texture2D(uScene, uv);
 
-    if (wake.z < 0.002) {
-      color = texture2D(uScene, uv);
-    } else {
-      // The glow: a smear back along the flow with the channels split
-      // across it, averaged.
-      vec2 direction = normalize(wake.xy + 1e-5);
-      vec2 smear = direction * ${GLOW_SMEAR_PX.toFixed(1)} * wake.z / uSize;
-      vec2 split = direction * ${GLOW_SPLIT_PX.toFixed(1)} * wake.z / uSize;
-      color = vec4(0.0);
-      for (int i = 0; i < ${GLOW_TAPS}; i++) {
-        vec2 tap = uv - smear * (float(i) / float(${GLOW_TAPS - 1}));
-        vec4 middle = texture2D(uScene, tap);
-        color += vec4(
-          texture2D(uScene, tap + split).r,
-          middle.g,
-          texture2D(uScene, tap - split).b,
-          middle.a
-        );
+    if (wake.z > 0.002) {
+      // A short trail back along the flow.
+      vec2 trail = normalize(wake.xy + 1e-5) * ${TRAIL_PX.toFixed(1)} * wake.z / uSize;
+      color = (color + texture2D(uScene, uv - trail * 0.5) + texture2D(uScene, uv - trail)) / 3.0;
+
+      // Bloom: a soft disc of the image around here, laid over it.
+      vec4 bloom = vec4(0.0);
+      for (int i = 0; i < ${BLOOM_TAPS}; i++) {
+        float angle = float(i) / float(${BLOOM_TAPS}) * 6.2832;
+        bloom += texture2D(uScene, uv + vec2(cos(angle), sin(angle)) * ${(BLOOM_PX / 2).toFixed(1)} / uSize);
       }
-      color /= float(${GLOW_TAPS});
-      // Blown out toward white. The image is premultiplied (it was blended
-      // onto a transparent target), so "white" here is its own alpha.
-      color.rgb = mix(color.rgb, vec3(color.a), ${GLOW_BLOWOUT.toFixed(2)} * wake.z);
-    }
+      bloom /= float(${BLOOM_TAPS});
+      color.rgb += bloom.rgb * ${BLOOM_STRENGTH.toFixed(2)} * wake.z;
 
-    // Light on the edge the wake is moving into: how fast its presence
-    // falls away ahead of the flow.
-    vec2 ahead = normalize(wake.xy + 1e-5) * 6.0 / uSize;
-    float edge = max(wake.z - wakeAt(vUv + ahead).z, 0.0);
-    color.rgb += edge * ${WAKE_GLINT.toFixed(3)} * color.a;
+      // Glass: the wake's presence as a surface, lit from above-left. Its
+      // slope picks out thin highlights where it rises toward the light.
+      // Premultiplied, so the light is scaled by alpha.
+      vec2 spread = ${GLINT_SPREAD.toFixed(1)} / uSize;
+      vec2 slope = vec2(
+        wakeAt(vUv + vec2(spread.x, 0.0)).z - wakeAt(vUv - vec2(spread.x, 0.0)).z,
+        wakeAt(vUv + vec2(0.0, spread.y)).z - wakeAt(vUv - vec2(0.0, spread.y)).z
+      );
+      vec3 normal = normalize(vec3(-slope * 6.0, 1.0));
+      float light = pow(max(dot(normal, normalize(vec3(-0.5, 0.6, 0.6))), 0.0), ${GLINT_SHARPNESS.toFixed(1)});
+      color.rgb += light * ${GLINT_STRENGTH.toFixed(2)} * length(slope) * 4.0 * color.a;
+      color.rgb = min(color.rgb, vec3(color.a));
+    }
 
     gl_FragColor = color;
   }

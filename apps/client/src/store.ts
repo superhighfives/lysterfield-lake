@@ -70,6 +70,12 @@ export interface AppState {
   swapDirection: SwapDirection
   swapStyle: SwapStyle
   carouselStyle: CarouselStyle
+  /** Debug mode (Shift+D, or ?debug): the diagnostics overlay, and
+   *  switches for performance experiments — the full-screen wake pass, and
+   *  a cap on the canvas's pixel ratio (null = native, up to 2). */
+  debug: boolean
+  wakeEnabled: boolean
+  dprCap: number | null
   setDream: (dream: Dream | null) => void
   setResetting: (resetting: boolean) => void
   setSeeking: (seeking: boolean) => void
@@ -94,6 +100,9 @@ export interface AppState {
   setSwapPhase: (swapPhase: SwapPhase) => void
   setSwapStyle: (swapStyle: SwapStyle) => void
   setCarouselStyle: (carouselStyle: CarouselStyle) => void
+  setDebug: (debug: boolean) => void
+  setWakeEnabled: (wakeEnabled: boolean) => void
+  setDprCap: (dprCap: number | null) => void
 }
 
 export const useStore = create<AppState>()((set) => ({
@@ -120,6 +129,9 @@ export const useStore = create<AppState>()((set) => ({
   swapDirection: 1,
   swapStyle: initialSwapStyle(),
   carouselStyle: initialCarouselStyle(),
+  debug: new URLSearchParams(location.search).has('debug'),
+  wakeEnabled: true,
+  dprCap: null,
   setDream: (dream: Dream | null) => set({ dream }),
   setResetting: (resetting: boolean) => {
     set(() => ({ resetting }))
@@ -162,4 +174,7 @@ export const useStore = create<AppState>()((set) => ({
   setSwapStyle: (swapStyle: SwapStyle) => set(() => ({ swapStyle })),
   setCarouselStyle: (carouselStyle: CarouselStyle) =>
     set(() => ({ carouselStyle })),
+  setDebug: (debug: boolean) => set(() => ({ debug })),
+  setWakeEnabled: (wakeEnabled: boolean) => set(() => ({ wakeEnabled })),
+  setDprCap: (dprCap: number | null) => set(() => ({ dprCap })),
 }))

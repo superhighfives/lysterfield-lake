@@ -9,6 +9,7 @@ import {
   swapDrag,
 } from '../utils/swap-gesture'
 import { latestPulse } from '../utils/audio'
+import { cursorHint } from '../utils/cursor-hint'
 
 // A custom cursor, on devices with a precise, hovering pointer (touch keeps
 // its own). A dot sits exactly under the pointer; a ring trails it and
@@ -136,9 +137,14 @@ function Cursor() {
 
       const { swapPhase } = useStore.getState()
       let next: Mode = 'default'
-      if (swapDrag.active) next = 'drag'
+      const hint = cursorHint.active ? cursorHint : null
+      if (swapDrag.active || hint?.dragging) next = 'drag'
       else if (swapPhase === 'loading') next = 'busy'
-      else if (canSwap() && nearPolaroid(pointer.x, pointer.y)) next = 'polaroid'
+      else if (
+        hint?.near ||
+        (canSwap() && nearPolaroid(pointer.x, pointer.y))
+      )
+        next = 'polaroid'
       else if (
         hovered?.closest(INTERACTIVE) ||
         document.body.style.cursor === 'pointer'
@@ -150,9 +156,15 @@ function Cursor() {
       }
 
       if (next === 'drag') {
-        const { dream, direction, progress } = dragPreview()
+        const preview = dragPreview()
+        const dream = hint?.dragging ? hint.dream : preview.dream
+        const progress = hint?.dragging ? hint.progress : preview.progress
         // Dragging left brings the next one in from the right.
-        const side = direction === 1 ? 'right' : 'left'
+        const side = hint?.dragging
+          ? hint.side
+          : preview.direction === 1
+            ? 'right'
+            : 'left'
         const key = `${dream?.id}-${side}`
         if (key !== previewKey) {
           previewKey = key
