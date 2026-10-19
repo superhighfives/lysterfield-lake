@@ -50,7 +50,7 @@ function DreamGlow({
    *  which the screen shows whichever is in front — whole frames, not a
    *  panel of `texture`. */
   dreamTextures: VideoTexture[] | null
-  /** 0-1: how present the avatar and lyrics are (main.tsx's fadeRef), so
+  /** 0-1: how present the avatar is (main.tsx's fadeRef), so
    *  the spill fades as the polaroid's dragged, and is gone through a
    *  swap, with them. Followed directly, not through the slow presence
    *  ease below. */

@@ -57,13 +57,10 @@ type GLTFResult = GLTF & {
 
 const FRAME_LIGHT = '#ffffff'
 const FRAME_DARK = '#2b2826'
-const FRAME_DARK_ROUGHNESS = 0.75
-// The player's polaroid in dark mode: still a sheen as it tilts, but a
-// broad, soft one. At the glossy paper's own roughness the spotlight
-// focused into a hard white streak across the charcoal frame, even dimmed;
-// rougher spreads it, and the dimmer dark-mode light (scene.tsx) keeps the
-// spread from washing the frame grey.
-const PLAYER_DARK_ROUGHNESS = 0.5
+// Matte, like paper: every frame, and the sheen layer over the photo, in
+// both schemes. The model's own glossy finish (roughness 0.5) caught the
+// spotlight as a hard, bright band across the polaroid as it moved.
+const PAPER_ROUGHNESS = 0.95
 
 // Carousel cards draw entirely in three.js's transparent pass (opaque
 // objects all draw first, in a pass of their own), sorted back to front
@@ -80,7 +77,6 @@ function layeredCopy(material: MeshStandardMaterial) {
     // to a muted, slightly olive grey — the carousel's lit frames should
     // read as white (see the choose-screen light levels in scene.tsx).
     copy.toneMapped = false
-    copy.userData.roughness = material.userData.roughness ?? material.roughness
     layeredCopies.set(material, copy)
   }
 
@@ -194,6 +190,8 @@ const Polaroid = forwardRef<
   }, [layered, nodes, materials])
 
   materials['Material.001'].transparent = true
+  materials['Material.001'].roughness = PAPER_ROUGHNESS
+  if (playerOverlay) playerOverlay.roughness = PAPER_ROUGHNESS
 
   // Charcoal frames in dark mode. The frame materials are a white paper
   // texture times `color`, so tinting keeps the paper grain. useGLTF
@@ -207,17 +205,11 @@ const Polaroid = forwardRef<
       materials.initialShadingGroup,
     ]) {
       material.color.set(dark ? FRAME_DARK : FRAME_LIGHT)
-      material.userData.roughness ??= material.roughness
-      material.roughness = dark
-        ? PLAYER_DARK_ROUGHNESS
-        : material.userData.roughness
+      material.roughness = PAPER_ROUGHNESS
       const copy = layeredCopies.get(material)
       if (copy) {
         copy.color.set(dark ? FRAME_DARK : FRAME_LIGHT)
-        // Matte in dark mode: the glossy paper's specular highlight, from
-        // a light right by the camera, read as a bright white smear on the
-        // charcoal cards under the pointer.
-        copy.roughness = dark ? FRAME_DARK_ROUGHNESS : copy.userData.roughness
+        copy.roughness = PAPER_ROUGHNESS
       }
     }
   }, [dark, materials, layered])

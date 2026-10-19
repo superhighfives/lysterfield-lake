@@ -56,41 +56,7 @@ const land = (p: number) => {
   )
 }
 
-// The `jump` swap's choreography, shared with views/main.tsx's card
-// behind: where that card peeks out (world units, relative to the
-// polaroid: across, down, back, turned), how far back the polaroid goes
-// to trade places with it, and how far apart sideways the two swing as
-// they pass — clear of each other (a card is ~1.28 wide), so they never
-// cut through one another — and when, through the swap, they trade depth.
-export const PEEK = { x: 0.2, y: -0.03, z: 0.14, rz: 0.07 }
-export const BEHIND_Z = 0.18
-export const PASS_WIDE = 0.85
-const PASS_BACK = 0.5
-export const PASS_DEPTH: [number, number] = [0.35, 0.65]
-const smooth = (a: number, b: number, t: number) => {
-  const x = Math.min(1, Math.max(0, (t - a) / (b - a)))
-  return x * x * (3 - 2 * x)
-}
-
-export const passDepth = (p: number) => smooth(PASS_DEPTH[0], PASS_DEPTH[1], p)
-
 export const SWAP_ANIMATIONS: Record<SwapStyle, SwapAnimation> = {
-  // The card peeking out from behind is the next dream, already playing.
-  // Let go and the two swing apart and trade places: it comes to the
-  // front, this one goes behind it (the card behind is views/main.tsx's).
-  jump: {
-    outDuration: 0.6,
-    inDuration: 0.4,
-    exit: (p, dir) => ({
-      ...rest,
-      x: -dir * Math.sin(Math.PI * p) * PASS_BACK,
-      z: -BEHIND_Z * passDepth(p),
-      rz: -dir * Math.sin(Math.PI * p) * 0.06,
-    }),
-    enter: () => rest,
-    inPlace: true,
-  },
-
   // Springs back to where it was, its photo fading to a blank print, and
   // the next dream develops into the same frame.
   snap: {

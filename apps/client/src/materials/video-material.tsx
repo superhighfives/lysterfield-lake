@@ -54,7 +54,7 @@ const uniforms = {
   uBackgroundMix: 0,
   // 1 = fully shown. Below 1 the mesh dissolves through an ordered dither
   // (the same 8x8 matrix as the sketch) and its UVs ripple, rather than
-  // fading flat — used to clear the avatar and lyrics during a dream swap.
+  // fading flat — used to clear the avatar during a dream swap.
   uFade: 1,
   // The mesh's motion, in panel UV per frame-ish (see main.tsx). Smears
   // the image back along it and splits its colour channels, so a moving

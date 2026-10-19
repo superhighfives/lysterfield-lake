@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { ThreeEvent, useThree } from '@react-three/fiber'
 import { Text, useCursor, useTexture } from '@react-three/drei'
 import { a, animated, config, useSpring } from '@react-spring/three'
-import { Euler } from 'three'
+import { Euler, Texture } from 'three'
 import Polaroid from '../models/polaroid'
 import { PolaroidMaterial } from '../materials/polaroid-material'
 import { useStore } from '../store'
@@ -29,6 +29,7 @@ function DreamCard({
   showText = true,
   interactive = true,
   saturation = 1,
+  photo,
 }: {
   dream: Dream
   onSelect: (event: ThreeEvent<MouseEvent>) => void
@@ -41,6 +42,9 @@ function DreamCard({
   interactive?: boolean
   /** 1 = full colour, 0 = grayscale; eases between. */
   saturation?: number
+  /** Shown in place of the dream's still (its loop, on the stack's top
+   *  card). */
+  photo?: Texture
 }) {
   const dark = useStore((state) => state.colorScheme === 'dark')
   const textureImage = useTexture(`/assets/${dream.id}/hero.jpg`)
@@ -107,7 +111,7 @@ function DreamCard({
           //@ts-ignore: https://github.com/pmndrs/react-spring/issues/1515 */}
           <PolaroidShaderWrapper
             key={PolaroidMaterial.key}
-            uTexture={textureImage}
+            uTexture={photo ?? textureImage}
             uSize={size}
             uAspect={aspect}
             uHover={hoverAmount}

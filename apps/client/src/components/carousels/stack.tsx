@@ -7,7 +7,7 @@ import {
 } from 'react'
 import { ThreeEvent, useFrame, useThree } from '@react-three/fiber'
 import { useTexture } from '@react-three/drei'
-import { CanvasTexture, Group } from 'three'
+import { CanvasTexture, Group, Texture, VideoTexture } from 'three'
 import DreamCard from '../dream-card'
 import { cursorHint } from '../../utils/cursor-hint'
 import { useStore } from '../../store'
@@ -28,7 +28,10 @@ import { CarouselProps, easeTo, seeded } from './shared'
 //
 // The pile lies on a surface rather than floating: tipped back a little
 // (TABLE_TILT), with one broad soft shadow beneath it all (PILE_SHADOW,
-// offset away from the light). Hovering (or dragging) the top card brings
+// offset away from the light). The top card plays its dream's loop
+// (public/assets/<id>/loop.mov — one video, moved to each new top card;
+// the cards beneath keep their stills, in grey anyway). Hovering (or
+// dragging) the top card brings
 // its dream up big behind it all, through the same cinema screen as the
 // player's (materials/dream-screen.ts), crossfading to each new top
 // card's — fading in and out at SCREEN_EASE per frame.
@@ -96,19 +99,23 @@ function StackScreen({
   top,
   presence,
   active,
+  loop,
 }: {
   items: Dream[]
   top: number
   presence: MutableRefObject<number>
   /** Whether the top card's hovered or being dragged. */
   active: MutableRefObject<boolean>
+  /** The top card's loop, once it's playing; its still until then. */
+  loop?: Texture
 }) {
   const scheme = useStore((state) => state.colorScheme)
   // One hero at a time, by its own URL: the same cache entry choose.tsx
   // preloads, so it's a synchronous hit. An array of them is a different
   // entry, which loaded mid-render and updated Loading's progress from
   // inside this component's render.
-  const texture = useTexture(`/assets/${items[top].id}/hero.jpg`)
+  const still = useTexture(`/assets/${items[top].id}/hero.jpg`)
+  const texture = loop ?? still
   const screens = useMemo(
     () => [createDreamScreen(null, { order: 0 }), createDreamScreen(null, { order: 1 })],
     []
@@ -164,6 +171,55 @@ function StackScreen({
   )
 }
 
+// One video for the top card's loop, moved to each new top card. Ready
+// (`loopFor` names the dream) once it's actually playing, so the still
+// shows until there's a frame to replace it with.
+function useTopLoop(id: string | undefined, colorSpace: string) {
+  const loop = useMemo(() => {
+    const el = document.createElement('video')
+    el.muted = true
+    el.loop = true
+    el.playsInline = true
+    el.crossOrigin = 'anonymous'
+    el.preload = 'auto'
+    el.setAttribute('playsinline', '')
+    return { el, texture: new VideoTexture(el) }
+  }, [])
+  loop.texture.colorSpace = colorSpace
+  const [loopFor, setLoopFor] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!id) return
+    const { el } = loop
+    setLoopFor(null)
+    el.src = `/assets/${id}/loop.mov`
+    const ready = () => setLoopFor(id)
+    el.addEventListener('playing', ready, { once: true })
+    el.play().catch(() => {})
+    return () => el.removeEventListener('playing', ready)
+  }, [loop, id])
+
+  useEffect(
+    () => () => {
+      loop.el.pause()
+      loop.el.removeAttribute('src')
+      loop.el.load()
+      loop.texture.dispose()
+    },
+    [loop]
+  )
+
+  // Paused under the player, where the stack's out of sight.
+  useFrame(() => {
+    const hidden = !!useStore.getState().dream
+    if (hidden && !loop.el.paused) loop.el.pause()
+    else if (!hidden && loop.el.paused && loop.el.getAttribute('src'))
+      loop.el.play().catch(() => {})
+  })
+
+  return loopFor && loopFor === id ? loop.texture : undefined
+}
+
 function Stack({ items, onSelect, presence }: CarouselProps) {
   // Bottom to top: the last is the card on top.
   const [order, setOrder] = useState(() => items.map((_, i) => i))
@@ -192,6 +248,8 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
   )
 
   const top = order[order.length - 1]
+  const topStill = useTexture(`/assets/${items[top].id}/hero.jpg`)
+  const loop = useTopLoop(items[top]?.id, topStill.colorSpace)
   const [topHovered, setTopHovered] = useState(false)
   const screenActive = useRef(false)
   // A new card on top starts unhovered.
@@ -282,6 +340,7 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
         top={top}
         presence={presence}
         active={screenActive}
+        loop={loop}
       />
       <mesh position={PILE_SHADOW.offset}>
         <planeGeometry args={PILE_SHADOW.size} />
@@ -310,6 +369,7 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
             dream={dream}
             tilt={false}
             interactive={i === top}
+            photo={i === top ? loop : undefined}
             // Grayscale until it reaches the top of the pile.
             saturation={i === top ? 1 : 0}
             onHoverChange={(hover) => i === top && setTopHovered(hover)}
