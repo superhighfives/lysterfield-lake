@@ -228,6 +228,12 @@ export function stepCrossfade(delta: number) {
   if (dreamVideo.mix === target && behind.id && !behind.loading) empty(behind)
 }
 
+/** Jumps the crossfade straight to the front slot — while the polaroid's
+ *  dream is burnt away for a swap, there's nothing to fade between. */
+export function snapCrossfade() {
+  dreamVideo.mix = dreamVideo.front
+}
+
 /** Keeps the dream videos on the main video's clock: mirrors play, pause,
  *  seeks and rate, and nudges or seeks back any drift. Returns a cleanup. */
 export function followMain(main: HTMLVideoElement) {

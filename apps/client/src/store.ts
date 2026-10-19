@@ -16,12 +16,12 @@ export type Resume = { dreamId: string; time: number }
 export type SwapPhase = 'idle' | 'out' | 'loading' | 'in'
 /** 1 = next dream, -1 = previous. */
 export type SwapDirection = 1 | -1
-export const SWAP_STYLES = ['snap', 'drop', 'slide', 'flip'] as const
+export const SWAP_STYLES = ['balatro', 'snap', 'drop', 'slide', 'flip'] as const
 export type SwapStyle = (typeof SWAP_STYLES)[number]
 
 function initialSwapStyle(): SwapStyle {
   const param = new URLSearchParams(location.search).get('swap')
-  return SWAP_STYLES.find((style) => style === param) ?? 'snap'
+  return SWAP_STYLES.find((style) => style === param) ?? 'balatro'
 }
 
 export interface AppState {
@@ -123,7 +123,9 @@ export const useStore = create<AppState>()((set) => ({
   swapDirection: 1,
   swapStyle: initialSwapStyle(),
   debug: new URLSearchParams(location.search).has('debug'),
-  wakeEnabled: true,
+  // Off by default: it costs three extra passes every frame the pointer
+  // moves. Shift+D's debug panel turns it on.
+  wakeEnabled: false,
   // 1.5 rather than native: at 2x on a big display the canvas is ~12M
   // pixels, rendered twice a frame while the wake runs (debug mode's
   // numbers: ~31ms a frame at 2x, ~22ms at 1.5x, ~17.5ms at 1x).

@@ -56,7 +56,36 @@ const land = (p: number) => {
   )
 }
 
+// Overshoots its target a little and settles back, for `enter`'s p
+// counting down: 0 at p = 1, past 1 briefly, 1 at p = 0.
+const BACK = 1.70158
+const backOut = (t: number) => 1 + (BACK + 1) * (t - 1) ** 3 + BACK * (t - 1) ** 2
+
 export const SWAP_ANIMATIONS: Record<SwapStyle, SwapAnimation> = {
+  // Like a card in Balatro: it springs back and lifts toward you as its
+  // dream burns away to the background (uDreamHide, views/main.tsx), waits
+  // there while the next loads, then spins a full turn — overshooting a
+  // little and wobbling as it settles — as the next dream burns in.
+  balatro: {
+    outDuration: 0.35,
+    inDuration: 0.8,
+    exit: (p, dir) => {
+      const e = easeOutCubic(p)
+      return { ...rest, z: 0.2 * e, rx: -0.1 * e, rz: -dir * 0.05 * e }
+    },
+    enter: (p, dir) => {
+      const t = 1 - p
+      return {
+        ...rest,
+        z: 0.2 * p,
+        rx: -0.1 * p,
+        ry: dir * Math.PI * 2 * backOut(t),
+        rz: -dir * 0.05 * p + dir * Math.sin(t * Math.PI * 3) * (1 - t) * 0.06,
+      }
+    },
+    inPlace: true,
+  },
+
   // Springs back to where it was, its photo fading to a blank print, and
   // the next dream develops into the same frame.
   snap: {

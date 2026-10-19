@@ -24,6 +24,7 @@ import {
   dreamElements,
   dreamVideo,
   isSplit,
+  snapCrossfade,
   stepCrossfade,
 } from '../utils/dream-video'
 import {
@@ -334,7 +335,10 @@ function Main(
     // Split, a swap only changes the dream video: the song plays on, and
     // the new dream crossfades in rather than developing from blank.
     const splitNow = isSplit(useStore.getState().dream)
-    stepCrossfade(delta)
+    // Mid-swap the dream's burnt away (uDreamHide below), so the next one
+    // can just be there when it burns back in.
+    if (splitNow && swapPhase !== 'idle') snapCrossfade()
+    else stepCrossfade(delta)
     for (const material of [polaroidMaterial.current, lyricsMaterial.current])
       if (material) material.uDreamMix = dreamVideo.mix
     if (swapPhase !== swapPhaseRef.current) {
@@ -469,6 +473,16 @@ function Main(
             : 1
       rippleUniform.current.z = rippleRef.current
       polaroidMaterial.current.uRipple = rippleUniform.current
+      // Split, the dream burns away to the background as the swap goes
+      // out, stays gone while the next loads, and burns back in.
+      const progress = swapProgressRef.current
+      polaroidMaterial.current.uDreamHide = !splitNow
+        ? 0
+        : swapPhase === 'loading'
+          ? 1
+          : swapPhase === 'out' || swapPhase === 'in'
+            ? progress * progress * (3 - 2 * progress)
+            : 0
     }
 
     // The music's pulse. (The cursor's liquid wake is drawn over the whole
@@ -495,8 +509,16 @@ function Main(
         0,
         1
       )
-    fadeRef.current = MathUtils.lerp(fadeRef.current, fadeTarget, FADE_EASE)
+    fadeRef.current = MathUtils.lerp(
+      fadeRef.current,
+      fadeTarget,
+      swapPhase === 'out' ? FADE_EASE * 2 : FADE_EASE
+    )
     if (fadeRef.current > 0.999) fadeRef.current = 1
+    // Gone, not nearly: a last trace of the dissolve read as a ghost of
+    // the avatar over the polaroid while the next dream loaded.
+    if (swapPhase === 'loading') fadeRef.current = 0
+    if (avatarFollow.current) avatarFollow.current.visible = fadeRef.current > 0.01
     for (const material of [avatarMaterial.current, lyricsMaterial.current]) {
       if (material) material.uFade = fadeRef.current
     }
