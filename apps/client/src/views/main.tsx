@@ -112,14 +112,13 @@ const AVATAR_FOLLOW_TILT = 0.15
 // The polaroid swells this much (scale) on each beat.
 const PULSE_SCALE = 0.012
 // The avatar dissolves (through the same stipple as a drag) as the pointer
-// leaves the polaroid: whole over it, starting to go at its edge — the
-// frame reaches AVATAR_FRAME (a share of the photo's width) past the photo
-// — and gone AVATAR_GONE further out, eased by AVATAR_EASE per frame:
-// quick, so it moves with the pointer. As it fades it warps and drifts
-// away from the pointer (the shader, uAvatar). Not on touch, where the
-// pointer's the tilt.
-const AVATAR_FRAME = 0.08
-const AVATAR_GONE = 0.25
+// moves away from the middle of the screen: whole within AVATAR_NEAR of it
+// (pointer units, 1 = the screen's edge), gone by AVATAR_FAR, eased by
+// AVATAR_EASE per frame — quick, so it moves with the pointer. As it
+// fades it warps and drifts away from the pointer (the shader, uAvatar).
+// Not on touch, where the pointer's the tilt.
+const AVATAR_NEAR = 0.3
+const AVATAR_FAR = 0.95
 const AVATAR_EASE = 0.3
 // The blank print's water (utils/water-sim.ts): pointer speed (CSS px per
 // frame) for a full-strength stroke.
@@ -528,29 +527,17 @@ function Main(
     // Gone, not nearly: a last trace of the dissolve read as a ghost of
     // the avatar over the polaroid while the next dream loaded.
     if (swapPhase === 'loading') fadeRef.current = 0
-    // And as the pointer leaves the polaroid (its photo's bounds on screen,
-    // from last frame — see below).
-    let pointerFade = 1
-    if (!isMobile && !isTouch && polaroidRect.visible) {
-      const px = ((state.pointer.x + 1) / 2) * state.size.width
-      const py = ((1 - state.pointer.y) / 2) * state.size.height
-      const width = polaroidRect.right - polaroidRect.left
-      const outside = Math.hypot(
-        Math.max(polaroidRect.left - px, 0, px - polaroidRect.right),
-        Math.max(polaroidRect.top - py, 0, py - polaroidRect.bottom)
-      )
-      pointerFade =
-        1 -
-        MathUtils.smoothstep(
-          outside,
-          width * AVATAR_FRAME,
-          width * (AVATAR_FRAME + AVATAR_GONE)
-        )
-    }
-
+    // And as the pointer leaves the middle of the screen.
     avatarPointerFade.current = MathUtils.lerp(
       avatarPointerFade.current,
-      pointerFade,
+      isMobile || isTouch
+        ? 1
+        : 1 -
+            MathUtils.smoothstep(
+              Math.hypot(pointerX - 1, pointerY - 1),
+              AVATAR_NEAR,
+              AVATAR_FAR
+            ),
       AVATAR_EASE
     )
     const avatarFade = fadeRef.current * avatarPointerFade.current

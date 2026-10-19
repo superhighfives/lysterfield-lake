@@ -22,13 +22,17 @@ import {
 // Two half-float maps, traded each frame: red is the surface now, green
 // the surface a frame ago (the wave equation needs both).
 
-// The sheet's resolution (texels a side), how much of each wave survives a
-// step (lower settles sooner), and a stroke's radius (photo UV) and
-// strength per unit of pointer speed.
+// The sheet's resolution (texels a side), how fast waves travel (the wave
+// equation's c², per step: lower is slower and smoother; stable below
+// 0.5), how much of each wave survives a step (lower settles sooner), and
+// a stroke's radius (photo UV) and strength per unit of pointer speed —
+// broad and gentle, so a stroke leaves a long, soft wake rather than a
+// sharp groove.
 const SIZE = 192
-const DAMPING = 0.985
-const RADIUS = 0.02
-const PUSH = 0.2
+const WAVE_SPEED = 0.12
+const DAMPING = 0.993
+const RADIUS = 0.07
+const PUSH = 0.05
 
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
@@ -52,7 +56,7 @@ const stepShader = /* glsl */ `
       texture2D(uPrevious, vUv - vec2(uTexel.x, 0.0)).r +
       texture2D(uPrevious, vUv + vec2(0.0, uTexel.y)).r +
       texture2D(uPrevious, vUv - vec2(0.0, uTexel.y)).r;
-    float next = (around * 0.5 - now.g) * ${DAMPING.toFixed(3)};
+    float next = (2.0 * now.r - now.g + ${WAVE_SPEED.toFixed(2)} * (around - 4.0 * now.r)) * ${DAMPING.toFixed(3)};
 
     // The pointer pressing into the surface along this frame's path.
     if (uStrength > 0.0) {
@@ -60,7 +64,7 @@ const stepShader = /* glsl */ `
       vec2 ab = uSegment.zw - a;
       float t = clamp(dot(vUv - a, ab) / max(dot(ab, ab), 1e-8), 0.0, 1.0);
       float d = length(vUv - (a + ab * t)) / ${RADIUS.toFixed(3)};
-      next -= uStrength * (1.0 - smoothstep(0.0, 1.0, d));
+      next -= uStrength * exp(-d * d * 3.0);
     }
 
     gl_FragColor = vec4(next, now.r, 0.0, 1.0);

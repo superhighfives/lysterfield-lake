@@ -446,10 +446,11 @@ export const VideoMaterial = shaderMaterial(
         if (blank > 0.0) {
           // The water over the print: its slope bends the print beneath it
           // (refraction) and catches a light from above-left.
+          // Measured across a few texels, for a smooth surface.
           vec2 slope = vec2(
-            texture2D(uWater, st + vec2(WATER_TEXEL, 0.0)).r - texture2D(uWater, st - vec2(WATER_TEXEL, 0.0)).r,
-            texture2D(uWater, st + vec2(0.0, WATER_TEXEL)).r - texture2D(uWater, st - vec2(0.0, WATER_TEXEL)).r
-          );
+            texture2D(uWater, st + vec2(WATER_TEXEL * 3.0, 0.0)).r - texture2D(uWater, st - vec2(WATER_TEXEL * 3.0, 0.0)).r,
+            texture2D(uWater, st + vec2(0.0, WATER_TEXEL * 3.0)).r - texture2D(uWater, st - vec2(0.0, WATER_TEXEL * 3.0)).r
+          ) / 3.0;
           vec3 surface = normalize(vec3(-slope * 6.0, 1.0));
           float lit = dot(surface, normalize(vec3(-0.45, 0.55, 0.7))) - 0.7;
           float glint = pow(max(dot(reflect(vec3(0.0, 0.0, -1.0), surface), normalize(vec3(-0.3, 0.4, 0.86))), 0.0), 60.0);
