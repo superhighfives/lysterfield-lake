@@ -1,6 +1,6 @@
 import { shaderMaterial } from '@react-three/drei'
 import { extend, ThreeElement } from '@react-three/fiber'
-import { ShaderMaterial, Texture, Vector2, Vector3 } from 'three'
+import { ShaderMaterial, Texture, Vector2, Vector3, Vector4 } from 'three'
 
 const uniforms = {
   uOpacity: 0,
@@ -59,9 +59,9 @@ const uniforms = {
   // The polaroid developing after it lands (see main.tsx): 0 = a blank,
   // milky print, 1 = fully developed.
   uDevelop: 1,
-  // The pointer over the blank print, rippling its emulsion: xy = where on
-  // the photo (UV), z = strength (from its speed).
-  uEmulsionPointer: new Vector3(0.5, 0.5, 0),
+  // Ripples in the blank print, dropped where the pointer moves over it:
+  // xy = where on the photo (UV), z = age (s), w = strength (0 = none).
+  uEmulsionDrops: Array.from({ length: 8 }, () => new Vector4()),
   // A landing ripple through the photo: xy = origin in UV, z = seconds
   // since it started (negative = none).
   uRipple: new Vector3(0.5, 0.5, -1),
@@ -192,12 +192,16 @@ export const VideoMaterial = shaderMaterial(
     const float RIPPLE_AMOUNT = 0.02;
     const float RIPPLE_FREQUENCY = 18.0;
     const float RIPPLE_SPEED = 5.0;
+    // The avatar's own warp at fully faded (UV), and how far it drifts from
+    // the pointer (UV per unit of pointer offset from the middle).
+    const float AVATAR_WARP = 0.05;
+    const float AVATAR_DRIFT = 0.08;
     // Motion smear: taps along the velocity, and how far the red and blue
     // channels split either side of it.
     const int SMEAR_TAPS = 10;
     const float SPLIT_AMOUNT = 0.15;
     uniform float uDevelop;
-    uniform vec3 uEmulsionPointer;
+    uniform vec4 uEmulsionDrops[8];
     uniform vec3 uRipple;
     uniform float uPulse;
     // Landing ripple: ring speed (UV/s), wavelength, peak UV displacement,
@@ -287,11 +291,15 @@ export const VideoMaterial = shaderMaterial(
       // Rippling UVs while dissolving (uFade < 1); untouched otherwise.
       // The music's pulse adds a breath of the same ripple.
       float dissolve = 1.0 - uFade;
-      float rippleAmount = dissolve * RIPPLE_AMOUNT + uPulse * RIPPLE_AMOUNT * 0.15;
+      // The avatar warps harder as it fades (it follows the pointer, see
+      // main.tsx), and drifts away from the pointer as it goes.
+      float warpAmount = uAvatar == 1.0 ? AVATAR_WARP : RIPPLE_AMOUNT;
+      float rippleAmount = dissolve * warpAmount + uPulse * RIPPLE_AMOUNT * 0.15;
       vec2 st = vUv + rippleAmount * vec2(
         sin(vUv.y * RIPPLE_FREQUENCY + uTime * RIPPLE_SPEED),
         cos(vUv.x * RIPPLE_FREQUENCY + uTime * RIPPLE_SPEED * 0.8)
       );
+      if (uAvatar == 1.0) st += (uPointerRelative - 1.0) * dissolve * AVATAR_DRIFT;
 
       // Landing ripple: one ring spreading out from where it landed,
       // pushing the image outward along it, dying away as it goes.
@@ -433,12 +441,23 @@ export const VideoMaterial = shaderMaterial(
         vec3 milky = mix(vec3(0.80, 0.82, 0.79), vec3(0.20, 0.21, 0.20), uDark);
         float blank = 1.0 - smoothstep(0.0, 0.3, uDevelop);
         if (blank > 0.0) {
-          // Rings spreading from the pointer as it moves over the print.
-          vec2 fromPointer = st - uEmulsionPointer.xy;
-          float reach = length(fromPointer);
-          float ring = sin(reach * 42.0 - uTime * 6.0) * exp(-reach * 3.5) * uEmulsionPointer.z;
-          vec2 drift = st * 2.6 + vec2(uTime * 0.05, -uTime * 0.035)
-            + normalize(fromPointer + 1e-5) * ring * 0.12;
+          // Ripples dropped along the pointer's path: each a ring spreading
+          // out from where it fell, softening and fading as it goes.
+          float ring = 0.0;
+          vec2 push = vec2(0.0);
+          for (int i = 0; i < 8; i++) {
+            vec4 drop = uEmulsionDrops[i];
+            if (drop.w <= 0.0) continue;
+            vec2 away = st - drop.xy;
+            float front = length(away) - drop.z * 0.3;
+            float width = 0.03 + drop.z * 0.03;
+            float band = exp(-(front * front) / (width * width));
+            float fade = max(0.0, 1.0 - drop.z / 2.0);
+            float wave = sin(front * 70.0) * band * fade * fade * drop.w;
+            ring += wave;
+            push += normalize(away + 1e-5) * wave;
+          }
+          vec2 drift = st * 2.6 + vec2(uTime * 0.05, -uTime * 0.035) + push * 0.08;
           float warp = emulsionNoise(drift * 1.7 + uTime * 0.08);
           float blotch = emulsionNoise(drift + warp * 1.6);
           float ghost = dot(panel(3.0, vec2(localX, st.y - offsetY)).rgb, vec3(0.299, 0.587, 0.114));

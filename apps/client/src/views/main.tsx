@@ -11,6 +11,7 @@ import {
   Group,
   Mesh,
   Vector3,
+  Vector4,
   Box3,
 } from 'three'
 import { suspend } from 'suspend-react'
@@ -113,15 +114,21 @@ const PULSE_SCALE = 0.012
 // The avatar dissolves (through the same stipple as a drag) as the pointer
 // moves away from the middle of the screen: whole within AVATAR_NEAR of it
 // (pointer units, 1 = the screen's edge), gone by AVATAR_FAR, eased by
-// AVATAR_EASE per frame. Not on touch, where the pointer's the tilt.
-const AVATAR_NEAR = 0.45
-const AVATAR_FAR = 1.1
-const AVATAR_EASE = 0.06
-// The blank print's ripples under the pointer: pointer speed (CSS px per
-// frame) for full strength, and how quickly strength follows (it lingers,
-// so rings carry on a moment after the pointer stops).
+// AVATAR_EASE per frame — quick, so it moves with the pointer. As it
+// fades it warps and drifts away from the pointer (the shader, uAvatar).
+// Not on touch, where the pointer's the tilt.
+const AVATAR_NEAR = 0.3
+const AVATAR_FAR = 0.95
+const AVATAR_EASE = 0.3
+// The blank print's ripples: the pointer drops one every EMULSION_SPACING
+// (photo UV) it moves over the print, each spreading out from where it
+// fell and fading over EMULSION_SECONDS, at most EMULSION_DROPS at once
+// (the oldest makes way). Faster moves drop stronger ones, full at
+// EMULSION_FULL_SPEED (CSS px per frame).
+const EMULSION_DROPS = 8
+const EMULSION_SPACING = 0.06
+const EMULSION_SECONDS = 2
 const EMULSION_FULL_SPEED = 25
-const EMULSION_EASE = 0.06
 
 function Main(
   props: ThreeElements['group'] & {
@@ -234,11 +241,15 @@ function Main(
   const developRef = useRef(1)
   // Whether the dream on show has started playing yet (it shows a blank,
   // living print until then, as a swap does), the avatar's pointer fade,
-  // and the blank print's ripple: the pointer on the photo (UV) and its
-  // strength — the polaroid's own Vector3, like rippleUniform below.
+  // and the blank print's ripples: each drop's place on the photo (UV),
+  // birth and strength, and the uniform they're written to — the
+  // polaroid's own array, like rippleUniform below.
   const startedRef = useRef(false)
   const avatarPointerFade = useRef(1)
-  const emulsionPointer = useRef(new Vector3(0.5, 0.5, 0))
+  const emulsionDrops = useRef<{ u: number; v: number; born: number; strength: number }[]>([])
+  const emulsionUniform = useRef(
+    Array.from({ length: EMULSION_DROPS }, () => new Vector4())
+  )
   const lastPointerPx = useRef(new Vector2(-1, -1))
   const avatarFollow = useRef<Group>(null)
   const avatarOffsetRef = useRef(0)
@@ -580,14 +591,25 @@ function Main(
           ? 0
           : Math.hypot(px - lastPointerPx.current.x, py - lastPointerPx.current.y)
       lastPointerPx.current.set(px, py)
-      const ripple = emulsionPointer.current
-      if (over) ripple.setX(u).setY(v)
-      ripple.z = MathUtils.lerp(
-        ripple.z,
-        over ? Math.min(speed / EMULSION_FULL_SPEED, 1) : 0,
-        EMULSION_EASE
-      )
-      polaroidMaterial.current.uEmulsionPointer = ripple
+      const now = performance.now() / 1000
+      const drops = emulsionDrops.current
+      const last = drops[drops.length - 1]
+      if (
+        over &&
+        speed > 0.5 &&
+        (!last || Math.hypot(u - last.u, v - last.v) >= EMULSION_SPACING)
+      ) {
+        drops.push({ u, v, born: now, strength: Math.min(speed / EMULSION_FULL_SPEED, 1) })
+        if (drops.length > EMULSION_DROPS) drops.shift()
+      }
+
+      emulsionUniform.current.forEach((uniform, i) => {
+        const drop = drops[i]
+        const age = drop ? now - drop.born : Infinity
+        if (!drop || age > EMULSION_SECONDS) uniform.set(0, 0, 0, 0)
+        else uniform.set(drop.u, drop.v, age, drop.strength)
+      })
+      polaroidMaterial.current.uEmulsionDrops = emulsionUniform.current
     }
 
     if (!isMobile && !isTouch) {
