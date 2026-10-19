@@ -15,7 +15,7 @@ const PANEL_TOTAL = 5
 const uniforms = {
   uTexture: new Texture(),
   // 0 draws the background (the back of the box); 1 draws the person, cut out by the matte and pushed
-  // forward by the depth panel.
+  // forward by the depth panel; 2 draws the box's walls, the background's edges stretched back around them.
   uLayer: 0,
   // Depth relief, as video-material.tsx's avatar: world units at full depth, and the panel-UV radii the
   // depth is blurred over and the matte's edge rolls off across.
@@ -40,6 +40,8 @@ export const PolaroidLoopMaterial = shaderMaterial(
   uniforms,
   /* glsl */ `
     varying vec2 vUv;
+    varying float vShade;
+    attribute float shade;
     uniform float uLayer;
     uniform float uDepthStrength;
     uniform float uShapeRadius;
@@ -58,6 +60,7 @@ export const PolaroidLoopMaterial = shaderMaterial(
 
     void main() {
       vUv = uv;
+      vShade = uLayer == 2.0 ? shade : 1.0;
       float relief = 0.0;
       if (uLayer == 1.0 && uDepthStrength != 0.0) {
         // As video-material.tsx: the coarse depth blurred into rounded forms, rolled off at the matte's edge.
@@ -70,16 +73,34 @@ export const PolaroidLoopMaterial = shaderMaterial(
   `,
   /* glsl */ `
     varying vec2 vUv;
+    varying float vShade;
     uniform float uLayer;
     uniform float uOutline;
     ${shared}
 
     void main() {
+      if (uLayer == 2.0) {
+        // A wall carries the background's edge where it meets the back, stretched toward the window: samples
+        // just inside that edge, averaged, so it reads as the picture wrapping round. Darker toward the back,
+        // as the inside of a box is.
+        // Averaged along the edge too, so each pixel of it doesn't become its own hard streak.
+        vec2 inward = (0.5 - vUv) * 0.06;
+        vec3 color = vec3(0.0);
+        for (int i = 0; i < 4; i++) {
+          for (int j = -2; j <= 2; j++) {
+            for (int k = -2; k <= 2; k++) {
+              color += panel(${POLAROID_PANEL.background.toFixed(1)}, vUv + inward * float(i) / 3.0 + vec2(float(j), float(k)) * 0.008).rgb;
+            }
+          }
+        }
+        gl_FragColor = vec4(color / 100.0 * vShade, 1.0);
+        return;
+      }
       if (uLayer == 0.0) {
-        // The back of the box: a little darker toward its edges, as the inside of a box is.
+        // The back of the box: darker toward its edges, meeting the walls at their own shade (WALL_SHADE.back).
         vec3 color = panel(${POLAROID_PANEL.background.toFixed(1)}, vUv).rgb;
         vec2 edge = smoothstep(vec2(0.0), vec2(0.18), vUv) * smoothstep(vec2(0.0), vec2(0.18), 1.0 - vUv);
-        gl_FragColor = vec4(color * mix(0.72, 1.0, edge.x * edge.y), 1.0);
+        gl_FragColor = vec4(color * mix(0.6, 1.0, edge.x * edge.y), 1.0);
         return;
       }
       vec3 portrait = panel(${POLAROID_PANEL.portrait.toFixed(1)}, vUv).rgb;

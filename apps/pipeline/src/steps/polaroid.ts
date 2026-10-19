@@ -12,6 +12,9 @@ const execFileAsync = promisify(execFile)
  */
 export const POLAROID_PANELS = ['2-portrait/upscaled', '3-background/frames', '4-matte/frames', '5-depth/frames', '6-outline/frames'] as const
 
+/** How strongly the outline inks over the portrait in the flattened loop: the 3D polaroid's default (admin-polaroid.tsx). */
+const OUTLINE_INK = 0.25
+
 /** 5 x 768 = 3840px wide: inside H.264's 4096px limit, so it decodes everywhere. */
 const PANEL_SIZE = 768
 
@@ -79,8 +82,11 @@ export async function polaroid(job: Job, opts: PolaroidOptions = {}): Promise<Po
 async function flatten(atlasPath: string, loopPath: string): Promise<void> {
   const panel = (i: number) => `crop=${PANEL_SIZE}:${PANEL_SIZE}:${i * PANEL_SIZE}:0`
   const filter = [
-    `[0]split=3[a][b][c]`,
-    `[a]${panel(0)}[portrait]`,
+    `[0]split=4[a][b][c][d]`,
+    `[a]${panel(0)},format=gbrp[raw]`,
+    `[d]${panel(4)},format=gbrp[outline]`,
+    // The outline inked over the portrait, as the 3D polaroid draws it by default (OUTLINE_INK).
+    `[raw][outline]blend=all_mode=multiply:all_opacity=${OUTLINE_INK}[portrait]`,
     `[b]${panel(1)}[background]`,
     `[c]${panel(2)},format=gray[matte]`,
     `[portrait][matte]alphamerge[cutout]`,

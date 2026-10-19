@@ -3,7 +3,7 @@ import { shaderMaterial, useGLTF } from '@react-three/drei'
 import { useDrag } from '@use-gesture/react'
 import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { AlwaysDepth, AlwaysStencilFunc, Box3, BufferGeometry, Color, DoubleSide, EqualStencilFunc, Float32BufferAttribute, Group, LinearSRGBColorSpace, MathUtils, Mesh, type MeshStandardMaterial, ReplaceStencilOp, Vector3, VideoTexture } from 'three'
+import { AlwaysDepth, AlwaysStencilFunc, Box3, BufferGeometry, DoubleSide, EqualStencilFunc, Float32BufferAttribute, Group, LinearSRGBColorSpace, MathUtils, Mesh, type MeshStandardMaterial, ReplaceStencilOp, Vector3, VideoTexture } from 'three'
 import ThemeToggle from '../components/theme-toggle.tsx'
 import { PolaroidLoopMaterial } from '../materials/polaroid-loop-material.tsx'
 import Polaroid, { polaroidBend } from '../models/polaroid.tsx'
@@ -47,8 +47,10 @@ const BOX_DEPTH = 1.6
 const PERSON_DEPTH = 0.6
 /** The camera's distance in the model's units (camera at z 6, card scaled by SCALE). */
 const CAMERA_DISTANCE = 6 / SCALE
-/** The walls' colour at the window and at the back, by theme. */
-const WALL = { light: ['#ece7df', '#9c968b'], dark: ['#2b2826', '#100f0e'] }
+/** How bright the walls are at the window and at the back. */
+const WALL_SHADE = { window: 0.95, back: 0.6 }
+/** The back and walls with the background panel turned off, by theme. */
+const PLAIN = { light: '#d9d4cc', dark: '#1c1a19' }
 
 const STENCIL = { stencilWrite: true, stencilRef: 1 }
 const IN_THE_BOX = { ...STENCIL, stencilFunc: EqualStencilFunc }
@@ -66,28 +68,35 @@ declare module '@react-three/fiber' {
   }
 }
 
-/** The box's four walls, from the window's edges back to the (larger) back, lighter at the window. */
-function useWalls(front: { x: number; y: number }, back: { x: number; y: number }, depth: number, colors: string[]) {
+/**
+ * The box's four walls, from the window's edges back to the (larger) back. Each vertex carries the UV of the
+ * back corner it lines up with, so a wall shows the background's edge stretched round it, and a shade that's
+ * lighter at the window than at the back.
+ */
+function useWalls(front: { x: number; y: number }, back: { x: number; y: number }, depth: number) {
   return useMemo(() => {
-    const [near, far] = colors.map((c) => new Color(c))
-    const f = [[-front.x, -front.y], [front.x, -front.y], [front.x, front.y], [-front.x, front.y]]
-    const b = [[-back.x, -back.y], [back.x, -back.y], [back.x, back.y], [-back.x, back.y]]
+    const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]]
+    const uvs = corners.map(([x, y]) => [(x + 1) / 2, (y + 1) / 2])
     const positions: number[] = []
-    const vertexColors: number[] = []
+    const uv: number[] = []
+    const shade: number[] = []
     for (let i = 0; i < 4; i++) {
       const j = (i + 1) % 4
-      const quad: [number[], number, Color][] = [[f[i], 0, near], [f[j], 0, near], [b[j], -depth, far], [f[i], 0, near], [b[j], -depth, far], [b[i], -depth, far]]
-      for (const [[x, y], z, color] of quad) {
-        positions.push(x, y, z)
-        vertexColors.push(color.r, color.g, color.b)
+      // Two triangles: front i, front j, back j; front i, back j, back i.
+      for (const [k, atBack] of [[i, false], [j, false], [j, true], [i, false], [j, true], [i, true]] as const) {
+        const [cx, cy] = corners[k]
+        positions.push(cx * (atBack ? back.x : front.x), cy * (atBack ? back.y : front.y), atBack ? -depth : 0)
+        uv.push(...uvs[k])
+        shade.push(atBack ? WALL_SHADE.back : WALL_SHADE.window)
       }
     }
 
     const geometry = new BufferGeometry()
     geometry.setAttribute('position', new Float32BufferAttribute(positions, 3))
-    geometry.setAttribute('color', new Float32BufferAttribute(vertexColors, 3))
+    geometry.setAttribute('uv', new Float32BufferAttribute(uv, 2))
+    geometry.setAttribute('shade', new Float32BufferAttribute(shade, 1))
     return geometry
-  }, [front.x, front.y, back.x, back.y, depth, colors])
+  }, [front.x, front.y, back.x, back.y, depth])
 }
 
 function LoopPolaroid({ texture, settings, drag }: { texture: VideoTexture; settings: Settings; drag: { current: { x: number; y: number; active: boolean } } }) {
@@ -101,7 +110,7 @@ function LoopPolaroid({ texture, settings, drag }: { texture: VideoTexture; sett
   const personDepth = BOX_DEPTH * PERSON_DEPTH
   const back = fill(BOX_DEPTH)
   const person = fill(personDepth)
-  const walls = useWalls({ x: photo.size.x / 2, y: photo.size.y / 2 }, back, BOX_DEPTH, dark ? WALL.dark : WALL.light)
+  const walls = useWalls({ x: photo.size.x / 2, y: photo.size.y / 2 }, back, BOX_DEPTH)
 
   useEffect(() => {
     // The window marks the stencil after the opaque card and before the box; the frame's overlay (its inner
@@ -136,14 +145,18 @@ function LoopPolaroid({ texture, settings, drag }: { texture: VideoTexture; sett
       <group position={[photo.center.x, photo.center.y, photo.front]}>
         {/* The walls, then the back of the box. */}
         <mesh geometry={walls} renderOrder={2}>
-          <meshBasicMaterial vertexColors side={DoubleSide} toneMapped={false} {...IN_THE_BOX} />
+          {settings.background ? (
+            <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={2} transparent={false} side={DoubleSide} {...IN_THE_BOX} />
+          ) : (
+            <meshBasicMaterial color={dark ? PLAIN.dark : PLAIN.light} side={DoubleSide} {...IN_THE_BOX} />
+          )}
         </mesh>
         <mesh position={[0, 0, -BOX_DEPTH]} renderOrder={2}>
           <planeGeometry args={[back.x * 2, back.y * 2]} />
           {settings.background ? (
             <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={0} transparent={false} {...IN_THE_BOX} />
           ) : (
-            <meshBasicMaterial color={dark ? WALL.dark[1] : WALL.light[0]} {...IN_THE_BOX} />
+            <meshBasicMaterial color={dark ? PLAIN.dark : PLAIN.light} {...IN_THE_BOX} />
           )}
         </mesh>
         {/* The person: finely divided, so the depth relief has vertices to move. */}
