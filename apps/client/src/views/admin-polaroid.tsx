@@ -2,7 +2,7 @@ import { Canvas, extend, type ThreeElement, useFrame } from '@react-three/fiber'
 import { shaderMaterial, useGLTF } from '@react-three/drei'
 import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { AlwaysDepth, AlwaysStencilFunc, Box3, DoubleSide, EqualStencilFunc, Group, LinearSRGBColorSpace, MathUtils, Mesh, type MeshStandardMaterial, ReplaceStencilOp, SphereGeometry, Vector2, Vector3, VideoTexture } from 'three'
+import { AlwaysDepth, AlwaysStencilFunc, Box3, BufferGeometry, DoubleSide, EqualStencilFunc, Float32BufferAttribute, Group, LinearSRGBColorSpace, MathUtils, Mesh, type MeshStandardMaterial, ReplaceStencilOp, Vector2, Vector3, VideoTexture } from 'three'
 import ThemeToggle from '../components/theme-toggle.tsx'
 import { PolaroidLoopMaterial } from '../materials/polaroid-loop-material.tsx'
 import Polaroid, { polaroidBend } from '../models/polaroid.tsx'
@@ -32,22 +32,22 @@ function usePhotoWindow() {
 }
 
 /**
- * The photo as a window into a shallow bowl. The window draws nothing: it marks the stencil and resets the
- * depth behind it to "far", so the bowl can sit behind the card (which would otherwise hide it) and still
- * depth-test against itself. The background lines the bowl, the middle of it as it would look face-on and
+ * The photo as a window into a shallow, rounded tub. The window draws nothing: it marks the stencil and resets the
+ * depth behind it to "far", so the tub can sit behind the card (which would otherwise hide it) and still
+ * depth-test against itself. The background lines the tub, the middle of it as it would look face-on and
  * its outer band stretched round toward the rim, and the person stands partway in, their depth relief
  * bringing them up toward the glass. Nothing shows outside the window, and the frame's own overlay (its
  * soft inner shadow) is drawn last, over all of it, like the edge of a print.
  */
 const SCALE = 0.5
-/** How deep the bowl behind the window is, in the model's units (the card is 3.66 wide). */
+/** How deep the tub behind the window is, in the model's units (the card is 3.66 wide). */
 const BOX_DEPTH = 1.6
-/** Where the person stands, as a fraction of the bowl's depth; the relief brings them up from here. */
+/** Where the person stands, as a fraction of the tub's depth; the relief brings them up from here. */
 const PERSON_DEPTH = 0.6
 /** The camera's distance in the model's units (camera at z 6, card scaled by SCALE). */
 const CAMERA_DISTANCE = 6 / SCALE
 /**
- * How much of the background, from each edge, is kept for the part of the bowl outside the window: face-on the
+ * How much of the background, from each edge, is kept for the part of the tub outside the window: face-on the
  * window shows the rest, and turning the card reveals the band, stretched more toward the rim.
  */
 const BAND = 0.04
@@ -73,18 +73,50 @@ declare module '@react-three/fiber' {
 }
 
 /**
- * The bowl the background lines: a half-sphere behind the window, opening toward the viewer, flattened to
- * `depth`. Its rim is a circle around the window's corners, so the window looks into it everywhere. The
- * geometry is in the window's own frame (centre at the origin, window at z 0), which the material reads to
+ * The tub the background lines: a rounded rectangle (a superellipse, the window's own shape) behind the window,
+ * opening toward the viewer, with a mostly flat floor that curves up into its walls. Its rim sits a little
+ * outside the window (TUB_REACH), so face-on the walls stay behind the person even at the window's edges.
+ * The geometry is in the window's own frame (centre at the origin, window at z 0), which the material reads to
  * work out how each point looks face-on.
  */
-function useBowl(radius: number, depth: number) {
+const TUB_REACH = 1.35
+/** How square the tub's corners are: 2 is an ellipse, higher is closer to a rectangle. */
+const TUB_SQUARENESS = 6
+/** How flat its floor is: 2 is a half-ellipse profile, higher keeps the floor flat and curves only near the walls. */
+const TUB_FLATNESS = 4
+
+function useTub(half: { x: number; y: number }, depth: number) {
   return useMemo(() => {
-    const geometry = new SphereGeometry(radius, 96, 48, 0, Math.PI * 2, 0, Math.PI / 2)
-    geometry.rotateX(-Math.PI / 2)
-    geometry.scale(1, 1, depth / radius)
+    const around = 160
+    const out = 48
+    const positions: number[] = []
+    const index: number[] = []
+    for (let i = 0; i <= out; i++) {
+      const r = i / out
+      const z = -depth * Math.pow(1 - Math.pow(r, TUB_FLATNESS), 1 / 2)
+      for (let j = 0; j <= around; j++) {
+        const a = (j / around) * Math.PI * 2
+        const [c, s] = [Math.cos(a), Math.sin(a)]
+        // A point on the superellipse rim, scaled in by r.
+        const rx = Math.sign(c) * Math.pow(Math.abs(c), 2 / TUB_SQUARENESS) * half.x * TUB_REACH
+        const ry = Math.sign(s) * Math.pow(Math.abs(s), 2 / TUB_SQUARENESS) * half.y * TUB_REACH
+        positions.push(rx * r, ry * r, z)
+      }
+    }
+
+    for (let i = 0; i < out; i++) {
+      for (let j = 0; j < around; j++) {
+        const a = i * (around + 1) + j
+        const b = a + around + 1
+        index.push(a, b, a + 1, b, b + 1, a + 1)
+      }
+    }
+
+    const geometry = new BufferGeometry()
+    geometry.setAttribute('position', new Float32BufferAttribute(positions, 3))
+    geometry.setIndex(index)
     return geometry
-  }, [radius, depth])
+  }, [half.x, half.y, depth])
 }
 
 function LoopPolaroid({ texture, settings, pointer }: { texture: VideoTexture; settings: Settings; pointer: { current: { x: number; y: number } } }) {
@@ -97,8 +129,9 @@ function LoopPolaroid({ texture, settings, pointer }: { texture: VideoTexture; s
   const fill = (depth: number) => ({ x: (photo.size.x / 2) * ((CAMERA_DISTANCE + depth) / CAMERA_DISTANCE), y: (photo.size.y / 2) * ((CAMERA_DISTANCE + depth) / CAMERA_DISTANCE) })
   const personDepth = BOX_DEPTH * PERSON_DEPTH
   const person = fill(personDepth)
-  const bowl = useBowl(Math.hypot(photo.size.x, photo.size.y) / 2, BOX_DEPTH)
+  const tub = useTub({ x: photo.size.x / 2, y: photo.size.y / 2 }, BOX_DEPTH)
   const half = useMemo(() => new Vector2(photo.size.x / 2, photo.size.y / 2), [photo])
+  const tubHalf = useMemo(() => half.clone().multiplyScalar(TUB_REACH), [half])
 
   useEffect(() => {
     // The window marks the stencil after the opaque card and before the box; the frame's overlay (its inner
@@ -131,8 +164,8 @@ function LoopPolaroid({ texture, settings, pointer }: { texture: VideoTexture; s
         passthroughMaterial={<windowMaterial colorWrite={false} depthFunc={AlwaysDepth} {...STENCIL} stencilFunc={AlwaysStencilFunc} stencilZPass={ReplaceStencilOp} />}
       />
       <group position={[photo.center.x, photo.center.y, photo.front]}>
-        {/* The bowl the background lines. */}
-        <mesh geometry={bowl} renderOrder={2}>
+        {/* The tub the background lines. */}
+        <mesh geometry={tub} renderOrder={2}>
           {settings.background ? (
             <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={2} uHalf={half} uCameraDistance={CAMERA_DISTANCE} uBand={BAND} transparent={false} side={DoubleSide} {...IN_THE_BOX} />
           ) : (
@@ -140,11 +173,12 @@ function LoopPolaroid({ texture, settings, pointer }: { texture: VideoTexture; s
           )}
         </mesh>
         {/* Reaching past the window, its edges stretched out (the panels clamp at their edge), so where the person
-            meets the edge of the frame (shoulders) they carry on until the bowl curves in front of them. Face-on,
-            the window shows the same middle of the panels as the bowl does. */}
-        <mesh position={[0, 0, -personDepth]} renderOrder={3}>
+            meets the edge of the frame (shoulders) they carry on, wrapping round the tub's walls where those come
+            forward of them (the material follows the tub's shape). Face-on, the window shows the same middle of
+            the panels as the tub does. */}
+        <mesh renderOrder={3}>
           <planeGeometry args={[person.x * 2 * PERSON_REACH, person.y * 2 * PERSON_REACH, 256, 256]} />
-          <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={1} uUvScale={PERSON_REACH} uBand={BAND} uDepthStrength={settings.depth * personDepth} uOutline={settings.outline} {...IN_THE_BOX} />
+          <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={1} uUvScale={PERSON_REACH} uBand={BAND} uPersonDepth={personDepth} uTubHalf={tubHalf} uTubDepth={BOX_DEPTH} uTubSquareness={TUB_SQUARENESS} uTubFlatness={TUB_FLATNESS} uDepthStrength={settings.depth * personDepth} uOutline={settings.outline} {...IN_THE_BOX} />
         </mesh>
       </group>
     </group>

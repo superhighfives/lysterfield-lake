@@ -15,7 +15,7 @@ const PANEL_TOTAL = 5
 const uniforms = {
   uTexture: new Texture(),
   // 1 draws the person, cut out by the matte and pushed forward by the depth panel; 2 draws the background
-  // on the inside of a bowl behind the window (see the fragment shader).
+  // on the inside of a tub behind the window (see the fragment shader).
   uLayer: 0,
   // Depth relief, as video-material.tsx's avatar: world units at full depth, and the panel-UV radii the
   // depth is blurred over and the matte's edge rolls off across.
@@ -24,13 +24,20 @@ const uniforms = {
   uEdgeRadius: 0.04,
   // How much the outline panel inks over the portrait (0 = none).
   uOutline: 0,
-  // For the person: how many window-widths their plane spans (it reaches past the window to the bowl).
+  // For the person: how many window-widths their plane spans (it reaches past the window to the tub).
   uUvScale: 1,
-  // The bowl: half the window's size, the camera's distance (to see the bowl as it's seen face-on), and how
-  // much of the background, from each edge, is kept for the part of the bowl outside the window.
+  // The tub: half the window's size, the camera's distance (to see the tub as it's seen face-on), and how
+  // much of the background, from each edge, is kept for the part of the tub outside the window.
   uHalf: new Vector2(1, 1),
   uCameraDistance: 12,
   uBand: 0.12,
+  // The tub's shape (admin-polaroid.tsx's useTub), so the person can wrap round its walls: its rim's half-size,
+  // depth, how square and how flat it is, and how far back the person stands in it.
+  uTubHalf: new Vector2(1, 1),
+  uTubDepth: 1,
+  uTubSquareness: 6,
+  uTubFlatness: 4,
+  uPersonDepth: 0,
 }
 
 const shared = /* glsl */ `
@@ -43,12 +50,12 @@ const shared = /* glsl */ `
     return texture2D(uTexture, vec2((x + index - 1.0) / ${PANEL_TOTAL.toFixed(1)}, clamp(uv.y, 0.0, 1.0)));
   }
 
-  // Where along one axis of the panels a point takes its colour from (the bowl's background, and the person's
+  // Where along one axis of the panels a point takes its colour from (the tub's background, and the person's
   // edges). t is how far out it is
   // as seen face-on, 1 being the window's edge. Inside the window, the background's middle, undistorted;
   // past it, the outer band, easing out toward the panel's edge so the stretch grows smoothly. The two
   // parts meet with the same slope, so there's no crease where the window's edge falls.
-  float bowlUv(float t) {
+  float tubUv(float t) {
     float a = abs(t);
     float inner = 1.0 - 2.0 * uBand;
     float g = a <= 1.0 ? a * inner : inner + 2.0 * uBand * (1.0 - exp(-(a - 1.0) * inner / (2.0 * uBand)));
@@ -64,6 +71,19 @@ export const PolaroidLoopMaterial = shaderMaterial(
     uniform float uLayer;
     uniform float uUvScale;
     uniform float uDepthStrength;
+    uniform vec2 uTubHalf;
+    uniform float uTubDepth;
+    uniform float uTubSquareness;
+    uniform float uTubFlatness;
+    uniform float uPersonDepth;
+
+    // How far back the tub's surface is at a point (0 at the window, -uTubDepth at its floor): the same shape
+    // useTub builds, read from where the point falls in the rounded rectangle.
+    float tubZ(vec2 xy) {
+      vec2 q = abs(xy) / uTubHalf;
+      float r = pow(pow(q.x, uTubSquareness) + pow(q.y, uTubSquareness), 1.0 / uTubSquareness);
+      return r >= 1.0 ? 0.0 : -uTubDepth * sqrt(1.0 - pow(r, uTubFlatness));
+    }
     uniform float uShapeRadius;
     uniform float uEdgeRadius;
     ${shared}
@@ -80,9 +100,9 @@ export const PolaroidLoopMaterial = shaderMaterial(
 
     void main() {
       // uUvScale is how many window-widths the mesh spans; the person's plane reaches past the window, and past
-      // its edge their outer band is revealed and eased out, as the bowl does with the background.
+      // its edge their outer band is revealed and eased out, as the tub does with the background.
       vec2 seen = (uv - 0.5) * 2.0 * uUvScale;
-      vUv = uLayer == 1.0 ? vec2(bowlUv(seen.x), bowlUv(seen.y)) : 0.5 + (uv - 0.5) * uUvScale;
+      vUv = uLayer == 1.0 ? vec2(tubUv(seen.x), tubUv(seen.y)) : 0.5 + (uv - 0.5) * uUvScale;
       vPosition = position;
       float relief = 0.0;
       if (uLayer == 1.0 && uDepthStrength != 0.0) {
@@ -91,7 +111,11 @@ export const PolaroidLoopMaterial = shaderMaterial(
         float inside = clamp((blurPanel(${POLAROID_PANEL.matte.toFixed(1)}, vUv, uEdgeRadius) - 0.5) * 2.0, 0.0, 1.0);
         relief = shape * smoothstep(0.0, 1.0, inside) * uDepthStrength;
       }
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position.xy, position.z + relief, 1.0);
+      float z = position.z + relief;
+      // The person stands uPersonDepth back; where the tub's wall comes forward of that, they lie just in front
+      // of it instead, so their stretched edges wrap round the tub rather than being cut off by it.
+      if (uLayer == 1.0) z = max(-uPersonDepth + relief, tubZ(position.xy) + 0.03);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position.xy, z, 1.0);
     }
   `,
   /* glsl */ `
@@ -106,11 +130,11 @@ export const PolaroidLoopMaterial = shaderMaterial(
 
     void main() {
       if (uLayer == 2.0) {
-        // The bowl, seen face-on: perspective draws a point further back closer to the middle.
+        // The tub, seen face-on: perspective draws a point further back closer to the middle.
         vec2 seen = vPosition.xy * uCameraDistance / (uCameraDistance - vPosition.z) / uHalf;
-        vec3 color = panel(${POLAROID_PANEL.background.toFixed(1)}, vec2(bowlUv(seen.x), bowlUv(seen.y))).rgb;
-        // Darker toward the rim, as the inside of a bowl is.
-        float rim = smoothstep(0.7, 1.6, length(seen));
+        vec3 color = panel(${POLAROID_PANEL.background.toFixed(1)}, vec2(tubUv(seen.x), tubUv(seen.y))).rgb;
+        // Darker toward the rim, as the inside of a tub is: measured in the tub's own rounded-rectangle shape.
+        float rim = smoothstep(0.75, 1.5, pow(pow(abs(seen.x), 6.0) + pow(abs(seen.y), 6.0), 1.0 / 6.0));
         gl_FragColor = vec4(color * mix(1.0, 0.78, rim), 1.0);
         return;
       }
