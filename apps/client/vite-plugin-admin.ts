@@ -66,12 +66,6 @@ function listJobs(kind?: 'polaroid') {
 
 const countFrames = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((f) => /\.(png|jpg)$/.test(f)).length : 0)
 
-
-/**
- * A polaroid job's stages (plans/in-progress/polaroid-admin-flow.md), each read from the files on disk: panels 2, 4, 5
- * and 6 from the polaroid model, panel 3 from Bria, then the atlas and the flattened loop. `withCost` adds
- * what the paid stages would cost to run now, from `polaroid-run --plan` (which knows what's already done).
- */
 /**
  * Moderation, in job.json's `review`: a new recording is `submitted`; `approved` lets it be made (the paid
  * stages refuse anything else); once made, `shown` approves it for showing; `rejected` stops it anywhere.
@@ -113,6 +107,11 @@ function deletePolaroid(job: string) {
   if (existsSync(RECORDINGS_DIR)) for (const f of readdirSync(RECORDINGS_DIR).filter((f) => path.parse(f).name === job)) rmSync(path.join(RECORDINGS_DIR, f))
 }
 
+/**
+ * A polaroid job's stages (plans/in-progress/polaroid-admin-flow.md), each read from the files on disk: panels 2, 4, 5
+ * and 6 from the polaroid model, panel 3 from Bria, then the atlas and the flattened loop. `withCost` adds
+ * what the paid stages would cost to run now, from `polaroid-run --plan` (which knows what's already done).
+ */
 function polaroidDetail(job: string, withCost: boolean) {
   const dir = jobDir(job)
   const config = readJson(path.join(dir, 'job.json')) as { fps: number; review?: PolaroidReview }
