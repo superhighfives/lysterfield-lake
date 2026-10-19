@@ -3,7 +3,7 @@ import { copyFile, mkdir, mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { exists, forEachFrame, framesDir, siblingFramePath, videoPath, type Job } from '../job.ts'
+import { exists, forEachFrame, framesDir, listFrames, siblingFramePath, videoPath, type Job } from '../job.ts'
 import { maskDepth } from './depth.ts'
 import { matte } from './matte.ts'
 import { maskOutline } from './outline.ts'
@@ -51,15 +51,20 @@ export async function polaroidPanels(job: Job, tarPath: string, concurrency: num
   if (!(await exists(await videoPath(job, '4-matte/raw', 'mp4')))) throw new Error('No 4-matte/raw.mp4 in the job or the tar')
   const { alphaFramesDir, repairs } = await matte(job, await videoPath(job, '0-source/video'))
 
+  // A split job arrives a frame range at a time, so only the frames whose raw output is here yet are
+  // post-processed; the rest follow when their range is unpacked.
   const sourceFrames = path.join(job.dir, '0-source/frames')
-  const depthOut = await framesDir(job, '5-depth/frames')
-  await forEachFrame(sourceFrames, depthOut, concurrency, async (inputPath, outputPath) => {
-    await maskDepth(await siblingFramePath(inputPath, path.join(job.dir, '5-depth/raw')), await siblingFramePath(inputPath, alphaFramesDir), outputPath)
-  })
-  const outlineOut = await framesDir(job, '6-outline/frames')
-  await forEachFrame(sourceFrames, outlineOut, concurrency, async (inputPath, outputPath) => {
-    await maskOutline(await siblingFramePath(inputPath, path.join(job.dir, '6-outline/raw')), await siblingFramePath(inputPath, alphaFramesDir), outputPath)
-  })
+  for (const [panel, mask] of [['5-depth', maskDepth], ['6-outline', maskOutline]] as const) {
+    const rawDir = await framesDir(job, `${panel}/raw`)
+    const ready = new Set((await listFrames(rawDir)).map((f) => path.parse(f).name))
+    await forEachFrame(
+      sourceFrames,
+      await framesDir(job, `${panel}/frames`),
+      concurrency,
+      async (inputPath, outputPath) => mask(await siblingFramePath(inputPath, rawDir), await siblingFramePath(inputPath, alphaFramesDir), outputPath),
+      { only: (frame) => ready.has(path.parse(frame).name) }
+    )
+  }
 
   return { matteRepairs: repairs.length, frames: (await readdir(sourceFrames)).length }
 }

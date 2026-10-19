@@ -44,3 +44,14 @@ ran out of memory, spilled into system memory and slowed to a crawl.
 - DiffusionCLIP, one frame: 11.9s at 40 inversion steps, 7.9s at 20 (34.5dB from 40, no visible change),
   7.0s at 10 (softer, a visibly different brush texture). fp16 was slower (13.5s at 40): autocast's casts cost
   more than this U-Net gains.
+
+## Measured (2026-10-18, Replicate)
+
+Deployment `superhighfives/lysterfield-polaroid` (L40S, 0-4 instances). `park-party` split four ways,
+from cold: 9 minutes wall clock, each range 130-207s queued and booting, then ~322s running (10.4s a frame
+at `portrait_batch` 4, so batching was no faster than the 4090 one at a time). About $2 with the boots,
+~$1.25 warm. Output matches the PC's (portrait 51dB, depth 54-56dB).
+
+Pushing this image to r8.im times out finalising large layers (`timeout awaiting response headers`) from
+both the Mac and the PC. Retrying works, since each attempt only sends what's missing: the first push took
+five tries.
