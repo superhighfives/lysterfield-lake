@@ -280,11 +280,13 @@ function WakePass() {
       useStore.getState().colorScheme === 'dark' ? 1 : 0
     const stroke = takeStroke(state.size.width, state.size.height)
     writeDrops(state.size.height)
-    // Nothing moving: the pass would copy the scene across unchanged, so
-    // skip it and draw the scene straight to the screen, as it was before
-    // the wake existed. Only a stroke's worth of frames pay for the extra
-    // passes. The trail's faint remainder is cleared, so it starts clean.
-    if (!trailActive()) {
+    // Nothing moving, or a dream playing (the wake's for the welcome and
+    // choose screens; the player has its own water): the pass would copy
+    // the scene across unchanged, so skip it and draw the scene straight to
+    // the screen, as it was before the wake existed. Only a stroke's worth
+    // of frames pay for the extra passes. The trail's faint remainder is
+    // cleared, so it starts clean.
+    if (!trailActive() || useStore.getState().dream) {
       if (trail.dirty) {
         for (const map of [trail.read, trail.write]) {
           gl.setRenderTarget(map)

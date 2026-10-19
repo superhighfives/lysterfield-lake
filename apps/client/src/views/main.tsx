@@ -111,15 +111,13 @@ const AVATAR_FOLLOW_EASE = 0.08
 const AVATAR_FOLLOW_TILT = 0.15
 // The polaroid swells this much (scale) on each beat.
 const PULSE_SCALE = 0.012
-// The avatar dissolves (through the same stipple as a drag) as the pointer
-// moves away from the middle of the screen: whole within AVATAR_NEAR of it
-// (pointer units, 1 = the screen's edge), gone by AVATAR_FAR, eased by
-// AVATAR_EASE per frame — quick, so it moves with the pointer. As it
-// fades it warps and drifts away from the pointer (the shader, uAvatar).
-// Not on touch, where the pointer's the tilt.
-const AVATAR_NEAR = 0.3
-const AVATAR_FAR = 0.95
-const AVATAR_EASE = 0.3
+// How much of the avatar's pointer fade breaks into stipple (uHash).
+const AVATAR_HASH = 0.6
+// After a swap the avatar arrives at full strength, wherever the pointer
+// is, for REVEAL_HOLD seconds from the landing, then eases back to its
+// pointer fade over REVEAL_RELEASE seconds.
+const REVEAL_HOLD = 2
+const REVEAL_RELEASE = 1
 // The blank print's water (utils/water-sim.ts): pointer speed (CSS px per
 // frame) for a full-strength stroke.
 const EMULSION_FULL_SPEED = 30
@@ -234,11 +232,11 @@ function Main(
   const bendTarget = useRef(new Vector2())
   const developRef = useRef(1)
   // Whether the dream on show has started playing yet (it shows a blank,
-  // living print until then, as a swap does), the avatar's pointer fade,
-  // and the blank print's water, with the pointer where it was last frame
+  // living print until then, as a swap does), and the blank print's water, with the pointer where it was last frame
   // (CSS px, and on the photo in UV).
   const startedRef = useRef(false)
-  const avatarPointerFade = useRef(1)
+  // Seconds since the last swap's arrival started (Infinity = none).
+  const revealRef = useRef(Infinity)
   const water = useMemo(() => createWaterSim(), [])
   useEffect(() => () => water.dispose(), [water])
   const lastPointerPx = useRef(new Vector2(-1, -1))
@@ -381,6 +379,7 @@ function Main(
 
       if (swapPhase === 'in') {
         developRef.current = 0
+        revealRef.current = 0
         rippleRef.current = -1
       }
 
@@ -527,24 +526,20 @@ function Main(
     // Gone, not nearly: a last trace of the dissolve read as a ghost of
     // the avatar over the polaroid while the next dream loaded.
     if (swapPhase === 'loading') fadeRef.current = 0
-    // And as the pointer leaves the middle of the screen.
-    avatarPointerFade.current = MathUtils.lerp(
-      avatarPointerFade.current,
-      isMobile || isTouch
-        ? 1
-        : 1 -
-            MathUtils.smoothstep(
-              Math.hypot(pointerX - 1, pointerY - 1),
-              AVATAR_NEAR,
-              AVATAR_FAR
-            ),
-      AVATAR_EASE
-    )
-    const avatarFade = fadeRef.current * avatarPointerFade.current
+    const avatarFade = fadeRef.current
     if (avatarFollow.current) avatarFollow.current.visible = avatarFade > 0.01
     // Only the avatar: the song plays on through a swap, so its words do
     // too.
     if (avatarMaterial.current) avatarMaterial.current.uFade = avatarFade
+
+    // Full strength for a while after a swap, then back to the pointer.
+    revealRef.current += delta
+    if (avatarMaterial.current)
+      avatarMaterial.current.uReveal = MathUtils.clamp(
+        1 - (revealRef.current - REVEAL_HOLD) / REVEAL_RELEASE,
+        0,
+        1
+      )
 
     // The photo's bounds on screen, for the cursor and tap detection.
     const photo = polaroidVisible.current
@@ -683,6 +678,7 @@ function Main(
               uShapeRadius={DEPTH_SHAPE_RADIUS}
               uEdgeRadius={DEPTH_EDGE_RADIUS}
               uSharpen={AVATAR_SHARPEN}
+              uHash={AVATAR_HASH}
               uDark={dark}
             />
           </animated.mesh>

@@ -114,9 +114,10 @@ export const useStore = create<AppState>()((set) => ({
   swapPhase: 'idle',
   swapDirection: 1,
   debug: new URLSearchParams(location.search).has('debug'),
-  // Off by default: it costs three extra passes every frame the pointer
-  // moves. Shift+D's debug panel turns it on.
-  wakeEnabled: false,
+  // The liquid wake on the welcome and choose screens (components/
+  // wake-pass.tsx skips itself once a dream's playing). Shift+D's debug
+  // panel turns it off.
+  wakeEnabled: true,
   // 1.5 rather than native: at 2x on a big display the canvas is ~12M
   // pixels, rendered twice a frame while the wake runs (debug mode's
   // numbers: ~31ms a frame at 2x, ~22ms at 1.5x, ~17.5ms at 1x).

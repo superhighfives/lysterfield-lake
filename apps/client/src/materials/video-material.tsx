@@ -56,6 +56,14 @@ const uniforms = {
   // the image back along it and splits its colour channels, so a moving
   // polaroid streaks and a still one is untouched.
   uVelocity: new Vector2(0, 0),
+  // How much of the avatar's pointer-driven fade (it clears as the pointer
+  // nears it) breaks up through the dissolve's dither rather than fading
+  // smoothly. 0 = smooth, 1 = all stipple.
+  uHash: 0,
+  // 1 = show the avatar at full strength whatever the pointer is doing (its
+  // pointer fade, and so the hashing, held off); eased back to 0. Used
+  // just after a dream swap, so the new dream's avatar arrives whole.
+  uReveal: 0,
   // The polaroid developing after it lands (see main.tsx): 0 = a blank,
   // milky print, 1 = fully developed.
   uDevelop: 1,
@@ -193,15 +201,13 @@ export const VideoMaterial = shaderMaterial(
     const float RIPPLE_AMOUNT = 0.02;
     const float RIPPLE_FREQUENCY = 18.0;
     const float RIPPLE_SPEED = 5.0;
-    // The avatar's own warp at fully faded (UV), and how far it drifts from
-    // the pointer (UV per unit of pointer offset from the middle).
-    const float AVATAR_WARP = 0.05;
-    const float AVATAR_DRIFT = 0.08;
     // Motion smear: taps along the velocity, and how far the red and blue
     // channels split either side of it.
     const int SMEAR_TAPS = 10;
     const float SPLIT_AMOUNT = 0.15;
     uniform float uDevelop;
+    uniform float uReveal;
+    uniform float uHash;
     uniform sampler2D uWater;
     // One texel of the water's height field (utils/water-sim.ts's SIZE).
     const float WATER_TEXEL = 1.0 / 192.0;
@@ -294,15 +300,11 @@ export const VideoMaterial = shaderMaterial(
       // Rippling UVs while dissolving (uFade < 1); untouched otherwise.
       // The music's pulse adds a breath of the same ripple.
       float dissolve = 1.0 - uFade;
-      // The avatar warps harder as it fades (it follows the pointer, see
-      // main.tsx), and drifts away from the pointer as it goes.
-      float warpAmount = uAvatar == 1.0 ? AVATAR_WARP : RIPPLE_AMOUNT;
-      float rippleAmount = dissolve * warpAmount + uPulse * RIPPLE_AMOUNT * 0.15;
+      float rippleAmount = dissolve * RIPPLE_AMOUNT + uPulse * RIPPLE_AMOUNT * 0.15;
       vec2 st = vUv + rippleAmount * vec2(
         sin(vUv.y * RIPPLE_FREQUENCY + uTime * RIPPLE_SPEED),
         cos(vUv.x * RIPPLE_FREQUENCY + uTime * RIPPLE_SPEED * 0.8)
       );
-      if (uAvatar == 1.0) st += (uPointerRelative - 1.0) * dissolve * AVATAR_DRIFT;
 
       // Landing ripple: one ring spreading out from where it landed,
       // pushing the image outward along it, dying away as it goes.
@@ -425,10 +427,18 @@ export const VideoMaterial = shaderMaterial(
 
         image = vec4(blendMultiply(vec3(image), vec3(outColor), 0.3), 1.0);
 
-        // The avatar no longer clears as the pointer nears it (dragging the
-        // polaroid does that now); it only thins where idle (uIdle).
+        float minRadius = 0.15;
+        float maxRadius = 0.30;
+        float dist = distance(uPointerRelative / 2.0, vec2(0.5, 0.6));
+        float range = maxRadius - minRadius;
+        float mixAmount = clamp((dist - minRadius) / range, 0.15, 1.0);
         float fadeIn = clamp(uTime / 4.0 - 1.5, 0.0, 1.0);
-        opacityOverride = -mask.r * uIdle * fadeIn;
+        float radial = clamp((0.5 - st.y) * 1.0 - mixAmount, 0.0, 1.0);
+
+        opacityOverride = ((1.0 - (mixAmount - radial + (mask.r * uIdle))) * fadeIn);
+        // Held off while revealed (see uReveal): as if the pointer were
+        // well away from the avatar.
+        opacityOverride *= 1.0 - uReveal;
       }
 
       image = mix(image, white, fadeAmount);
@@ -495,6 +505,13 @@ export const VideoMaterial = shaderMaterial(
       // threshold, so the mesh breaks up into the sketch's own stipple.
       if(uFade < 1.0) {
         gl_FragColor.a *= uFade >= ditherLimit() ? 1.0 : 0.0;
+      }
+
+      // The avatar's pointer fade, partly broken into the same stipple:
+      // where it's half-faded, cells snap to shown or gone.
+      if(uHash > 0.0 && uAvatar == 1.0) {
+        float a = gl_FragColor.a;
+        gl_FragColor.a = mix(a, a >= ditherLimit() ? 1.0 : 0.0, uHash);
       }
 
       // Nothing here: drawn, it would still write depth and hide whatever's
