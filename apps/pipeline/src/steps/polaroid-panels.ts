@@ -16,6 +16,8 @@ const RAW = ['2-portrait/raw', '2-portrait/upscaled', '5-depth/raw', '6-outline/
 export interface PolaroidPanelsResult {
   matteRepairs: number
   frames: number
+  /** Unpacked, but not post-processed yet: no matte in the job so far. */
+  waitingForMatte?: boolean
 }
 
 /**
@@ -48,7 +50,8 @@ export async function polaroidPanels(job: Job, tarPath: string, concurrency: num
     await rm(unpacked, { recursive: true, force: true })
   }
 
-  if (!(await exists(await videoPath(job, '4-matte/raw', 'mp4')))) throw new Error('No 4-matte/raw.mp4 in the job or the tar')
+  // A split job's ranges can land before the one with the matte: unpacked now, post-processed once it's here.
+  if (!(await exists(await videoPath(job, '4-matte/raw', 'mp4')))) return { matteRepairs: 0, frames: 0, waitingForMatte: true }
   const { alphaFramesDir, repairs } = await matte(job, await videoPath(job, '0-source/video'))
 
   // A split job arrives a frame range at a time, so only the frames whose raw output is here yet are

@@ -45,7 +45,12 @@ export interface Task {
 
 /** How many tasks a lane runs at once. `instant` tasks (creating a take, approvals, notes) take milliseconds and never wait. */
 const CAPACITY: Record<Lane, number> = { replicate: 3, pc: 1, local: 1, quick: Infinity, instant: Infinity }
-const LANES: Record<string, Lane> = { directions: 'replicate', samples: 'replicate', clip: 'replicate', full: 'replicate', rerender: 'replicate', check: 'local', hold: 'quick', restore: 'local' }
+const LANES: Record<string, Lane> = {
+  directions: 'replicate', samples: 'replicate', clip: 'replicate', full: 'replicate', rerender: 'replicate', check: 'local', hold: 'quick', restore: 'local',
+  'polaroid-panels': 'replicate', 'polaroid-background': 'replicate', 'polaroid-atlas': 'local',
+}
+/** Replicate-lane actions that never go to our own GPU, whatever DEFORUM_URL or the page says (only Deforum runs there). */
+const REPLICATE_ONLY = new Set(['polaroid-panels', 'polaroid-background'])
 /** Finished tasks kept on disk; older ones are swept when the queue loads. */
 const KEEP_FINISHED = 100
 
@@ -149,7 +154,7 @@ export function createQueue(opts: { dir: string; cwd: string; env: () => NodeJS.
         args,
         // A Replicate job sent to our own GPU instead waits its turn on that one GPU. Unsaid, the
         // pipeline picks the GPU whenever DEFORUM_URL is set, so the lane does the same.
-        lane: LANES[action] === 'replicate' && (body.on ?? (opts.env().DEFORUM_URL ? 'pc' : 'replicate')) === 'pc' ? 'pc' : (LANES[action] ?? 'instant'),
+        lane: LANES[action] === 'replicate' && !REPLICATE_ONLY.has(action) && (body.on ?? (opts.env().DEFORUM_URL ? 'pc' : 'replicate')) === 'pc' ? 'pc' : (LANES[action] ?? 'instant'),
         status: 'queued',
         created: Date.now(),
       }
