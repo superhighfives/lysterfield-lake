@@ -22,6 +22,8 @@ export interface InitOptions {
   length?: number
   /** Where to take the square from; the largest centred square if unset. */
   crop?: Crop
+  /** What the job is for, recorded in job.json (see JobConfig). */
+  kind?: 'polaroid'
 }
 
 export interface InitResult {
@@ -76,6 +78,7 @@ export async function init(jobDir: string, opts: InitOptions): Promise<InitResul
 
   const job = await createJob(jobDir, {
     fps,
+    ...(opts.kind ? { kind: opts.kind } : {}),
     source: { path: originalRelativePath, from: path.resolve(opts.sourceVideoPath), offset: opts.offset, length: opts.length, crop },
   })
 

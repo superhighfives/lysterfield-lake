@@ -24,6 +24,8 @@ export interface PolaroidOptions {
 
 export interface PolaroidResult {
   atlasPath: string
+  /** The flattened loop to download: the portrait over the background through the matte. */
+  loopPath: string
   frames: number
 }
 
@@ -49,7 +51,11 @@ export async function polaroid(job: Job, opts: PolaroidOptions = {}): Promise<Po
   }
   if (frames < blend * 3) throw new Error(`Only ${frames} frames after trimming; too short to loop`)
 
-  if (await exists(atlasPath)) return { atlasPath, frames: frames - blend }
+  const loopPath = await videoPath(job, 'polaroid/loop', 'mp4')
+  if (await exists(atlasPath)) {
+    if (!(await exists(loopPath))) await flatten(atlasPath, loopPath)
+    return { atlasPath, loopPath, frames: frames - blend }
+  }
 
   const scaled = POLAROID_PANELS.map((_, i) => `[${i}]trim=end_frame=${frames},scale=${PANEL_SIZE}:${PANEL_SIZE},format=yuv420p,setsar=1[p${i}]`)
   const fade = blend / job.fps
@@ -61,5 +67,24 @@ export async function polaroid(job: Job, opts: PolaroidOptions = {}): Promise<Po
     `[rest][head]xfade=transition=fade:duration=${fade}:offset=${(frames - 2 * blend) / job.fps}[v]`,
   ].join(';')
   await execFileAsync('ffmpeg', ['-y', ...inputs, '-filter_complex', filter, '-map', '[v]', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-movflags', '+faststart', '-an', atlasPath])
-  return { atlasPath, frames: frames - blend }
+  await flatten(atlasPath, loopPath)
+  return { atlasPath, loopPath, frames: frames - blend }
+}
+
+/**
+ * The atlas flattened into one square loop, for downloading and sharing: the portrait (panel 1) over the
+ * background (panel 2) through the matte (panel 3), as the 3D polaroid layers them. Cut from the atlas, so it
+ * loops exactly as the polaroid does.
+ */
+async function flatten(atlasPath: string, loopPath: string): Promise<void> {
+  const panel = (i: number) => `crop=${PANEL_SIZE}:${PANEL_SIZE}:${i * PANEL_SIZE}:0`
+  const filter = [
+    `[0]split=3[a][b][c]`,
+    `[a]${panel(0)}[portrait]`,
+    `[b]${panel(1)}[background]`,
+    `[c]${panel(2)},format=gray[matte]`,
+    `[portrait][matte]alphamerge[cutout]`,
+    `[background][cutout]overlay=format=auto,format=yuv420p[v]`,
+  ].join(';')
+  await execFileAsync('ffmpeg', ['-y', '-i', atlasPath, '-filter_complex', filter, '-map', '[v]', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18', '-movflags', '+faststart', '-an', loopPath])
 }

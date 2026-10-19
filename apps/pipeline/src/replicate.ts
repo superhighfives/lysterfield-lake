@@ -107,8 +107,12 @@ async function outputExpired(output: unknown): Promise<boolean> {
   throw new Error(`Couldn't check whether an earlier prediction's output is still there (the file host answered ${response.status}). Nothing was run; run it again.`)
 }
 
+/**
+ * `identifier` is a pinned version (`owner/name:version`) or a deployment (`deployment:owner/name`), which
+ * runs on that deployment's own hardware and instances.
+ */
 export async function runModelToFileResumable(
-  identifier: `${string}/${string}:${string}`,
+  identifier: `${string}/${string}:${string}` | `deployment:${string}/${string}`,
   input: Record<string, unknown>,
   outputPath: string,
   statePath: string
@@ -131,7 +135,12 @@ export async function runModelToFileResumable(
   if (existing && expired && !startAgain) {
     throw new Error(`Prediction ${existing.id} finished on ${existing.completed_at?.slice(0, 10) ?? 'an earlier day'}, but Replicate no longer has its output (it keeps outputs for about an hour). It was not run again; retry it (--retry true) to start a new one.`)
   }
-  let prediction = existing && !startAgain ? existing : await replicate.predictions.create({ version: identifier.split(':')[1], input })
+  const create = () => {
+    if (!identifier.startsWith('deployment:')) return replicate.predictions.create({ version: identifier.split(':')[1], input })
+    const [owner, name] = identifier.slice('deployment:'.length).split('/')
+    return replicate.deployments.predictions.create(owner, name, { input })
+  }
+  let prediction = existing && !startAgain ? existing : await create()
   if (prediction === existing) console.log(`Picking up prediction ${prediction.id} (${prediction.status})`)
   else await writeFile(statePath, `${JSON.stringify({ id: prediction.id })}\n`)
 

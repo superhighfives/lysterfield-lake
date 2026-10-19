@@ -20,11 +20,17 @@ export const MODELS = {
    * phase 5's plan). Landed back on DiffusionCLIP itself, now self-hosted
    * at `superhighfives/diffusionclip` (`models/diffusionclip/`) instead of
    * depending on the abandoned public listing — same real style,
-   * $0.02/call, and (with the deployment's min instances set to 1) no cold
-   * boot either.
+   * $0.02/call on a T4. This calls the version, not the `diffusionclip`
+   * deployment, so it cold-boots like any private model (~3 minutes,
+   * measured 2026-10-17).
+   *
+   * This version (2026-10-18) loads both checkpoints once per boot instead
+   * of on every frame, and takes `n_inv_step` and `fp16`. At the defaults
+   * (40 inversion steps, fp32) its output matches the previous version's
+   * (`67ec618b…`, 72dB PSNR), so song runs look the same, only faster.
    */
   portrait:
-    'superhighfives/diffusionclip:67ec618b47194f7d6776ebadd6985c851ecab8d9b2399cb335a0f86e773ce93d',
+    'superhighfives/diffusionclip:fd60b4d997f0ee3f4a966ae2840f57b051ca76a99ad4e7bda3833ced572a21ee',
   zoedepth: 'cjwbw/zoedepth:6375723d97400d3ac7b88e3022b738bf6f433ae165c4a2acd1955eaa6b8fcb62',
   realEsrgan: 'cjwbw/real-esrgan:d0ee3d708c9b911f122a4ad90046c5d26a0293b99476d697f6bb7f2e251ce2d4',
   robustVideoMatting:
@@ -104,4 +110,10 @@ export const MODELS = {
    * (gpu-server.ts). See plans/done/own-deforum-dream-model.md.
    */
   deforum: 'superhighfives/lysterfield-deforum:c874cd192ac419fb736be755ad148ff7b512bc8ae0d7a4d7b1c5cb9fa91e1f1e',
-} as const satisfies Record<string, `${string}/${string}` | `${string}/${string}:${string}`>
+  /**
+   * A polaroid's panels 2, 4, 5 and 6 in one prediction (models/polaroid, private). Run through its
+   * deployment (L40S, 0-4 instances) rather than a pinned version, so a split job's ranges run on separate
+   * instances at once; the deployment's settings on Replicate pick the version.
+   */
+  polaroidDeployment: 'deployment:superhighfives/lysterfield-polaroid',
+} as const satisfies Record<string, `${string}/${string}` | `${string}/${string}:${string}` | `deployment:${string}/${string}`>
