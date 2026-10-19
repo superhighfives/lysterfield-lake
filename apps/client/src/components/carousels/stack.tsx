@@ -104,8 +104,11 @@ function StackScreen({
   active: MutableRefObject<boolean>
 }) {
   const scheme = useStore((state) => state.colorScheme)
-  // Already loaded: choose.tsx preloads every hero.
-  const textures = useTexture(items.map((dream) => `/assets/${dream.id}/hero.jpg`))
+  // One hero at a time, by its own URL: the same cache entry choose.tsx
+  // preloads, so it's a synchronous hit. An array of them is a different
+  // entry, which loaded mid-render and updated Loading's progress from
+  // inside this component's render.
+  const texture = useTexture(`/assets/${items[top].id}/hero.jpg`)
   const screens = useMemo(
     () => [createDreamScreen(null, { order: 0 }), createDreamScreen(null, { order: 1 })],
     []
@@ -119,12 +122,12 @@ function StackScreen({
 
   useEffect(() => {
     const shown = screens[front.current].material.uniforms.uTexture
-    if (shown.value === textures[top]) return
+    if (shown.value === texture) return
     // Unless nothing's showing yet, bring the new one in on the other screen.
     if (shown.value && opacity.current[front.current] > 0.01)
       front.current = 1 - front.current
-    screens[front.current].material.uniforms.uTexture.value = textures[top]
-  }, [screens, textures, top])
+    screens[front.current].material.uniforms.uTexture.value = texture
+  }, [screens, texture])
 
   useEffect(
     () => () => {
