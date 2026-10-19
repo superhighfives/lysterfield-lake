@@ -88,8 +88,10 @@ type Slot = {
   /** The dream this slot holds, or null when it's empty. */
   id: string | null
   ready: Promise<void> | null
-  /** Loaded, sought and playing along. */
+  /** Loaded, sought and playing along — or failed. */
   settled: boolean
+  /** Its video wouldn't load (missing, say). */
+  failed: boolean
   /** How far ahead (s) a seek aims: the last seek's duration. */
   lead: number
 }
@@ -128,6 +130,7 @@ function slots() {
       id: null,
       ready: null,
       settled: false,
+      failed: false,
       lead: SEEK_LEAD,
     }))
   return dreamVideo.slots
@@ -143,14 +146,17 @@ function empty(slot: Slot) {
   slot.id = null
   slot.ready = null
   slot.settled = false
+  slot.failed = false
 }
 
 /** Loads a dream into a slot and brings it to `time` (or wherever the main
  *  video is by then); resolves once it's there and can play. */
 function load(slot: Slot, dream: Dream, time: number) {
-  if (slot.id === dream.id && slot.ready) return slot.ready
+  // A failed one loads afresh: whatever stopped it may have passed.
+  if (slot.id === dream.id && slot.ready && !slot.failed) return slot.ready
   slot.id = dream.id
   slot.settled = false
+  slot.failed = false
   const el = slot.el
   el.src = `${dreamsUrl}/${dream.id}/dream${small()}.${extension}`
   el.load()
@@ -184,13 +190,14 @@ function load(slot: Slot, dream: Dream, time: number) {
     }
 
     // A dream that won't load (missing, say) mustn't leave the player
-    // waiting on it for good: it counts as settled, and the song plays on
-    // without it.
+    // waiting on it for good: it settles as failed, and whoever asked for
+    // it decides what to show instead.
     el.addEventListener(
       'error',
       () => {
         if (slot.id !== dream.id) return
         console.warn(`Dream video for ${dream.id} failed to load`, el.error)
+        slot.failed = true
         slot.settled = true
         resolve()
       },
@@ -204,26 +211,35 @@ function load(slot: Slot, dream: Dream, time: number) {
 }
 
 /** The first dream after the choose screen (or a resume): loaded straight
- *  into the front slot, at `time`. Resolves once it's ready to play. */
-export function startDream(dream: Dream, time: number) {
+ *  into the front slot, at `time`. Resolves once it's ready to play: true,
+ *  or false if its video wouldn't load. */
+export async function startDream(dream: Dream, time: number) {
   const [first, second] = slots()
   empty(second)
   dreamVideo.front = 0
   dreamVideo.mix = 0
-  return load(first, dream, time)
+  await load(first, dream, time)
+  return !(first.id === dream.id && first.failed)
 }
 
 /** Switches to another dream mid-song: the back slot loads it at the main
  *  video's time (if it isn't already warm there), then it becomes the
- *  front. Resolves once it's showing. */
+ *  front. Resolves once it's showing ('shown'); if its video wouldn't
+ *  load, the front's left as it was, still playing the last dream
+ *  ('failed'); or a later switch took over while it loaded ('superseded'). */
 export async function switchDream(dream: Dream, time: number) {
   const all = slots()
-  if (all[dreamVideo.front].id === dream.id) return
+  if (all[dreamVideo.front].id === dream.id) return 'shown'
   const back = 1 - dreamVideo.front
   await load(all[back], dream, time)
-  // Superseded by a later switch while this one loaded.
-  if (all[back].id !== dream.id) return
+  if (all[back].id !== dream.id) return 'superseded'
+  if (all[back].failed) {
+    empty(all[back])
+    return 'failed'
+  }
+
   dreamVideo.front = back
+  return 'shown'
 }
 
 /** Warms a dream in the back slot — the one a swap would bring next —

@@ -39,6 +39,7 @@ import {
   warmDream,
 } from '../utils/dream-video'
 import { adjacentDream } from '../utils/swap-dream'
+import { HistoryState, urlFor } from '../utils/use-history-sync'
 
 // If the dream video still isn't ready this long after asking — the first
 // one, or a switch — carry on anyway: play the main video (the polaroid
@@ -102,12 +103,17 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       const resumeTime = resume?.dreamId === dream.id ? resume.time : null
       // Split, the dream video loads alongside, from the same time, and the
       // main video waits for it — so the polaroid doesn't come in blank.
+      // If its video won't load, there's no dream to fall back to: back
+      // to the choose screen, as the home button does.
+      let failed = false
       const dreamReady = isSplit(dream)
         ? Promise.race([
             // Then the next one warms behind it (the card peeking out).
-            startDream(dream, resumeTime ?? 0).then(() =>
-              warmDream(adjacentDream(1))
-            ),
+            startDream(dream, resumeTime ?? 0).then((ok) => {
+              if (ok) return warmDream(adjacentDream(1))
+              failed = true
+              if (!cancelled) useStore.getState().setResetting(true)
+            }),
             new Promise((resolve) => setTimeout(resolve, DREAM_READY_TIMEOUT_MS)),
           ])
         : Promise.resolve()
@@ -140,7 +146,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
           }
         })
       dreamReady.then(() => {
-        if (!cancelled) play(true)
+        if (!cancelled && !failed) play(true)
       })
 
       return () => {
@@ -161,6 +167,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       if (!dream || !isSplit(dream) || loadedDream.current === dream.id) return
       // The main video's own load (above) handles a fresh one.
       if (loadedDream.current === null) return
+      const previous = loadedDream.current
       loadedDream.current = dream.id
 
       const { resume, setResume } = useStore.getState()
@@ -179,7 +186,26 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
         if (swapPhase === 'loading') setSwapPhase('in')
       }
 
-      switchDream(dream, time).then(() => {
+      switchDream(dream, time).then((result) => {
+        if (result === 'superseded') return
+        // Its video wouldn't load: the polaroid never left the last dream
+        // (still playing in sync), so the swap lands back on it.
+        if (result === 'failed') {
+          const { collection, setDream } = useStore.getState()
+          const fallback = collection.find((item) => item.id === previous)
+          if (fallback) {
+            loadedDream.current = fallback.id
+            history.replaceState(
+              { dream: fallback.id, t: el.currentTime } satisfies HistoryState,
+              '',
+              urlFor(fallback.id)
+            )
+            setDream(fallback)
+          }
+
+          return finish()
+        }
+
         finish()
         // The next one along, the way this swap went, warms behind.
         warmDream(adjacentDream(useStore.getState().swapDirection))
