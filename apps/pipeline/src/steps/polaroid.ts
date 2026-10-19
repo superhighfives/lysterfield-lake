@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
@@ -93,6 +93,7 @@ async function findLoop(job: Job, total: number, trim: number, blend: number): P
       candidates.push({ start, end, difference: difference / blend })
     }
   }
+  if (candidates.length === 0) throw new Error(`Only ${total - trim} frames after trimming; too short for a ${MIN_LOOP_SECONDS}s loop`)
   // The longest of the cuts nearly as good as the best: a few hundredths of a difference isn't worth a loop
   // that repeats twice as often.
   const lowest = Math.min(...candidates.map((c) => c.difference))
@@ -126,7 +127,10 @@ export async function polaroid(job: Job, opts: PolaroidOptions = {}): Promise<Po
   const loopPath = await videoPath(job, 'polaroid/loop', 'mp4')
   if (await exists(atlasPath)) {
     if (!(await exists(loopPath))) await flatten(atlasPath, loopPath)
-    return { atlasPath, loopPath, frames: total - trim - blend }
+    const loopJson = path.join(job.dir, 'polaroid', 'loop.json')
+    if (!(await exists(loopJson))) return { atlasPath, loopPath, frames: total - trim - blend }
+    const { blend: madeBlend, ...loop } = JSON.parse(await readFile(loopJson, 'utf8')) as Loop & { blend: number }
+    return { atlasPath, loopPath, frames: loop.end - loop.start + 1 - madeBlend, loop }
   }
 
   const loop = await findLoop(job, total, trim, blend)
