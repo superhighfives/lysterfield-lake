@@ -21,7 +21,10 @@ import {
 // its middle (LENS_CORE either side of centre, in short-side units), then
 // stretched progressively harder toward the long side's edges to fill it —
 // a wide, horizontal fisheye (vertical on a portrait screen) — and fades
-// to nothing over EDGE_FADE at all four edges. Colour near the pointer,
+// out as a broad vignette: a rounded (superellipse, FADE_ROUNDNESS) falloff
+// from FADE_START of the way out to nothing at the screen's edges. A narrow
+// band at the edges, as it was, left the image bright almost to the rim,
+// where it read as a hard rounded frame. Colour near the pointer,
 // grey beyond: GREY_NEAR to GREY_FAR from it (short-side units). Its
 // strength per scheme — additive in dark mode, so it lights the dark page;
 // a plain wash in light mode, where adding would just clip to white — and
@@ -30,7 +33,8 @@ import {
 const LENS_CORE = 0.3
 const GREY_NEAR = 0.2
 const GREY_FAR = 0.65
-const EDGE_FADE = 0.3
+const FADE_START = 0.4
+const FADE_ROUNDNESS = 2.5
 export const SCREEN_OPACITY = { light: 0.3, dark: 0.4 }
 const LIGHT_LIFT = { light: 0.45, dark: 0 }
 
@@ -82,9 +86,14 @@ const fragmentShader = (panels: number, panel: number) => /* glsl */ `
     vec3 image = panelAt(imageUv);
     vec3 color = mix(image, vec3(dot(image, vec3(0.299, 0.587, 0.114))), grey);
     color = mix(color, vec3(1.0), uLift);
-    // Fading out toward every edge, the same width on all four.
-    vec2 edge = extent * 0.5 - abs(p);
-    float fade = smoothstep(0.0, ${EDGE_FADE.toFixed(2)}, edge.x) * smoothstep(0.0, ${EDGE_FADE.toFixed(2)}, edge.y);
+    // The vignette: 0 at the centre, 1 at each edge's midpoint (beyond it
+    // in the corners).
+    vec2 reach = abs(p) / (extent * 0.5);
+    float out_ = pow(
+      pow(reach.x, ${FADE_ROUNDNESS.toFixed(1)}) + pow(reach.y, ${FADE_ROUNDNESS.toFixed(1)}),
+      ${(1 / FADE_ROUNDNESS).toFixed(3)}
+    );
+    float fade = 1.0 - smoothstep(${FADE_START.toFixed(2)}, 1.0, out_);
     gl_FragColor = vec4(color, uOpacity * fade);
   }
 `
