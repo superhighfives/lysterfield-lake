@@ -1,6 +1,5 @@
 import { Canvas, extend, type ThreeElement, useFrame } from '@react-three/fiber'
 import { shaderMaterial, useGLTF } from '@react-three/drei'
-import { useDrag } from '@use-gesture/react'
 import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { AlwaysDepth, AlwaysStencilFunc, Box3, DoubleSide, EqualStencilFunc, Group, LinearSRGBColorSpace, MathUtils, Mesh, type MeshStandardMaterial, ReplaceStencilOp, SphereGeometry, Vector2, Vector3, VideoTexture } from 'three'
@@ -15,13 +14,13 @@ import { Tasks } from './admin-tasks.tsx'
 // /admin/polaroid lists the polaroid jobs; ?job=<name> shows one job's stages, each paid one behind a
 // confirm with its cost, the queue's tasks for it, and, once made, the 3D polaroid: the job's looping
 // 5-panel atlas on the player's polaroid model, the person cut out by the matte and pushed forward by the
-// depth panel in front of the background. Drag to turn it.
+// depth panel in front of the background. It turns to follow the pointer.
 
 type Settings = { depth: number; outline: number; background: boolean }
-const DEFAULTS: Settings = { depth: 0.6, outline: 0.25, background: true }
+const DEFAULTS: Settings = { depth: 1, outline: 0.25, background: true }
 
-/** A drag turns the polaroid this far per pixel; let go and it eases back to its idle sway. */
-const DRAG_RADIANS = 0.008
+/** How far the polaroid turns toward the pointer, in radians, with the pointer at the viewer's edge. */
+const FOLLOW = { y: 0.6, x: 0.45 }
 
 /** The polaroid's photo window, from the model's own "inside" mesh: where the person's plane goes. */
 function usePhotoWindow() {
@@ -88,7 +87,7 @@ function useBowl(radius: number, depth: number) {
   }, [radius, depth])
 }
 
-function LoopPolaroid({ texture, settings, drag }: { texture: VideoTexture; settings: Settings; drag: { current: { x: number; y: number; active: boolean } } }) {
+function LoopPolaroid({ texture, settings, pointer }: { texture: VideoTexture; settings: Settings; pointer: { current: { x: number; y: number } } }) {
   const group = useRef<Group>(null)
   const photoWindow = useRef<Mesh>(null)
   const photo = usePhotoWindow()
@@ -117,12 +116,12 @@ function LoopPolaroid({ texture, settings, drag }: { texture: VideoTexture; sett
     // window and the box behind it stay lined up.
     polaroidBend.value.set(0, 0)
     const t = state.clock.elapsedTime
-    const d = drag.current
-    // Idle: a slow sway, nudged by the pointer. Dragging: wherever the drag puts it.
-    const targetY = d.active ? d.x : Math.sin(t * 0.5) * 0.25 + state.pointer.x * 0.2
-    const targetX = d.active ? d.y : Math.sin(t * 0.37) * 0.08 - state.pointer.y * 0.15
-    g.rotation.y = MathUtils.damp(g.rotation.y, targetY, d.active ? 20 : 3, delta)
-    g.rotation.x = MathUtils.damp(g.rotation.x, targetX, d.active ? 20 : 3, delta)
+    // A slow sway, turned toward the pointer.
+    const p = pointer.current
+    const targetY = Math.sin(t * 0.5) * 0.12 + p.x * FOLLOW.y
+    const targetX = Math.sin(t * 0.37) * 0.05 - p.y * FOLLOW.x
+    g.rotation.y = MathUtils.damp(g.rotation.y, targetY, 4, delta)
+    g.rotation.x = MathUtils.damp(g.rotation.x, targetX, 4, delta)
   })
 
   return (
@@ -543,28 +542,36 @@ function Viewer({ job }: { job: string }) {
   const [settings, setSettings] = useState(DEFAULTS)
   const dark = useStore((state) => state.colorScheme === 'dark')
   const { texture, error } = useAtlas(job)
-  const drag = useRef({ x: 0, y: 0, active: false })
+  // The pointer anywhere on the page, relative to the viewer: 0 at its centre, 1 at its edges, held a little
+  // past them, so the card keeps following as you move around the page.
+  const area = useRef<HTMLDivElement>(null)
+  const pointer = useRef({ x: 0, y: 0 })
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      const r = area.current?.getBoundingClientRect()
+      if (!r) return
+      pointer.current = {
+        x: MathUtils.clamp(((e.clientX - r.left) / r.width) * 2 - 1, -1.5, 1.5),
+        y: MathUtils.clamp(1 - ((e.clientY - r.top) / r.height) * 2, -1.5, 1.5),
+      }
+    }
 
-  const bind = useDrag(({ active, movement: [mx, my], memo }) => {
-    // Start from wherever the polaroid is when the drag begins, so it doesn't jump.
-    const start = (memo as { x: number; y: number } | undefined) ?? { x: drag.current.x, y: drag.current.y }
-    drag.current = { x: start.x + mx * DRAG_RADIANS, y: MathUtils.clamp(start.y + my * DRAG_RADIANS, -0.9, 0.9), active }
-    if (!active) drag.current = { x: 0, y: 0, active: false }
-    return start
-  })
+    window.addEventListener('pointermove', move)
+    return () => window.removeEventListener('pointermove', move)
+  }, [])
 
   const set = (patch: Partial<Settings>) => setSettings((s) => ({ ...s, ...patch }))
 
   return (
     <div className="relative h-[70vh] overflow-hidden rounded-lg border border-stone-300 bg-stone-200/50 dark:border-stone-700 dark:bg-stone-900/50">
-      <div {...bind()} className="absolute inset-0 cursor-grab touch-none active:cursor-grabbing">
+      <div ref={area} className="absolute inset-0">
         <Canvas camera={{ position: [0, 0, 6], fov: 35 }} dpr={[1, 2]} gl={{ stencil: true }}>
           <ambientLight intensity={dark ? 1.0 : 1.1} />
           <directionalLight position={[2, 3, 5]} intensity={dark ? 1.2 : 1.6} />
-          <Suspense fallback={null}>{texture && <LoopPolaroid texture={texture} settings={settings} drag={drag} />}</Suspense>
+          <Suspense fallback={null}>{texture && <LoopPolaroid texture={texture} settings={settings} pointer={pointer} />}</Suspense>
         </Canvas>
       </div>
-      <p className="pointer-events-none absolute left-4 top-3 text-sm text-stone-600 dark:text-stone-400">{error || (texture ? 'Drag to turn it.' : 'Loading…')}</p>
+      <p className="pointer-events-none absolute left-4 top-3 text-sm text-stone-600 dark:text-stone-400">{error || (texture ? 'Move the pointer to turn it.' : 'Loading…')}</p>
       <div className="absolute bottom-4 left-4 w-72 space-y-3 rounded-lg border border-stone-300 bg-white/85 p-4 text-sm backdrop-blur dark:border-stone-700 dark:bg-stone-900/85">
         <label className="flex items-center gap-2">
           <span className="w-16">Depth</span>
