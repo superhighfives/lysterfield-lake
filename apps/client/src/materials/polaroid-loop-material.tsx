@@ -125,6 +125,7 @@ export const PolaroidLoopMaterial = shaderMaterial(
     uniform float uOutline;
     uniform vec2 uHalf;
     uniform float uCameraDistance;
+    uniform float uTubSquareness;
 
     ${shared}
 
@@ -134,7 +135,7 @@ export const PolaroidLoopMaterial = shaderMaterial(
         vec2 seen = vPosition.xy * uCameraDistance / (uCameraDistance - vPosition.z) / uHalf;
         vec3 color = panel(${POLAROID_PANEL.background.toFixed(1)}, vec2(tubUv(seen.x), tubUv(seen.y))).rgb;
         // Darker toward the rim, as the inside of a tub is: measured in the tub's own rounded-rectangle shape.
-        float rim = smoothstep(0.75, 1.5, pow(pow(abs(seen.x), 6.0) + pow(abs(seen.y), 6.0), 1.0 / 6.0));
+        float rim = smoothstep(0.75, 1.5, pow(pow(abs(seen.x), uTubSquareness) + pow(abs(seen.y), uTubSquareness), 1.0 / uTubSquareness));
         gl_FragColor = vec4(color * mix(1.0, 0.78, rim), 1.0);
         return;
       }

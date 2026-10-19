@@ -72,6 +72,13 @@ declare module '@react-three/fiber' {
   }
 }
 
+/** How far past the window the tub's rim reaches, as a multiple of its half-size. */
+const TUB_REACH = 1.35
+/** How square the tub's corners are: 2 is an ellipse, higher is closer to a rectangle. */
+const TUB_SQUARENESS = 6
+/** How flat its floor is: 2 is a half-ellipse profile, higher keeps the floor flat and curves only near the walls. */
+const TUB_FLATNESS = 4
+
 /**
  * The tub the background lines: a rounded rectangle (a superellipse, the window's own shape) behind the window,
  * opening toward the viewer, with a mostly flat floor that curves up into its walls. Its rim sits a little
@@ -79,12 +86,6 @@ declare module '@react-three/fiber' {
  * The geometry is in the window's own frame (centre at the origin, window at z 0), which the material reads to
  * work out how each point looks face-on.
  */
-const TUB_REACH = 1.35
-/** How square the tub's corners are: 2 is an ellipse, higher is closer to a rectangle. */
-const TUB_SQUARENESS = 6
-/** How flat its floor is: 2 is a half-ellipse profile, higher keeps the floor flat and curves only near the walls. */
-const TUB_FLATNESS = 4
-
 function useTub(half: { x: number; y: number }, depth: number) {
   return useMemo(() => {
     const around = 160
@@ -167,7 +168,7 @@ function LoopPolaroid({ texture, settings, pointer }: { texture: VideoTexture; s
         {/* The tub the background lines. */}
         <mesh geometry={tub} renderOrder={2}>
           {settings.background ? (
-            <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={2} uHalf={half} uCameraDistance={CAMERA_DISTANCE} uBand={BAND} transparent={false} side={DoubleSide} {...IN_THE_BOX} />
+            <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={2} uHalf={half} uTubSquareness={TUB_SQUARENESS} uCameraDistance={CAMERA_DISTANCE} uBand={BAND} transparent={false} side={DoubleSide} {...IN_THE_BOX} />
           ) : (
             <meshBasicMaterial color={dark ? PLAIN.dark : PLAIN.light} side={DoubleSide} {...IN_THE_BOX} />
           )}
