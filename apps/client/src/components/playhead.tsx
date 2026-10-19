@@ -463,9 +463,9 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                 via ref: it's not a React-known DOM attribute. */}
             <div
               ref={(el) => el?.setAttribute('noautohide', '')}
-              className="flex flex-col xs:flex-row w-[calc(100vw-4rem)] max-w-[400px] left-4 right-4 xs:space-x-3 items-center"
+              className="flex flex-col xs:flex-row w-full h-full xs:space-x-3 items-center"
             >
-              <div className="flex self-stretch justify-center border-b xs:border-r xs:border-b-0 border-yellow-500">
+              <div className="flex flex-1 xs:flex-none self-stretch items-center justify-center border-b xs:border-r xs:border-b-0 border-yellow-500">
                 <Footer />
                 <div className="group flex relative">
                   <MediaMuteButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 py-2 xs:px-2 xs:py-1">
@@ -514,10 +514,10 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                   <Tooltip text={videoPlaying ? 'Pause' : 'Play'} placement="below" />
                 </div>
               </div>
-              <div className="flex w-full gap-2 items-center pl-3 xs:pl-0 pr-3 py-2 xs:py-1">
-                <MediaTimeDisplay className="font-mono text-xs" />
+              <div className="flex flex-1 w-full xs:w-auto min-w-0 gap-2 items-center pl-3 xs:pl-0 pr-4 py-2 xs:py-1">
+                <MediaTimeDisplay className="font-mono text-xs [--media-control-padding:4px]" />
                 <MediaTimeRange
-                  className="grow h-4
+                  className="grow min-w-0 h-4
                     [&::part(track)]:bg-slate-300/40 dark:[&::part(track)]:bg-stone-600/40 [&::part(track)]:rounded-full [&::part(track)]:h-2
                     [&::part(buffered)]:bg-slate-300/60 dark:[&::part(buffered)]:bg-stone-500/60 [&::part(buffered)]:rounded-full
                     [&::part(progress)]:bg-yellow-400 [&::part(progress)]:rounded-full

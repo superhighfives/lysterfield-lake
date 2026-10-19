@@ -7,12 +7,12 @@ function Tooltip({
 }) {
   const position =
     placement === 'above'
-      ? '-translate-y-[calc(50%_+_22px)] top-0 left-0'
+      ? 'bottom-full mb-1 left-1/2 -translate-x-1/2'
       : 'top-full mt-1 left-1/2 -translate-x-1/2'
 
   return (
     <div
-      className={`group-hover:opacity-100 whitespace-nowrap text-yellow-800 font-sans transition opacity-0 bg-yellow-400 text-sm px-2 py-1 rounded absolute pointer-events-none ${position}`}
+      className={`group-hover:opacity-100 whitespace-nowrap text-yellow-900 font-mono uppercase tracking-widest text-[10px] leading-none transition opacity-0 bg-yellow-400 px-1.5 py-1 rounded-sm absolute z-50 pointer-events-none ${position}`}
     >
       {text}
     </div>
