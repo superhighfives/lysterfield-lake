@@ -1,3 +1,4 @@
+import type { MutableRefObject } from 'react'
 import { MathUtils, Object3D } from 'three'
 import type { Dream } from '../../utils/types'
 
@@ -9,6 +10,9 @@ import type { Dream } from '../../utils/types'
 export type CarouselProps = {
   items: Dream[]
   onSelect: (dream: Dream) => void
+  /** 0-1: how far the choose screen's in view, for what's drawn in
+   *  screen space rather than with the pile (its dream screen). */
+  presence: MutableRefObject<number>
 }
 
 /** A stable pseudo-random value in [0, 1) for card `i` and stream `k`, so

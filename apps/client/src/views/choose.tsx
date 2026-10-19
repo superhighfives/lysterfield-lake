@@ -273,7 +273,11 @@ function Choose(props: ThreeElements['group']) {
         position={polaroidPosition as unknown as Vector3}
         scale={carouselScale}
       >
-        <Stack items={collection} onSelect={setDream} />
+        <Stack
+          items={collection}
+          onSelect={setDream}
+          presence={polaroidVisibilityRef}
+        />
       </animated.group>
     </group>
   )

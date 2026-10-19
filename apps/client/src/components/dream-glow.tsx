@@ -1,22 +1,15 @@
 import { MutableRefObject, useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import {
-  AdditiveBlending,
-  Color,
-  Mesh,
-  CustomBlending,
-  OneFactor,
-  OneMinusSrcAlphaFactor,
-  SrcAlphaFactor,
-  PlaneGeometry,
-  ShaderMaterial,
-  Texture,
-  Vector2,
-} from 'three'
+import { Color, Texture } from 'three'
 import { useStore } from '../store'
+import {
+  SCREEN_OPACITY,
+  createDreamScreen,
+  setScreenScheme,
+} from '../materials/dream-screen'
 
 // The dream behind everything, like a cinema screen: the dream panel
-// filling the whole screen, fixed there whatever the camera does. And its
+// filling the whole screen (materials/dream-screen.ts). And its
 // colour pooling faintly in the page's bowl (see --dream-tint in
 // index.css): the dream panel (7 of the composite video) is drawn into a
 // tiny canvas a few times a second and averaged, and the tint eases toward
@@ -26,25 +19,6 @@ import { useStore } from '../store'
 // shown colour eases toward it.
 const SAMPLE_MS = 250
 const EASE = 0.04
-// The screen: the dream's square fills the screen's short side, true to
-// shape across its middle (LENS_CORE either side of centre, in short-side
-// units), then stretched progressively harder toward the long side's
-// edges to fill it — a wide, horizontal fisheye (vertical on a portrait
-// screen). Colour near the pointer, grey beyond: GREY_NEAR to GREY_FAR from
-// it (short-side units). Its strength per scheme — additive in dark mode,
-// so it lights the dark page; a plain wash in light mode, where adding
-// would just clip to white.
-const LENS_CORE = 0.3
-const GREY_NEAR = 0.2
-const GREY_FAR = 0.65
-// The screen fades to nothing over this much (short-side units) at all
-// four edges.
-const EDGE_FADE = 0.3
-const GLOW_OPACITY = { light: 0.3, dark: 0.4 }
-// In light mode the dream is lifted this far toward white first, so the
-// wash stays light rather than greying the page; the wake's swells are
-// the darker element there (components/wake-pass.tsx).
-const LIGHT_LIFT = { light: 0.45, dark: 0 }
 // The page tint's strength per scheme. Its colour is pushed toward full
 // saturation first, so a pale dream still tints.
 const TINT_ALPHA = { light: 0.15, dark: 0.1 }
@@ -61,63 +35,6 @@ const DREAM_PANEL = 7
 // Scratch objects for the per-frame tint maths.
 const scratchHsl = { h: 0, s: 0, l: 0 }
 const scratchColor = new Color()
-
-// Straight to clip space: the quad covers the screen wherever its mesh is.
-const vertexShader = /* glsl */ `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = vec4(position.xy * 2.0, 0.0, 1.0);
-  }
-`
-
-// The dream panel through the lens (above) — in colour or grey, its own
-// grey, not the photo's grey portrait background (panel 3), which has
-// hard-edged regions.
-const fragmentShader = /* glsl */ `
-  varying vec2 vUv;
-  uniform sampler2D uTexture;
-  uniform float uOpacity;
-  uniform float uAspect;
-  uniform float uLift;
-  uniform vec2 uPointerRelative;
-
-  vec3 panelAt(float panel, vec2 uv) {
-    float x = clamp(uv.x, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
-    return texture2D(uTexture, vec2((x + panel - 1.0) / ${PANELS.toFixed(1)}, clamp(uv.y, 0.0, 1.0))).rgb;
-  }
-
-  // x: short-side units from the centre, out to halfExtent at the screen's
-  // edge. Returns the dream's own coordinate, -0.5 to 0.5: true to shape
-  // within the core, and beyond it easing out — ever more stretched — to
-  // reach the dream's edge exactly at the screen's.
-  float lens(float x, float halfExtent) {
-    float a = abs(x);
-    float core = min(${LENS_CORE.toFixed(2)}, halfExtent);
-    if (a <= core) return x;
-    float span = halfExtent - core;
-    float room = 0.5 - core;
-    float r = clamp((a - core) / span, 0.0, 1.0);
-    float q = max(span / room, 1.0);
-    return sign(x) * (core + room * (1.0 - pow(1.0 - r, q)));
-  }
-
-  void main() {
-    vec2 extent = vec2(max(uAspect, 1.0), max(1.0 / uAspect, 1.0));
-    vec2 p = (vUv - 0.5) * extent;
-    vec2 dreamUv = 0.5 + vec2(lens(p.x, extent.x * 0.5), lens(p.y, extent.y * 0.5));
-
-    vec2 pointer = (uPointerRelative / 2.0 - 0.5) * extent;
-    float grey = smoothstep(${GREY_NEAR.toFixed(2)}, ${GREY_FAR.toFixed(2)}, distance(p, pointer));
-    vec3 dream = panelAt(${DREAM_PANEL.toFixed(1)}, dreamUv);
-    vec3 color = mix(dream, vec3(dot(dream, vec3(0.299, 0.587, 0.114))), grey);
-    color = mix(color, vec3(1.0), uLift);
-    // Fading out toward every edge, the same width on all four.
-    vec2 edge = extent * 0.5 - abs(p);
-    float fade = smoothstep(0.0, ${EDGE_FADE.toFixed(2)}, edge.x) * smoothstep(0.0, ${EDGE_FADE.toFixed(2)}, edge.y);
-    gl_FragColor = vec4(color, uOpacity * fade);
-  }
-`
 
 function DreamGlow({
   video,
@@ -151,51 +68,22 @@ function DreamGlow({
   const dreamSince = useRef(0)
   const hasSample = useRef(false)
   const presenceRef = useRef(0)
-  const material = useMemo(
-    () =>
-      new ShaderMaterial({
-        vertexShader,
-        fragmentShader,
-        uniforms: {
-          uTexture: { value: texture },
-          uOpacity: { value: 0 },
-          uAspect: { value: 1 },
-          uLift: { value: 0 },
-          uPointerRelative: { value: new Vector2(1, 1) },
-        },
-        // Not in the transparent pass, so with the lowest renderOrder it
-        // draws first, behind everything, blending onto the clear page.
-        transparent: false,
-        depthTest: false,
-        depthWrite: false,
-        toneMapped: false,
-      }),
+  // The composite video's dream panel, as the screen behind everything
+  // (materials/dream-screen.ts).
+  const screen = useMemo(
+    () => createDreamScreen(texture, { panels: PANELS, panel: DREAM_PANEL }),
     [texture]
   )
+  const { material } = screen
+  useEffect(
+    () => () => {
+      screen.mesh.geometry.dispose()
+      material.dispose()
+    },
+    [screen, material]
+  )
 
-  // Drawn first (see transparent above), in screen space, so never culled
-  // and never in the way of the pointer.
-  const screen = useMemo(() => {
-    const mesh = new Mesh(new PlaneGeometry(), material)
-    mesh.renderOrder = -1000
-    mesh.frustumCulled = false
-    mesh.raycast = () => {}
-
-    return mesh
-  }, [material])
-  useEffect(() => () => screen.geometry.dispose(), [screen])
-
-  useEffect(() => {
-    // Light mode's wash is normal blending spelled out: three.js skips
-    // NormalBlending on a material outside the transparent pass.
-    material.blending = scheme === 'dark' ? AdditiveBlending : CustomBlending
-    material.blendSrc = SrcAlphaFactor
-    material.blendDst = OneMinusSrcAlphaFactor
-    material.blendSrcAlpha = OneFactor
-    material.blendDstAlpha = OneMinusSrcAlphaFactor
-    material.uniforms.uLift.value = LIGHT_LIFT[scheme]
-    material.needsUpdate = true
-  }, [material, scheme])
+  useEffect(() => setScreenScheme(material, scheme), [material, scheme])
 
   // No dream, no tint.
   useEffect(() => {
@@ -260,7 +148,7 @@ function DreamGlow({
     presenceRef.current += (goal - presenceRef.current) * PRESENCE_EASE
     const presence = presenceRef.current * fade.current
 
-    material.uniforms.uOpacity.value = GLOW_OPACITY[scheme] * presence
+    material.uniforms.uOpacity.value = SCREEN_OPACITY[scheme] * presence
     // The pointer as the polaroid's photo sees it (set by main.tsx).
     material.uniforms.uPointerRelative.value = useStore.getState().globalPointer
 
@@ -284,7 +172,7 @@ function DreamGlow({
   })
 
   return (
-    <primitive object={screen} />
+    <primitive object={screen.mesh} />
   )
 }
 
