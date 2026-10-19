@@ -81,6 +81,9 @@ with `"kind": "polaroid"` in `job.json`: 5 seconds, panels 2-6 only, no dream. I
 `apps/client/src/materials/polaroid-loop-material.tsx`. It isn't the player's 7-panel atlas, so the rule
 above doesn't apply to it, and changing one doesn't change the other.
 
+- Moderation lives in `job.json`'s `review`: `submitted` → `approved` (to make) → `shown` (to show), or
+  `rejected`. The admin refuses to run any polaroid stage unless it's `approved`, so a visitor's clip
+  costs nothing until a person has looked at it. Delete only works on polaroid jobs, never a song's.
 - Panels 2, 4, 5 and 6 come from one model, `models/polaroid`, on the `lysterfield-polaroid` Replicate
   deployment (`polaroid-run`, about $1.90 a loop). Polaroid generation runs on Replicate only, never on
   the 4090 PC.

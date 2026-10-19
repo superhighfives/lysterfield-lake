@@ -1,12 +1,12 @@
-import { Canvas, useFrame } from '@react-three/fiber'
-import { useGLTF } from '@react-three/drei'
+import { Canvas, extend, type ThreeElement, useFrame } from '@react-three/fiber'
+import { shaderMaterial, useGLTF } from '@react-three/drei'
 import { useDrag } from '@use-gesture/react'
 import { AlertDialog } from '@base-ui/react/alert-dialog'
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Box3, Group, LinearSRGBColorSpace, MathUtils, Mesh, Vector3, VideoTexture } from 'three'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { AlwaysDepth, AlwaysStencilFunc, Box3, BufferGeometry, Color, DoubleSide, EqualStencilFunc, Float32BufferAttribute, Group, LinearSRGBColorSpace, MathUtils, Mesh, type MeshStandardMaterial, ReplaceStencilOp, Vector3, VideoTexture } from 'three'
 import ThemeToggle from '../components/theme-toggle.tsx'
-import { PolaroidLoopMaterial, type PolaroidLoopMaterialProps } from '../materials/polaroid-loop-material.tsx'
-import Polaroid from '../models/polaroid.tsx'
+import { PolaroidLoopMaterial } from '../materials/polaroid-loop-material.tsx'
+import Polaroid, { polaroidBend } from '../models/polaroid.tsx'
 import { useStore } from '../store.ts'
 import { active, api, jobFile, type Task } from './admin-api.ts'
 import { Tasks } from './admin-tasks.tsx'
@@ -18,7 +18,7 @@ import { Tasks } from './admin-tasks.tsx'
 // depth panel in front of the background. Drag to turn it.
 
 type Settings = { depth: number; outline: number; background: boolean }
-const DEFAULTS: Settings = { depth: 0.2, outline: 0.25, background: true }
+const DEFAULTS: Settings = { depth: 0.6, outline: 0.25, background: true }
 
 /** A drag turns the polaroid this far per pixel; let go and it eases back to its idle sway. */
 const DRAG_RADIANS = 0.008
@@ -32,14 +32,92 @@ function usePhotoWindow() {
   }, [nodes])
 }
 
+/**
+ * The photo as a window into a shallow box. The window draws nothing: it marks the stencil and resets the
+ * depth behind it to "far", so the box can sit behind the card (which would otherwise hide it) and still
+ * depth-test against itself. The box has a back (the background), four walls that are edge-on face-on and
+ * come into view as the card turns, and the person standing partway in, their depth relief bringing them up
+ * toward the glass. Nothing shows outside the window, and the frame's own overlay (its soft inner shadow)
+ * is drawn last, over all of it, like the edge of a print.
+ */
+const SCALE = 0.5
+/** How far back the background sits, in the model's units (the card is 3.66 wide). */
+const BOX_DEPTH = 1.6
+/** Where the person stands, as a fraction of the box's depth; the relief brings them up from here. */
+const PERSON_DEPTH = 0.6
+/** The camera's distance in the model's units (camera at z 6, card scaled by SCALE). */
+const CAMERA_DISTANCE = 6 / SCALE
+/** The walls' colour at the window and at the back, by theme. */
+const WALL = { light: ['#ece7df', '#9c968b'], dark: ['#2b2826', '#100f0e'] }
+
+const STENCIL = { stencilWrite: true, stencilRef: 1 }
+const IN_THE_BOX = { ...STENCIL, stencilFunc: EqualStencilFunc }
+
+/** The window: stencil 1 wherever it's seen from the front, and depth reset to the far plane there. */
+const WindowMaterial = shaderMaterial(
+  {},
+  /* glsl */ `void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  /* glsl */ `void main() { gl_FragColor = vec4(0.0); gl_FragDepth = 1.0; }`
+)
+extend({ WindowMaterial })
+declare module '@react-three/fiber' {
+  interface ThreeElements {
+    windowMaterial: ThreeElement<typeof WindowMaterial>
+  }
+}
+
+/** The box's four walls, from the window's edges back to the (larger) back, lighter at the window. */
+function useWalls(front: { x: number; y: number }, back: { x: number; y: number }, depth: number, colors: string[]) {
+  return useMemo(() => {
+    const [near, far] = colors.map((c) => new Color(c))
+    const f = [[-front.x, -front.y], [front.x, -front.y], [front.x, front.y], [-front.x, front.y]]
+    const b = [[-back.x, -back.y], [back.x, -back.y], [back.x, back.y], [-back.x, back.y]]
+    const positions: number[] = []
+    const vertexColors: number[] = []
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) % 4
+      const quad: [number[], number, Color][] = [[f[i], 0, near], [f[j], 0, near], [b[j], -depth, far], [f[i], 0, near], [b[j], -depth, far], [b[i], -depth, far]]
+      for (const [[x, y], z, color] of quad) {
+        positions.push(x, y, z)
+        vertexColors.push(color.r, color.g, color.b)
+      }
+    }
+
+    const geometry = new BufferGeometry()
+    geometry.setAttribute('position', new Float32BufferAttribute(positions, 3))
+    geometry.setAttribute('color', new Float32BufferAttribute(vertexColors, 3))
+    return geometry
+  }, [front.x, front.y, back.x, back.y, depth, colors])
+}
+
 function LoopPolaroid({ texture, settings, drag }: { texture: VideoTexture; settings: Settings; drag: { current: { x: number; y: number; active: boolean } } }) {
   const group = useRef<Group>(null)
-  const background = useRef<PolaroidLoopMaterialProps>(null)
+  const photoWindow = useRef<Mesh>(null)
   const photo = usePhotoWindow()
+  const dark = useStore((state) => state.colorScheme === 'dark')
+
+  // Each layer is sized so that, face-on, it exactly fills the window: perspective shrinks what's further back.
+  const fill = (depth: number) => ({ x: (photo.size.x / 2) * ((CAMERA_DISTANCE + depth) / CAMERA_DISTANCE), y: (photo.size.y / 2) * ((CAMERA_DISTANCE + depth) / CAMERA_DISTANCE) })
+  const personDepth = BOX_DEPTH * PERSON_DEPTH
+  const back = fill(BOX_DEPTH)
+  const person = fill(personDepth)
+  const walls = useWalls({ x: photo.size.x / 2, y: photo.size.y / 2 }, back, BOX_DEPTH, dark ? WALL.dark : WALL.light)
+
+  useEffect(() => {
+    // The window marks the stencil after the opaque card and before the box; the frame's overlay (its inner
+    // shadow) goes last, over everything.
+    if (photoWindow.current) photoWindow.current.renderOrder = 1
+    group.current?.traverse((object) => {
+      if (object instanceof Mesh && (object.material as MeshStandardMaterial).name === 'Material.001') object.renderOrder = 4
+    })
+  }, [])
 
   useFrame((state, delta) => {
     const g = group.current
     if (!g) return
+    // The player bends the shared polaroid as it moves (models/polaroid.tsx); this view keeps it flat, so the
+    // window and the box behind it stay lined up.
+    polaroidBend.value.set(0, 0)
     const t = state.clock.elapsedTime
     const d = drag.current
     // Idle: a slow sway, nudged by the pointer. Dragging: wherever the drag puts it.
@@ -47,26 +125,33 @@ function LoopPolaroid({ texture, settings, drag }: { texture: VideoTexture; sett
     const targetX = d.active ? d.y : Math.sin(t * 0.37) * 0.08 - state.pointer.y * 0.15
     g.rotation.y = MathUtils.damp(g.rotation.y, targetY, d.active ? 20 : 3, delta)
     g.rotation.x = MathUtils.damp(g.rotation.x, targetX, d.active ? 20 : 3, delta)
-    if (background.current) background.current.uParallax.set(-g.rotation.y * 0.12, g.rotation.x * 0.12)
   })
 
-  const scale = 0.5
   return (
-    <group ref={group} scale={scale}>
+    <group ref={group} scale={SCALE}>
       <Polaroid
-        passthroughMaterial={
-          settings.background ? (
-            <polaroidLoopMaterial ref={background} key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={0} />
-          ) : (
-            <meshBasicMaterial color="#d9d4cc" />
-          )
-        }
+        intersectRef={photoWindow as RefObject<Mesh>}
+        passthroughMaterial={<windowMaterial colorWrite={false} depthFunc={AlwaysDepth} {...STENCIL} stencilFunc={AlwaysStencilFunc} stencilZPass={ReplaceStencilOp} />}
       />
-      {/* The person: a finely divided plane over the photo window, so the depth relief has vertices to move. */}
-      <mesh position={[photo.center.x, photo.center.y, photo.front + 0.02]}>
-        <planeGeometry args={[photo.size.x, photo.size.y, 192, 192]} />
-        <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={1} uDepthStrength={settings.depth / scale} uOutline={settings.outline} depthWrite={false} />
-      </mesh>
+      <group position={[photo.center.x, photo.center.y, photo.front]}>
+        {/* The walls, then the back of the box. */}
+        <mesh geometry={walls} renderOrder={2}>
+          <meshBasicMaterial vertexColors side={DoubleSide} toneMapped={false} {...IN_THE_BOX} />
+        </mesh>
+        <mesh position={[0, 0, -BOX_DEPTH]} renderOrder={2}>
+          <planeGeometry args={[back.x * 2, back.y * 2]} />
+          {settings.background ? (
+            <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={0} transparent={false} {...IN_THE_BOX} />
+          ) : (
+            <meshBasicMaterial color={dark ? WALL.dark[1] : WALL.light[0]} {...IN_THE_BOX} />
+          )}
+        </mesh>
+        {/* The person: finely divided, so the depth relief has vertices to move. */}
+        <mesh position={[0, 0, -personDepth]} renderOrder={3}>
+          <planeGeometry args={[person.x * 2, person.y * 2, 192, 192]} />
+          <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={1} uDepthStrength={settings.depth * personDepth} uOutline={settings.outline} {...IN_THE_BOX} />
+        </mesh>
+      </group>
     </group>
   )
 }
@@ -109,10 +194,12 @@ function useAtlas(job: string) {
 }
 
 type Stage = { done: boolean; frames?: number }
+type Review = 'submitted' | 'approved' | 'shown' | 'rejected'
 type PolaroidJob = {
   name: string
   frames: number
   fps: number
+  review: Review
   stages: { panels: Stage; background: Stage; atlas: Stage }
   cost?: { panels: string; background: string }
 }
@@ -130,22 +217,29 @@ const STAGES = [
 
 const BUTTON = 'rounded bg-stone-900 dark:bg-stone-100 px-3 py-1.5 text-sm font-medium text-white dark:text-stone-900 disabled:opacity-40'
 const SECONDARY = 'rounded border border-stone-300 dark:border-stone-700 px-3 py-1.5 text-sm hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-40'
+const DANGER = 'rounded border border-red-300 dark:border-red-900 px-3 py-1.5 text-sm text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-40'
 
-/** A paid step's button: says what it costs and asks before spending it. */
-function SpendButton({ label, cost, what, disabled, onConfirm }: { label: string; cost: string; what: string; disabled?: boolean; onConfirm: () => void }) {
+/** A button that asks first: for spending money, or for something that can't be undone. */
+function ConfirmButton({ label, title, body, confirm, className = BUTTON, disabled, onConfirm }: {
+  label: string
+  title: string
+  body: string
+  confirm: string
+  className?: string
+  disabled?: boolean
+  onConfirm: () => void
+}) {
   const [open, setOpen] = useState(false)
   return (
     <AlertDialog.Root open={open} onOpenChange={setOpen}>
-      <AlertDialog.Trigger disabled={disabled} className={BUTTON}>
-        {label} ({cost})
+      <AlertDialog.Trigger disabled={disabled} className={className}>
+        {label}
       </AlertDialog.Trigger>
       <AlertDialog.Portal>
         <AlertDialog.Backdrop className="fixed inset-0 z-40 bg-stone-900/40 dark:bg-black/60" />
         <AlertDialog.Popup className="fixed left-1/2 top-1/2 z-50 w-[min(30rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white dark:bg-stone-900 p-6 font-sans text-stone-900 dark:text-stone-100 shadow-xl [color-scheme:light] dark:[color-scheme:dark] [touch-action:auto]">
-          <AlertDialog.Title className="font-serif text-2xl">Spend about {cost}?</AlertDialog.Title>
-          <AlertDialog.Description className="mt-2 text-sm text-stone-600 dark:text-stone-400">
-            {what} It runs on Replicate. Finished work isn&apos;t paid for twice if it&apos;s run again, but what has run is spent.
-          </AlertDialog.Description>
+          <AlertDialog.Title className="font-serif text-2xl">{title}</AlertDialog.Title>
+          <AlertDialog.Description className="mt-2 text-sm text-stone-600 dark:text-stone-400">{body}</AlertDialog.Description>
           <div className="mt-5 flex justify-end gap-2">
             <AlertDialog.Close className={SECONDARY}>Cancel</AlertDialog.Close>
             <button
@@ -154,14 +248,28 @@ function SpendButton({ label, cost, what, disabled, onConfirm }: { label: string
                 setOpen(false)
                 onConfirm()
               }}
-              className={BUTTON}
+              className={className === DANGER ? 'rounded bg-red-700 px-3 py-1.5 text-sm font-medium text-white' : BUTTON}
             >
-              Spend {cost} and start
+              {confirm}
             </button>
           </div>
         </AlertDialog.Popup>
       </AlertDialog.Portal>
     </AlertDialog.Root>
+  )
+}
+
+/** A paid step's button: says what it costs and asks before spending it. */
+function SpendButton({ label, cost, what, disabled, onConfirm }: { label: string; cost: string; what: string; disabled?: boolean; onConfirm: () => void }) {
+  return (
+    <ConfirmButton
+      label={`${label} (${cost})`}
+      title={`Spend about ${cost}?`}
+      body={`${what} It runs on Replicate. Finished work isn't paid for twice if it's run again, but what has run is spent.`}
+      confirm={`Spend ${cost} and start`}
+      disabled={disabled}
+      onConfirm={onConfirm}
+    />
   )
 }
 
@@ -179,7 +287,17 @@ function Page({ children }: { children: ReactNode }) {
   )
 }
 
-const progress = (job: PolaroidJob) => STAGES.filter((s) => job.stages[s.key].done).length
+/** Where a polaroid is, for people: its review and, once approved, whether it's been made. */
+function standing(job: PolaroidJob) {
+  if (job.review === 'rejected') return { group: 'Rejected', label: 'Rejected', tone: 'text-red-700 dark:text-red-400' }
+  if (job.review === 'shown') return { group: 'Shown', label: 'Shown', tone: 'text-emerald-700 dark:text-emerald-400' }
+  if (job.review === 'submitted') return { group: 'To review', label: 'Waiting for approval to make', tone: 'text-amber-700 dark:text-amber-400' }
+  if (job.stages.atlas.done) return { group: 'Ready to show', label: 'Made: waiting for approval to show', tone: 'text-amber-700 dark:text-amber-400' }
+  const done = STAGES.filter((s) => job.stages[s.key].done).length
+  return { group: 'Being made', label: `Approved: ${done} of ${STAGES.length} steps made`, tone: 'text-stone-500 dark:text-stone-400' }
+}
+
+const GROUPS = ['To review', 'Ready to show', 'Being made', 'Shown', 'Rejected']
 
 function PolaroidList() {
   const [jobs, setJobs] = useState<PolaroidJob[] | null>(null)
@@ -198,17 +316,28 @@ function PolaroidList() {
       </header>
       {error && <p className="mb-6 rounded bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-200">{error}</p>}
       {jobs?.length === 0 && <p className="text-sm text-stone-600 dark:text-stone-400">No polaroids yet. Record one to start.</p>}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-        {jobs?.map((job) => (
-          <a key={job.name} href={`/admin/polaroid?job=${encodeURIComponent(job.name)}`} className="group overflow-hidden rounded-lg border border-stone-300 bg-white dark:border-stone-700 dark:bg-stone-900">
-            <img src={jobFile(job.name, '0-source/frames/0001.jpg')} alt="" className="aspect-square w-full object-cover transition group-hover:opacity-90" />
-            <div className="p-3 text-sm">
-              <div className="truncate font-medium">{job.name}</div>
-              <div className="text-stone-500 dark:text-stone-400">{progress(job) === STAGES.length ? 'Done' : `${progress(job)} of ${STAGES.length} steps`}</div>
+      {GROUPS.map((group) => {
+        const inGroup = jobs?.filter((job) => standing(job).group === group) ?? []
+        if (inGroup.length === 0) return null
+        return (
+          <section key={group} className="mb-8">
+            <h2 className="mb-3 font-serif text-2xl">
+              {group} <span className="text-base text-stone-500">{inGroup.length}</span>
+            </h2>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+              {inGroup.map((job) => (
+                <a key={job.name} href={`/admin/polaroid?job=${encodeURIComponent(job.name)}`} className={`group overflow-hidden rounded-lg border border-stone-300 bg-white dark:border-stone-700 dark:bg-stone-900 ${job.review === 'rejected' ? 'opacity-60' : ''}`}>
+                  <img src={jobFile(job.name, '0-source/frames/0001.jpg')} alt="" className="aspect-square w-full object-cover transition group-hover:opacity-90" />
+                  <div className="p-3 text-sm">
+                    <div className="truncate font-medium">{job.name}</div>
+                    <div className={standing(job).tone}>{standing(job).label}</div>
+                  </div>
+                </a>
+              ))}
             </div>
-          </a>
-        ))}
-      </div>
+          </section>
+        )
+      })}
     </Page>
   )
 }
@@ -247,6 +376,27 @@ function JobView({ job }: { job: string }) {
     await reload().catch(fail)
   }
 
+  const review = async (decision: string, then?: () => Promise<void>) => {
+    setError('')
+    try {
+      await api(`/__admin/api/polaroids/${job}/review`, { decision })
+      if (then) await then()
+    } catch (e) {
+      fail(e as Error)
+    }
+
+    await reload().catch(fail)
+  }
+
+  const remove = async () => {
+    try {
+      await api(`/__admin/api/polaroids/${job}/delete`, {})
+      location.assign('/admin/polaroid')
+    } catch (e) {
+      fail(e as Error)
+    }
+  }
+
   if (!detail) {
     return (
       <Page>
@@ -257,8 +407,11 @@ function JobView({ job }: { job: string }) {
 
   const queued = (action: string) => tasks.some((t) => active(t) && t.action === action)
   const todo = STAGES.filter((s) => !detail.stages[s.key].done && !queued(s.action))
-  const sum = detail.cost ? parseFloat(detail.cost.panels.slice(1)) + parseFloat(detail.cost.background.slice(1)) : NaN
-  const total = Number.isNaN(sum) ? '?' : sum.toFixed(2)
+  const prices = detail.cost ? [detail.cost.panels, detail.cost.background].map((c) => Number(c.slice(1))) : []
+  const total = prices.length > 0 && prices.every(Number.isFinite) ? `$${prices.reduce((a, b) => a + b, 0).toFixed(2)}` : '?'
+  const approved = detail.review === 'approved'
+  const made = detail.stages.atlas.done
+  const makeAll = () => run(todo.map((s) => s.action))
 
   return (
     <Page>
@@ -274,9 +427,64 @@ function JobView({ job }: { job: string }) {
 
       {error && <p className="mb-6 rounded bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-200">{error}</p>}
 
+      {/* Moderation: nothing is made until it's approved, and nothing is shown until it's approved again. */}
+      <section className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-stone-300 bg-white p-4 dark:border-stone-700 dark:bg-stone-900">
+        <span className={`flex-1 text-sm font-medium ${standing(detail).tone}`}>{standing(detail).label}</span>
+        {detail.review === 'submitted' && (
+          <>
+            <SpendButton label="Approve and make" cost={total} what="Approves this polaroid to be made, then runs every step: the panels, the background, and the polaroid itself." onConfirm={() => review('approve', makeAll)} />
+            <button type="button" onClick={() => review('approve')} className={SECONDARY}>
+              Approve
+            </button>
+            <button type="button" onClick={() => review('reject')} className={SECONDARY}>
+              Reject
+            </button>
+          </>
+        )}
+        {approved && made && (
+          <>
+            <button type="button" onClick={() => review('show')} className={BUTTON}>
+              Approve to show
+            </button>
+            <button type="button" onClick={() => review('reject')} className={SECONDARY}>
+              Reject
+            </button>
+          </>
+        )}
+        {approved && !made && (
+          <button type="button" onClick={() => review('reject')} className={SECONDARY}>
+            Reject
+          </button>
+        )}
+        {detail.review === 'shown' && (
+          <>
+            <button type="button" onClick={() => review('hide')} className={SECONDARY}>
+              Hide
+            </button>
+            <button type="button" onClick={() => review('reject')} className={SECONDARY}>
+              Reject
+            </button>
+          </>
+        )}
+        {detail.review === 'rejected' && (
+          <button type="button" onClick={() => review('reopen')} className={SECONDARY}>
+            Reopen
+          </button>
+        )}
+        <ConfirmButton
+          label="Delete"
+          title={`Delete ${detail.name}?`}
+          body="This deletes the recording and everything made from it: the frames, every panel, the polaroid and its loop. It can't be undone."
+          confirm="Delete it"
+          className={DANGER}
+          disabled={tasks.some((t) => t.status === 'running')}
+          onConfirm={remove}
+        />
+      </section>
+
       <section className="mb-8 flex flex-col gap-6 md:flex-row">
         <img src={jobFile(job, '0-source/frames/0001.jpg')} alt="" className="aspect-square w-full self-start rounded-lg object-cover md:w-56" />
-        <ol className="flex-1 space-y-3">
+        <ol className={`flex-1 space-y-3 ${approved || detail.review === 'shown' ? '' : 'opacity-60'}`}>
           {STAGES.map((stage, i) => {
             const state = detail.stages[stage.key]
             const ready = STAGES.slice(0, i).every((s) => detail.stages[s.key].done)
@@ -295,6 +503,8 @@ function JobView({ job }: { job: string }) {
                   <span className="text-sm text-emerald-700 dark:text-emerald-400">Done</span>
                 ) : queued(stage.action) ? (
                   <span className="text-sm text-amber-700 dark:text-amber-400">Running…</span>
+                ) : !approved ? (
+                  <span className="text-sm text-stone-500">Needs approval</span>
                 ) : !ready ? (
                   <span className="text-sm text-stone-500">After step {i}</span>
                 ) : cost ? (
@@ -307,14 +517,9 @@ function JobView({ job }: { job: string }) {
               </li>
             )
           })}
-          {todo.length > 1 && (
+          {approved && todo.length > 1 && (
             <div className="pt-1">
-              <SpendButton
-                label="Make the whole polaroid"
-                cost={`$${total}`}
-                what="Runs every remaining step in order: the panels, then the background, then the polaroid itself."
-                onConfirm={() => run(todo.map((s) => s.action))}
-              />
+              <SpendButton label="Make the whole polaroid" cost={total} what="Runs every remaining step in order: the panels, then the background, then the polaroid itself." onConfirm={makeAll} />
             </div>
           )}
         </ol>
@@ -322,7 +527,7 @@ function JobView({ job }: { job: string }) {
 
       <Tasks job={job} tasks={tasks} titles={{}} onChanged={() => reload().catch(fail)} />
 
-      {detail.stages.atlas.done && (
+      {made && (
         <section className="mb-8">
           <div className="mb-3 flex items-baseline gap-4">
             <h2 className="font-serif text-2xl">The polaroid</h2>
@@ -357,7 +562,7 @@ function Viewer({ job }: { job: string }) {
   return (
     <div className="relative h-[70vh] overflow-hidden rounded-lg border border-stone-300 bg-stone-200/50 dark:border-stone-700 dark:bg-stone-900/50">
       <div {...bind()} className="absolute inset-0 cursor-grab touch-none active:cursor-grabbing">
-        <Canvas camera={{ position: [0, 0, 6], fov: 35 }} dpr={[1, 2]}>
+        <Canvas camera={{ position: [0, 0, 6], fov: 35 }} dpr={[1, 2]} gl={{ stencil: true }}>
           <ambientLight intensity={dark ? 1.0 : 1.1} />
           <directionalLight position={[2, 3, 5]} intensity={dark ? 1.2 : 1.6} />
           <Suspense fallback={null}>{texture && <LoopPolaroid texture={texture} settings={settings} drag={drag} />}</Suspense>
@@ -367,7 +572,7 @@ function Viewer({ job }: { job: string }) {
       <div className="absolute bottom-4 left-4 w-72 space-y-3 rounded-lg border border-stone-300 bg-white/85 p-4 text-sm backdrop-blur dark:border-stone-700 dark:bg-stone-900/85">
         <label className="flex items-center gap-2">
           <span className="w-16">Depth</span>
-          <input type="range" min={0} max={0.8} step={0.01} value={settings.depth} onChange={(e) => set({ depth: Number(e.target.value) })} className="flex-1" />
+          <input type="range" min={0} max={1} step={0.01} value={settings.depth} onChange={(e) => set({ depth: Number(e.target.value) })} className="flex-1" />
           <span className="w-8 text-right tabular-nums">{settings.depth.toFixed(2)}</span>
         </label>
         <label className="flex items-center gap-2">

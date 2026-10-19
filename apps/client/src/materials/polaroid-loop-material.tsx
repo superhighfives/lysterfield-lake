@@ -1,20 +1,22 @@
 import { shaderMaterial } from '@react-three/drei'
 import { extend, ThreeElement } from '@react-three/fiber'
-import { ShaderMaterial, Texture, Vector2 } from 'three'
+import { ShaderMaterial, Texture } from 'three'
 
-// A visitor's looping polaroid (plans/backlog/user-polaroid-loops.md), drawn from the pipeline's 5-panel
+// A visitor's looping polaroid (plans/in-progress/polaroid-admin-flow.md), drawn from the pipeline's 5-panel
 // polaroid atlas (apps/pipeline/src/steps/polaroid.ts), not the music video's 7-panel one, which
 // video-material.tsx reads. Panel order is fixed by POLAROID_PANELS there.
+//
+// The photo is a window into a shallow box (see admin-polaroid.tsx): the background is a plane set back
+// behind the card, the person a plane between it and the window, both seen only through the window
+// (stencil), so turning the card shows real parallax and nothing overhangs the frame.
 export const POLAROID_PANEL = { portrait: 1, background: 2, matte: 3, depth: 4, outline: 5 } as const
 const PANEL_TOTAL = 5
 
 const uniforms = {
   uTexture: new Texture(),
-  // 0 draws the background into the photo window; 1 draws the person, cut out by the matte and pushed
-  // forward by the depth panel, as a separate plane in front of it.
+  // 0 draws the background (the back of the box); 1 draws the person, cut out by the matte and pushed
+  // forward by the depth panel.
   uLayer: 0,
-  // Pointer/tilt parallax for the background, in panel UV.
-  uParallax: new Vector2(0, 0),
   // Depth relief, as video-material.tsx's avatar: world units at full depth, and the panel-UV radii the
   // depth is blurred over and the matte's edge rolls off across.
   uDepthStrength: 0,
@@ -26,12 +28,6 @@ const uniforms = {
 
 const shared = /* glsl */ `
   uniform sampler2D uTexture;
-
-  // Both layers show the panels' middle 84%: the background needs the margin for its parallax, and the person
-  // has to line up with it.
-  vec2 inset(vec2 uv) {
-    return uv * 0.84 + 0.08;
-  }
 
   // One panel of the atlas, clamped a texel in so a lookup never bleeds into the panel beside it.
   vec4 panel(float index, vec2 uv) {
@@ -65,8 +61,8 @@ export const PolaroidLoopMaterial = shaderMaterial(
       float relief = 0.0;
       if (uLayer == 1.0 && uDepthStrength != 0.0) {
         // As video-material.tsx: the coarse depth blurred into rounded forms, rolled off at the matte's edge.
-        float shape = blurPanel(${POLAROID_PANEL.depth.toFixed(1)}, inset(uv), uShapeRadius);
-        float inside = clamp((blurPanel(${POLAROID_PANEL.matte.toFixed(1)}, inset(uv), uEdgeRadius) - 0.5) * 2.0, 0.0, 1.0);
+        float shape = blurPanel(${POLAROID_PANEL.depth.toFixed(1)}, uv, uShapeRadius);
+        float inside = clamp((blurPanel(${POLAROID_PANEL.matte.toFixed(1)}, uv, uEdgeRadius) - 0.5) * 2.0, 0.0, 1.0);
         relief = shape * smoothstep(0.0, 1.0, inside) * uDepthStrength;
       }
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position.xy, position.z + relief, 1.0);
@@ -75,21 +71,21 @@ export const PolaroidLoopMaterial = shaderMaterial(
   /* glsl */ `
     varying vec2 vUv;
     uniform float uLayer;
-    uniform vec2 uParallax;
     uniform float uOutline;
     ${shared}
 
     void main() {
       if (uLayer == 0.0) {
-        vec2 uv = inset(vUv) + clamp(uParallax, -0.08, 0.08);
-        gl_FragColor = vec4(panel(${POLAROID_PANEL.background.toFixed(1)}, uv).rgb, 1.0);
+        // The back of the box: a little darker toward its edges, as the inside of a box is.
+        vec3 color = panel(${POLAROID_PANEL.background.toFixed(1)}, vUv).rgb;
+        vec2 edge = smoothstep(vec2(0.0), vec2(0.18), vUv) * smoothstep(vec2(0.0), vec2(0.18), 1.0 - vUv);
+        gl_FragColor = vec4(color * mix(0.72, 1.0, edge.x * edge.y), 1.0);
         return;
       }
-      vec2 uv = inset(vUv);
-      vec3 portrait = panel(${POLAROID_PANEL.portrait.toFixed(1)}, uv).rgb;
-      float ink = dot(panel(${POLAROID_PANEL.outline.toFixed(1)}, uv).rgb, vec3(0.299, 0.587, 0.114));
+      vec3 portrait = panel(${POLAROID_PANEL.portrait.toFixed(1)}, vUv).rgb;
+      float ink = dot(panel(${POLAROID_PANEL.outline.toFixed(1)}, vUv).rgb, vec3(0.299, 0.587, 0.114));
       vec3 color = portrait * mix(1.0, ink, uOutline);
-      float matte = smoothstep(0.35, 0.65, panel(${POLAROID_PANEL.matte.toFixed(1)}, uv).r);
+      float matte = smoothstep(0.35, 0.65, panel(${POLAROID_PANEL.matte.toFixed(1)}, vUv).r);
       if (matte < 0.01) discard;
       gl_FragColor = vec4(color, matte);
     }

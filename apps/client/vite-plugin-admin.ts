@@ -72,9 +72,50 @@ const countFrames = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter(
  * and 6 from the polaroid model, panel 3 from Bria, then the atlas and the flattened loop. `withCost` adds
  * what the paid stages would cost to run now, from `polaroid-run --plan` (which knows what's already done).
  */
+/**
+ * Moderation, in job.json's `review`: a new recording is `submitted`; `approved` lets it be made (the paid
+ * stages refuse anything else); once made, `shown` approves it for showing; `rejected` stops it anywhere.
+ */
+type PolaroidReview = 'submitted' | 'approved' | 'shown' | 'rejected'
+const REVIEW_MOVES: Record<string, { from: PolaroidReview[]; to: PolaroidReview; needsMade?: boolean }> = {
+  approve: { from: ['submitted'], to: 'approved' },
+  show: { from: ['approved'], to: 'shown', needsMade: true },
+  hide: { from: ['shown'], to: 'approved' },
+  reject: { from: ['submitted', 'approved', 'shown'], to: 'rejected' },
+  reopen: { from: ['rejected'], to: 'submitted' },
+}
+
+function reviewOf(job: string): PolaroidReview {
+  return (readJson(path.join(jobDir(job), 'job.json')) as { review?: PolaroidReview }).review ?? 'submitted'
+}
+
+function setPolaroidReview(job: string, decision: string) {
+  const move = REVIEW_MOVES[decision]
+  if (!move) throw new Error(`Unknown decision "${decision}"`)
+  const current = reviewOf(job)
+  if (!move.from.includes(current)) throw new Error(`Can't ${decision} a polaroid that's ${current}`)
+  if (move.needsMade && !polaroidDetail(job, false).stages.atlas.done) throw new Error('Make it before approving it to show')
+  // Rejecting stops anything still waiting to run; a run already started has to be stopped from the task list.
+  if (move.to === 'rejected') for (const task of tasks().activeFor(job, 'polaroid')) if (task.status === 'queued') tasks().cancel(task.id)
+  const file = path.join(jobDir(job), 'job.json')
+  writeFileSync(file, `${JSON.stringify({ ...(readJson(file) as object), review: move.to }, null, 2)}\n`)
+  return { review: move.to }
+}
+
+/** Deletes a polaroid outright: its job folder (every panel, the atlas, the loop) and its original recording. */
+function deletePolaroid(job: string) {
+  const dir = jobDir(job)
+  if ((readJson(path.join(dir, 'job.json')) as { kind?: string }).kind !== 'polaroid') throw new Error(`"${job}" isn't a polaroid`)
+  const active = tasks().activeFor(job, 'polaroid')
+  if (active.some((t) => t.status === 'running')) throw new Error('Something is running for it; stop it first')
+  for (const task of active) tasks().cancel(task.id)
+  rmSync(dir, { recursive: true, force: true })
+  if (existsSync(RECORDINGS_DIR)) for (const f of readdirSync(RECORDINGS_DIR).filter((f) => path.parse(f).name === job)) rmSync(path.join(RECORDINGS_DIR, f))
+}
+
 function polaroidDetail(job: string, withCost: boolean) {
   const dir = jobDir(job)
-  const config = readJson(path.join(dir, 'job.json')) as { fps: number; source?: { crop?: unknown } }
+  const config = readJson(path.join(dir, 'job.json')) as { fps: number; review?: PolaroidReview }
   const frames = countFrames(path.join(dir, '0-source/frames'))
   const panels = Math.min(...['2-portrait/upscaled', '4-matte/frames', '5-depth/frames', '6-outline/frames'].map((d) => countFrames(path.join(dir, d))))
   const background = countFrames(path.join(dir, '3-background/frames'))
@@ -89,7 +130,7 @@ function polaroidDetail(job: string, withCost: boolean) {
     const estimate = (key: string) => plan.match(new RegExp(`"${key}": "(\\$[\\d.]+)"`))?.[1] ?? '?'
     cost = { panels: stages.panels.done ? '$0.00' : estimate('estimatedCost'), background: stages.background.done ? '$0.00' : estimate('backgroundCost') }
   }
-  return { name: job, frames, fps: config.fps, stages, cost }
+  return { name: job, frames, fps: config.fps, review: config.review ?? 'submitted', stages, cost }
 }
 
 /** Where a take's frames, check.json and review.json live: the take folder for the full song, preview/dream for its 15s clip. */
@@ -312,11 +353,11 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
       ]
     // A polaroid's stages (plans/in-progress/polaroid-admin-flow.md). The paid two run on Replicate, never the PC.
     case 'polaroid-panels':
-      return ['polaroid-run', ...base]
     case 'polaroid-background':
-      return ['background-video', ...base]
     case 'polaroid-atlas':
-      return ['polaroid', ...base]
+      // Nothing is made, and nothing spent, until a person has approved it.
+      if (reviewOf(job) !== 'approved') throw new Error(`Approve it to make before running anything (it's ${reviewOf(job)})`)
+      return body.action === 'polaroid-panels' ? ['polaroid-run', ...base] : body.action === 'polaroid-background' ? ['background-video', ...base] : ['polaroid', ...base]
     default:
       throw new Error(`Unknown action "${String(body.action)}"`)
   }
@@ -451,7 +492,12 @@ export default function adminPlugin(): Plugin {
             const created = (j: string) => statSync(path.join(JOBS_DIR, j, 'job.json')).birthtimeMs
             return send(res, 200, listJobs('polaroid').sort((a, b) => created(b) - created(a)).map((j) => polaroidDetail(j, false)))
           }
-          if (parts[1] === 'polaroids' && parts[2] && req.method === 'GET') return send(res, 200, polaroidDetail(parts[2], true))
+          if (parts[1] === 'polaroids' && parts[2] && !parts[3] && req.method === 'GET') return send(res, 200, polaroidDetail(parts[2], true))
+          if (parts[1] === 'polaroids' && parts[2] && parts[3] === 'review' && req.method === 'POST') return send(res, 200, setPolaroidReview(parts[2], String((await readBody(req)).decision)))
+          if (parts[1] === 'polaroids' && parts[2] && parts[3] === 'delete' && req.method === 'POST') {
+            deletePolaroid(parts[2])
+            return send(res, 200, {})
+          }
           if (parts[1] === 'recordings' && req.method === 'POST') return send(res, 200, await createRecordingJob(await readBody(req, MAX_RECORDING_UPLOAD)))
           if (parts[1] === 'jobs' && parts.length === 2) return send(res, 200, listJobs())
           if (parts[1] === 'jobs' && parts.length === 3 && req.method === 'GET') return send(res, 200, jobDetail(parts[2]))
