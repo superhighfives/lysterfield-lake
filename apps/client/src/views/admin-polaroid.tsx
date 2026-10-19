@@ -3,7 +3,7 @@ import { shaderMaterial, useGLTF } from '@react-three/drei'
 import { useDrag } from '@use-gesture/react'
 import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { AlwaysDepth, AlwaysStencilFunc, Box3, BufferGeometry, DoubleSide, EqualStencilFunc, Float32BufferAttribute, Group, LinearSRGBColorSpace, MathUtils, Mesh, type MeshStandardMaterial, ReplaceStencilOp, Vector3, VideoTexture } from 'three'
+import { AlwaysDepth, AlwaysStencilFunc, Box3, DoubleSide, EqualStencilFunc, Group, LinearSRGBColorSpace, MathUtils, Mesh, type MeshStandardMaterial, ReplaceStencilOp, SphereGeometry, Vector2, Vector3, VideoTexture } from 'three'
 import ThemeToggle from '../components/theme-toggle.tsx'
 import { PolaroidLoopMaterial } from '../materials/polaroid-loop-material.tsx'
 import Polaroid, { polaroidBend } from '../models/polaroid.tsx'
@@ -33,27 +33,25 @@ function usePhotoWindow() {
 }
 
 /**
- * The photo as a window into a shallow box. The window draws nothing: it marks the stencil and resets the
- * depth behind it to "far", so the box can sit behind the card (which would otherwise hide it) and still
- * depth-test against itself. The box has a back (the background), four walls that are edge-on face-on and
- * come into view as the card turns, and the person standing partway in, their depth relief bringing them up
- * toward the glass. Nothing shows outside the window, and the frame's own overlay (its soft inner shadow)
- * is drawn last, over all of it, like the edge of a print.
+ * The photo as a window into a shallow bowl. The window draws nothing: it marks the stencil and resets the
+ * depth behind it to "far", so the bowl can sit behind the card (which would otherwise hide it) and still
+ * depth-test against itself. The background lines the bowl, the middle of it as it would look face-on and
+ * its outer band stretched round toward the rim, and the person stands partway in, their depth relief
+ * bringing them up toward the glass. Nothing shows outside the window, and the frame's own overlay (its
+ * soft inner shadow) is drawn last, over all of it, like the edge of a print.
  */
 const SCALE = 0.5
-/** How far back the background sits, in the model's units (the card is 3.66 wide). */
+/** How deep the bowl behind the window is, in the model's units (the card is 3.66 wide). */
 const BOX_DEPTH = 1.6
-/** Where the person stands, as a fraction of the box's depth; the relief brings them up from here. */
+/** Where the person stands, as a fraction of the bowl's depth; the relief brings them up from here. */
 const PERSON_DEPTH = 0.6
 /** The camera's distance in the model's units (camera at z 6, card scaled by SCALE). */
 const CAMERA_DISTANCE = 6 / SCALE
-/** How bright the walls are at the window and at the back (the back of the box meets them at the same shade). */
-const WALL_SHADE = { window: 0.97, back: 0.8 }
 /**
- * How much of the background the walls take, from each edge: the back of the box shows the rest, so the
- * picture runs straight on from the back onto the walls, stretched more toward the window.
+ * How much of the background, from each edge, is kept for the part of the bowl outside the window: face-on the
+ * window shows the rest, and turning the card reveals the band, stretched more toward the rim.
  */
-const WALL_BAND = 0.12
+const BAND = 0.12
 /** How far the person's plane reaches past the window, so their edges (shoulders) stretch out to the walls. */
 const PERSON_REACH = 1.8
 /** The back and walls with the background panel turned off, by theme. */
@@ -76,35 +74,18 @@ declare module '@react-three/fiber' {
 }
 
 /**
- * The box's four walls, from the window's edges back to the (larger) back. They carry the background's outer
- * band (WALL_BAND), from where the back of the box stops to the panel's edge at the window, and a shade
- * that's lighter at the window than at the back.
+ * The bowl the background lines: a half-sphere behind the window, opening toward the viewer, flattened to
+ * `depth`. Its rim is a circle around the window's corners, so the window looks into it everywhere. The
+ * geometry is in the window's own frame (centre at the origin, window at z 0), which the material reads to
+ * work out how each point looks face-on.
  */
-function useWalls(front: { x: number; y: number }, back: { x: number; y: number }, depth: number) {
+function useBowl(radius: number, depth: number) {
   return useMemo(() => {
-    const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]]
-    // At the back, the UV where the back of the box stops; at the window, the panel's own edge.
-    const uvAt = (c: number, atBack: boolean) => 0.5 + c * 0.5 * (atBack ? 1 - 2 * WALL_BAND : 1)
-    const positions: number[] = []
-    const uv: number[] = []
-    const shade: number[] = []
-    for (let i = 0; i < 4; i++) {
-      const j = (i + 1) % 4
-      // Two triangles: front i, front j, back j; front i, back j, back i.
-      for (const [k, atBack] of [[i, false], [j, false], [j, true], [i, false], [j, true], [i, true]] as const) {
-        const [cx, cy] = corners[k]
-        positions.push(cx * (atBack ? back.x : front.x), cy * (atBack ? back.y : front.y), atBack ? -depth : 0)
-        uv.push(uvAt(cx, atBack), uvAt(cy, atBack))
-        shade.push(atBack ? WALL_SHADE.back : WALL_SHADE.window)
-      }
-    }
-
-    const geometry = new BufferGeometry()
-    geometry.setAttribute('position', new Float32BufferAttribute(positions, 3))
-    geometry.setAttribute('uv', new Float32BufferAttribute(uv, 2))
-    geometry.setAttribute('shade', new Float32BufferAttribute(shade, 1))
+    const geometry = new SphereGeometry(radius, 96, 48, 0, Math.PI * 2, 0, Math.PI / 2)
+    geometry.rotateX(-Math.PI / 2)
+    geometry.scale(1, 1, depth / radius)
     return geometry
-  }, [front.x, front.y, back.x, back.y, depth])
+  }, [radius, depth])
 }
 
 function LoopPolaroid({ texture, settings, drag }: { texture: VideoTexture; settings: Settings; drag: { current: { x: number; y: number; active: boolean } } }) {
@@ -116,9 +97,9 @@ function LoopPolaroid({ texture, settings, drag }: { texture: VideoTexture; sett
   // Each layer is sized so that, face-on, it exactly fills the window: perspective shrinks what's further back.
   const fill = (depth: number) => ({ x: (photo.size.x / 2) * ((CAMERA_DISTANCE + depth) / CAMERA_DISTANCE), y: (photo.size.y / 2) * ((CAMERA_DISTANCE + depth) / CAMERA_DISTANCE) })
   const personDepth = BOX_DEPTH * PERSON_DEPTH
-  const back = fill(BOX_DEPTH)
   const person = fill(personDepth)
-  const walls = useWalls({ x: photo.size.x / 2, y: photo.size.y / 2 }, back, BOX_DEPTH)
+  const bowl = useBowl(Math.hypot(photo.size.x, photo.size.y) / 2, BOX_DEPTH)
+  const half = useMemo(() => new Vector2(photo.size.x / 2, photo.size.y / 2), [photo])
 
   useEffect(() => {
     // The window marks the stencil after the opaque card and before the box; the frame's overlay (its inner
@@ -151,29 +132,20 @@ function LoopPolaroid({ texture, settings, drag }: { texture: VideoTexture; sett
         passthroughMaterial={<windowMaterial colorWrite={false} depthFunc={AlwaysDepth} {...STENCIL} stencilFunc={AlwaysStencilFunc} stencilZPass={ReplaceStencilOp} />}
       />
       <group position={[photo.center.x, photo.center.y, photo.front]}>
-        {/* The walls, then the back of the box. */}
-        <mesh geometry={walls} renderOrder={2}>
+        {/* The bowl the background lines. */}
+        <mesh geometry={bowl} renderOrder={2}>
           {settings.background ? (
-            <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={2} transparent={false} side={DoubleSide} {...IN_THE_BOX} />
+            <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={2} uHalf={half} uCameraDistance={CAMERA_DISTANCE} uBand={BAND} transparent={false} side={DoubleSide} {...IN_THE_BOX} />
           ) : (
             <meshBasicMaterial color={dark ? PLAIN.dark : PLAIN.light} side={DoubleSide} {...IN_THE_BOX} />
           )}
         </mesh>
-        <mesh position={[0, 0, -BOX_DEPTH]} renderOrder={2}>
-          <planeGeometry args={[back.x * 2, back.y * 2]} />
-          {settings.background ? (
-            <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={0} uUvScale={1 - 2 * WALL_BAND} transparent={false} {...IN_THE_BOX} />
-          ) : (
-            <meshBasicMaterial color={dark ? PLAIN.dark : PLAIN.light} {...IN_THE_BOX} />
-          )}
-        </mesh>
-        {/* The person: finely divided, so the depth relief has vertices to move. */}
         {/* Reaching past the window, its edges stretched out (the panels clamp at their edge), so where the person
-            meets the edge of the frame (shoulders) they carry on to the walls, which hide the rest. Face-on, the
-            window shows the same middle of the panels as the back of the box. */}
+            meets the edge of the frame (shoulders) they carry on until the bowl curves in front of them. Face-on,
+            the window shows the same middle of the panels as the bowl does. */}
         <mesh position={[0, 0, -personDepth]} renderOrder={3}>
           <planeGeometry args={[person.x * 2 * PERSON_REACH, person.y * 2 * PERSON_REACH, 256, 256]} />
-          <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={1} uUvScale={(1 - 2 * WALL_BAND) * PERSON_REACH} uDepthStrength={settings.depth * personDepth} uOutline={settings.outline} {...IN_THE_BOX} />
+          <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={1} uUvScale={PERSON_REACH} uBand={BAND} uDepthStrength={settings.depth * personDepth} uOutline={settings.outline} {...IN_THE_BOX} />
         </mesh>
       </group>
     </group>
