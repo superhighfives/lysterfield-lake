@@ -79,6 +79,7 @@
           "uEdgeRadius",
           "uLayer",
           "uOutline",
+          "uUvScale",
           "colorWrite",
           "renderOrder",
           "stencilFunc",

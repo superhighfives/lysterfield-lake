@@ -47,8 +47,15 @@ const BOX_DEPTH = 1.6
 const PERSON_DEPTH = 0.6
 /** The camera's distance in the model's units (camera at z 6, card scaled by SCALE). */
 const CAMERA_DISTANCE = 6 / SCALE
-/** How bright the walls are at the window and at the back. */
-const WALL_SHADE = { window: 0.95, back: 0.6 }
+/** How bright the walls are at the window and at the back (the back of the box meets them at the same shade). */
+const WALL_SHADE = { window: 0.97, back: 0.8 }
+/**
+ * How much of the background the walls take, from each edge: the back of the box shows the rest, so the
+ * picture runs straight on from the back onto the walls, stretched more toward the window.
+ */
+const WALL_BAND = 0.12
+/** How far the person's plane reaches past the window, so their edges (shoulders) stretch out to the walls. */
+const PERSON_REACH = 1.8
 /** The back and walls with the background panel turned off, by theme. */
 const PLAIN = { light: '#d9d4cc', dark: '#1c1a19' }
 
@@ -69,14 +76,15 @@ declare module '@react-three/fiber' {
 }
 
 /**
- * The box's four walls, from the window's edges back to the (larger) back. Each vertex carries the UV of the
- * back corner it lines up with, so a wall shows the background's edge stretched round it, and a shade that's
- * lighter at the window than at the back.
+ * The box's four walls, from the window's edges back to the (larger) back. They carry the background's outer
+ * band (WALL_BAND), from where the back of the box stops to the panel's edge at the window, and a shade
+ * that's lighter at the window than at the back.
  */
 function useWalls(front: { x: number; y: number }, back: { x: number; y: number }, depth: number) {
   return useMemo(() => {
     const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]]
-    const uvs = corners.map(([x, y]) => [(x + 1) / 2, (y + 1) / 2])
+    // At the back, the UV where the back of the box stops; at the window, the panel's own edge.
+    const uvAt = (c: number, atBack: boolean) => 0.5 + c * 0.5 * (atBack ? 1 - 2 * WALL_BAND : 1)
     const positions: number[] = []
     const uv: number[] = []
     const shade: number[] = []
@@ -86,7 +94,7 @@ function useWalls(front: { x: number; y: number }, back: { x: number; y: number 
       for (const [k, atBack] of [[i, false], [j, false], [j, true], [i, false], [j, true], [i, true]] as const) {
         const [cx, cy] = corners[k]
         positions.push(cx * (atBack ? back.x : front.x), cy * (atBack ? back.y : front.y), atBack ? -depth : 0)
-        uv.push(...uvs[k])
+        uv.push(uvAt(cx, atBack), uvAt(cy, atBack))
         shade.push(atBack ? WALL_SHADE.back : WALL_SHADE.window)
       }
     }
@@ -154,15 +162,18 @@ function LoopPolaroid({ texture, settings, drag }: { texture: VideoTexture; sett
         <mesh position={[0, 0, -BOX_DEPTH]} renderOrder={2}>
           <planeGeometry args={[back.x * 2, back.y * 2]} />
           {settings.background ? (
-            <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={0} transparent={false} {...IN_THE_BOX} />
+            <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={0} uUvScale={1 - 2 * WALL_BAND} transparent={false} {...IN_THE_BOX} />
           ) : (
             <meshBasicMaterial color={dark ? PLAIN.dark : PLAIN.light} {...IN_THE_BOX} />
           )}
         </mesh>
         {/* The person: finely divided, so the depth relief has vertices to move. */}
+        {/* Reaching past the window, its edges stretched out (the panels clamp at their edge), so where the person
+            meets the edge of the frame (shoulders) they carry on to the walls, which hide the rest. Face-on, the
+            window shows the same middle of the panels as the back of the box. */}
         <mesh position={[0, 0, -personDepth]} renderOrder={3}>
-          <planeGeometry args={[person.x * 2, person.y * 2, 192, 192]} />
-          <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={1} uDepthStrength={settings.depth * personDepth} uOutline={settings.outline} {...IN_THE_BOX} />
+          <planeGeometry args={[person.x * 2 * PERSON_REACH, person.y * 2 * PERSON_REACH, 256, 256]} />
+          <polaroidLoopMaterial key={PolaroidLoopMaterial.key} uTexture={texture} uLayer={1} uUvScale={(1 - 2 * WALL_BAND) * PERSON_REACH} uDepthStrength={settings.depth * personDepth} uOutline={settings.outline} {...IN_THE_BOX} />
         </mesh>
       </group>
     </group>

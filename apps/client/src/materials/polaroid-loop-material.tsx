@@ -24,6 +24,9 @@ const uniforms = {
   uEdgeRadius: 0.04,
   // How much the outline panel inks over the portrait (0 = none).
   uOutline: 0,
+  // Scales the mesh's UVs about the centre: under 1 shows the panels' middle (the back of the box keeps the
+  // outer band for the walls); over 1 runs past the panel, whose edge is then stretched outward.
+  uUvScale: 1,
 }
 
 const shared = /* glsl */ `
@@ -40,9 +43,11 @@ export const PolaroidLoopMaterial = shaderMaterial(
   uniforms,
   /* glsl */ `
     varying vec2 vUv;
+    varying vec2 vMeshUv;
     varying float vShade;
     attribute float shade;
     uniform float uLayer;
+    uniform float uUvScale;
     uniform float uDepthStrength;
     uniform float uShapeRadius;
     uniform float uEdgeRadius;
@@ -59,13 +64,14 @@ export const PolaroidLoopMaterial = shaderMaterial(
     }
 
     void main() {
-      vUv = uv;
+      vUv = 0.5 + (uv - 0.5) * uUvScale;
+      vMeshUv = uv;
       vShade = uLayer == 2.0 ? shade : 1.0;
       float relief = 0.0;
       if (uLayer == 1.0 && uDepthStrength != 0.0) {
         // As video-material.tsx: the coarse depth blurred into rounded forms, rolled off at the matte's edge.
-        float shape = blurPanel(${POLAROID_PANEL.depth.toFixed(1)}, uv, uShapeRadius);
-        float inside = clamp((blurPanel(${POLAROID_PANEL.matte.toFixed(1)}, uv, uEdgeRadius) - 0.5) * 2.0, 0.0, 1.0);
+        float shape = blurPanel(${POLAROID_PANEL.depth.toFixed(1)}, vUv, uShapeRadius);
+        float inside = clamp((blurPanel(${POLAROID_PANEL.matte.toFixed(1)}, vUv, uEdgeRadius) - 0.5) * 2.0, 0.0, 1.0);
         relief = shape * smoothstep(0.0, 1.0, inside) * uDepthStrength;
       }
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position.xy, position.z + relief, 1.0);
@@ -73,6 +79,7 @@ export const PolaroidLoopMaterial = shaderMaterial(
   `,
   /* glsl */ `
     varying vec2 vUv;
+    varying vec2 vMeshUv;
     varying float vShade;
     uniform float uLayer;
     uniform float uOutline;
@@ -80,27 +87,18 @@ export const PolaroidLoopMaterial = shaderMaterial(
 
     void main() {
       if (uLayer == 2.0) {
-        // A wall carries the background's edge where it meets the back, stretched toward the window: samples
-        // just inside that edge, averaged, so it reads as the picture wrapping round. Darker toward the back,
-        // as the inside of a box is.
-        // Averaged along the edge too, so each pixel of it doesn't become its own hard streak.
-        vec2 inward = (0.5 - vUv) * 0.06;
-        vec3 color = vec3(0.0);
-        for (int i = 0; i < 4; i++) {
-          for (int j = -2; j <= 2; j++) {
-            for (int k = -2; k <= 2; k++) {
-              color += panel(${POLAROID_PANEL.background.toFixed(1)}, vUv + inward * float(i) / 3.0 + vec2(float(j), float(k)) * 0.008).rgb;
-            }
-          }
-        }
-        gl_FragColor = vec4(color / 100.0 * vShade, 1.0);
+        // A wall carries the background's outer band, running on from the back of the box: its UVs go from
+        // where the back's stop out to the panel's edge at the window, so the picture stretches more the nearer
+        // the window it is. Darker toward the back, as the inside of a box is.
+        gl_FragColor = vec4(panel(${POLAROID_PANEL.background.toFixed(1)}, vUv).rgb * vShade, 1.0);
         return;
       }
       if (uLayer == 0.0) {
-        // The back of the box: darker toward its edges, meeting the walls at their own shade (WALL_SHADE.back).
+        // The back of the box: darker toward its edges, meeting the walls at their shade there (WALL_SHADE.back).
         vec3 color = panel(${POLAROID_PANEL.background.toFixed(1)}, vUv).rgb;
-        vec2 edge = smoothstep(vec2(0.0), vec2(0.18), vUv) * smoothstep(vec2(0.0), vec2(0.18), 1.0 - vUv);
-        gl_FragColor = vec4(color * mix(0.6, 1.0, edge.x * edge.y), 1.0);
+        vec2 fromEdge = (0.5 - abs(vMeshUv - 0.5)) / 0.12;
+        float edge = smoothstep(0.0, 1.0, min(min(fromEdge.x, fromEdge.y), 1.0));
+        gl_FragColor = vec4(color * mix(0.8, 1.0, edge), 1.0);
         return;
       }
       vec3 portrait = panel(${POLAROID_PANEL.portrait.toFixed(1)}, vUv).rgb;
