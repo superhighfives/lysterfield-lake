@@ -193,6 +193,10 @@ function Main(
       }),
     []
   )
+  useEffect(
+    () => () => dreamTextures.forEach((dreamTexture) => dreamTexture.dispose()),
+    [dreamTextures]
+  )
 
   const idle = useIdle(5000)
 

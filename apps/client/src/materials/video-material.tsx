@@ -5,7 +5,7 @@ import { ShaderMaterial, Texture, Vector2, Vector3 } from 'three'
 const uniforms = {
   uOpacity: 0,
   uTexture: new Texture(),
-  // The split layout (plans/ready/split-dream-video-client.md): uTexture
+  // The split layout (plans/in-progress/split-dream-video-client.md): uTexture
   // is the shared main video, panels 1-6 (uFrameTotal 6), and panel 7, the
   // dream, comes from its own videos — uDream and uDreamNext, crossfaded
   // by uDreamMix (0 = uDream). uSplit 0 is the 7-panel layout, panel 7

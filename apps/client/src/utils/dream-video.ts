@@ -1,7 +1,7 @@
 import { useStore } from '../store'
 import type { Dream } from './types'
 
-// The split video (plans/ready/split-dream-video-client.md): one shared
+// The split video (plans/in-progress/split-dream-video-client.md): one shared
 // main video — panels 1-6 and the song, the same for every dream — and a
 // small, silent video of the dream itself (panel 7). The main video is
 // Playhead's <video>; it plays, keeps the audio and drives everything. The
@@ -172,6 +172,8 @@ function load(slot: Slot, dream: Dream, time: number) {
         'seeked',
         () => {
           if (slot.id !== dream.id) return
+          // Rejections here are autoplay/abort ones, expected while the
+          // dream switches; `sync` calls play() again each frame.
           if (dreamVideo.main && !dreamVideo.main.paused)
             el.play().catch(() => {})
           slot.settled = true
@@ -268,6 +270,7 @@ export function followMain(main: HTMLVideoElement) {
   dreamVideo.main = main
   const active = () => slots().filter((slot) => slot.id)
 
+  // Autoplay/abort rejections are expected; `sync` retries each frame.
   const handlePlay = () =>
     active().forEach((slot) => slot.el.play().catch(() => {}))
   const handlePause = () => active().forEach((slot) => slot.el.pause())
@@ -297,6 +300,7 @@ export function followMain(main: HTMLVideoElement) {
 
       // A stall (`waiting`) on the dream video leaves the main video
       // playing; the polaroid holds its last frame until this catches up.
+      // (A rejected play() is retried next frame, so it's ignored here.)
       if (el.paused && el.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA)
         el.play().catch(() => {})
       const drift = el.currentTime - main.currentTime
