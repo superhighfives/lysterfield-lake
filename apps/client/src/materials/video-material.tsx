@@ -5,6 +5,18 @@ import { ShaderMaterial, Texture, Vector2, Vector3 } from 'three'
 const uniforms = {
   uOpacity: 0,
   uTexture: new Texture(),
+  // The split layout (plans/in-progress/split-dream-video-client.md): uTexture
+  // is the shared main video, panels 1-6 (uFrameTotal 6), and panel 7, the
+  // dream, comes from its own videos — uDream and uDreamNext, crossfaded
+  // by uDreamMix (0 = uDream). uSplit 0 is the 7-panel layout, panel 7
+  // read from uTexture like the rest.
+  // Null, not an empty Texture, when unset (the avatar never reads panel
+  // 7): drei clones default uniforms, and a cloned empty Texture is flagged
+  // for upload with no image, which three.js warns about every frame.
+  uDream: null as Texture | null,
+  uDreamNext: null as Texture | null,
+  uDreamMix: 0,
+  uSplit: 0,
   uFrameSelected: 0,
   uFrameMask: 0,
   uFrameTotal: 0,
@@ -38,7 +50,7 @@ const uniforms = {
   uBackgroundMix: 0,
   // 1 = fully shown. Below 1 the mesh dissolves through an ordered dither
   // (the same 8x8 matrix as the sketch) and its UVs ripple, rather than
-  // fading flat — used to clear the avatar and lyrics during a dream swap.
+  // fading flat — used to clear the avatar during a dream swap.
   uFade: 1,
   // The mesh's motion, in panel UV per frame-ish (see main.tsx). Smears
   // the image back along it and splits its colour channels, so a moving
@@ -55,6 +67,10 @@ const uniforms = {
   // The polaroid developing after it lands (see main.tsx): 0 = a blank,
   // milky print, 1 = fully developed.
   uDevelop: 1,
+  // The blank print's water (utils/water-sim.ts): a height field over the
+  // photo, red = height, that the print refracts through and catches the
+  // light on. Null when there's none.
+  uWater: null as Texture | null,
   // A landing ripple through the photo: xy = origin in UV, z = seconds
   // since it started (negative = none).
   uRipple: new Vector3(0.5, 0.5, -1),
@@ -88,8 +104,10 @@ export const VideoMaterial = shaderMaterial(
     // Half the polaroid model's width and height, to normalise the bend.
     const vec2 BEND_EXTENT = vec2(1.83, 2.3);
 
-    // Samples one panel of the 7-panel atlas, clamped (like the fragment
-    // shader's localX) so a lookup never bleeds into the neighbouring panel.
+    // Samples one panel of the atlas (uFrameTotal panels: 7, or the split
+    // layout's main video, 6 — only the matte and depth are read here, both
+    // in the main video), clamped (like the fragment shader's localX) so a
+    // lookup never bleeds into the neighbouring panel.
     float samplePanel(float panel, vec2 uv) {
       float x = clamp(uv.x, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
       return texture2D(uTexture, vec2((x + (panel - 1.0)) / uFrameTotal, clamp(uv.y, 0.0, 1.0))).r;
@@ -153,6 +171,10 @@ export const VideoMaterial = shaderMaterial(
     varying vec2 vUv;
     varying vec2 texCoord;
     uniform sampler2D uTexture;
+    uniform sampler2D uDream;
+    uniform sampler2D uDreamNext;
+    uniform float uDreamMix;
+    uniform float uSplit;
     uniform float uOpacity;
     uniform float uFrameSelected;
     uniform float uFrameTotal;
@@ -166,7 +188,6 @@ export const VideoMaterial = shaderMaterial(
     uniform float uTime;
     uniform float uAvatar;
     uniform float uIdle;
-    uniform float uReveal;
     uniform float uDark;
     uniform float uBackgroundMix;
     uniform float uSharpen;
@@ -184,8 +205,12 @@ export const VideoMaterial = shaderMaterial(
     // channels split either side of it.
     const int SMEAR_TAPS = 10;
     const float SPLIT_AMOUNT = 0.15;
-    uniform float uHash;
     uniform float uDevelop;
+    uniform float uReveal;
+    uniform float uHash;
+    uniform sampler2D uWater;
+    // One texel of the water's height field (utils/water-sim.ts's SIZE).
+    const float WATER_TEXEL = 1.0 / 192.0;
     uniform vec3 uRipple;
     uniform float uPulse;
     // Landing ripple: ring speed (UV/s), wavelength, peak UV displacement,
@@ -239,6 +264,32 @@ export const VideoMaterial = shaderMaterial(
     }
 
     // The ordered-dither threshold (0-1) for this pixel's cell.
+    // One panel's colour at a panel-local uv (x already kept a texel inside
+    // the panel, see localX). Every fragment lookup goes through this, so
+    // the dream panel can come from its own videos in the split layout.
+    vec4 panel(float p, vec2 uv) {
+      if (uSplit > 0.5 && p == 7.0) {
+        vec2 d = clamp(uv, 0.0, 1.0);
+        return mix(texture2D(uDream, d), texture2D(uDreamNext, d), uDreamMix);
+      }
+      return texture2D(uTexture, vec2((uv.x + (p - 1.0)) / uFrameTotal, uv.y));
+    }
+
+    // Smooth value noise, 0-1, for the blank print's drifting emulsion.
+    float emulsionHash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    }
+    float emulsionNoise(vec2 p) {
+      vec2 cell = floor(p);
+      vec2 f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(
+        mix(emulsionHash(cell), emulsionHash(cell + vec2(1.0, 0.0)), u.x),
+        mix(emulsionHash(cell + vec2(0.0, 1.0)), emulsionHash(cell + vec2(1.0, 1.0)), u.x),
+        u.y
+      );
+    }
+
     float ditherLimit() {
       vec2 cell = gl_FragCoord.xy / DISSOLVE_CELL;
       int index = int(mod(cell.x, 8.0)) + int(mod(cell.y, 8.0)) * 8;
@@ -289,7 +340,7 @@ export const VideoMaterial = shaderMaterial(
       // conservative two.
       float localX = clamp(st.x - offsetX, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
 
-      vec4 image = texture2D(uTexture, vec2((localX + (uFrameSelected - 1.0)) / uFrameTotal, uInvert == 1.0 ? 1.0 - st.y : st.y - offsetY));
+      vec4 image = panel(uFrameSelected, vec2(localX, uInvert == 1.0 ? 1.0 - st.y : st.y - offsetY));
 
       // Unsharp mask: push each pixel away from the average of its four
       // neighbours (SHARPEN_TEXELS atlas texels away). The portrait panel
@@ -314,15 +365,15 @@ export const VideoMaterial = shaderMaterial(
         for (int i = 0; i < SMEAR_TAPS; i++) {
           float t = float(i) / float(SMEAR_TAPS - 1);
           vec2 tap = local - uVelocity * t;
-          float r = texture2D(uTexture, vec2((clamp(tap.x + uVelocity.x * SPLIT_AMOUNT, 1.0 / 512.0, 1.0 - 1.0 / 512.0) + (uFrameSelected - 1.0)) / uFrameTotal, clamp(tap.y + uVelocity.y * SPLIT_AMOUNT, 0.0, 1.0))).r;
-          float g = texture2D(uTexture, vec2((clamp(tap.x, 1.0 / 512.0, 1.0 - 1.0 / 512.0) + (uFrameSelected - 1.0)) / uFrameTotal, clamp(tap.y, 0.0, 1.0))).g;
-          float b = texture2D(uTexture, vec2((clamp(tap.x - uVelocity.x * SPLIT_AMOUNT, 1.0 / 512.0, 1.0 - 1.0 / 512.0) + (uFrameSelected - 1.0)) / uFrameTotal, clamp(tap.y - uVelocity.y * SPLIT_AMOUNT, 0.0, 1.0))).b;
+          float r = panel(uFrameSelected, vec2(clamp(tap.x + uVelocity.x * SPLIT_AMOUNT, 1.0 / 512.0, 1.0 - 1.0 / 512.0), clamp(tap.y + uVelocity.y * SPLIT_AMOUNT, 0.0, 1.0))).r;
+          float g = panel(uFrameSelected, vec2(clamp(tap.x, 1.0 / 512.0, 1.0 - 1.0 / 512.0), clamp(tap.y, 0.0, 1.0))).g;
+          float b = panel(uFrameSelected, vec2(clamp(tap.x - uVelocity.x * SPLIT_AMOUNT, 1.0 / 512.0, 1.0 - 1.0 / 512.0), clamp(tap.y - uVelocity.y * SPLIT_AMOUNT, 0.0, 1.0))).b;
           smear += vec3(r, g, b);
         }
         image.rgb = smear / float(SMEAR_TAPS);
       }
 
-      vec4 mask = texture2D(uTexture, vec2((localX + (uFrameMask - 1.0)) / uFrameTotal, st.y - offsetY));
+      vec4 mask = panel(uFrameMask, vec2(localX, st.y - offsetY));
 
       float mixValue = uMaskIntensity;
       float shortenedFadeAmount = 1.0 - clamp((uTime / 4.0) - 0.75, 0.0, 1.0);
@@ -346,7 +397,7 @@ export const VideoMaterial = shaderMaterial(
       if(uFrameOverlay != 0.0) {
         fadeAmount = extendedFadeAmount;
 
-        vec4 overlay = texture2D(uTexture, vec2((localX + (uFrameOverlay - 1.0)) / uFrameTotal, st.y - offsetY));
+        vec4 overlay = panel(uFrameOverlay, vec2(localX, st.y - offsetY));
 
         float minRadius = 0.15;
         float maxRadius = 0.5;
@@ -367,7 +418,7 @@ export const VideoMaterial = shaderMaterial(
       if(uAvatar == 1.0) {
         fadeAmount = extendedFadeAmount;
 
-        vec4 sketch = texture2D(uTexture, vec2((localX + (uFrameSketch - 1.0)) / uFrameTotal, st.y - offsetY));
+        vec4 sketch = panel(uFrameSketch, vec2(localX, st.y - offsetY));
 
         vec4 luma = vec4(0.299, 0.587, 0.114, 0.0);
         float grayscale = dot(sketch, luma);
@@ -394,10 +445,39 @@ export const VideoMaterial = shaderMaterial(
 
 
       // Developing: a blank milky print, then the tones come up, then the
-      // colour — the way an instant photo develops.
+      // colour — the way an instant photo develops. While it's blank
+      // (waiting on the next dream), the emulsion isn't still: soft blotches
+      // drift through it, and the scene's background ghosts in and out, as
+      // if the picture's about to surface.
       if(uDevelop < 1.0) {
         float luma = dot(image.rgb, vec3(0.299, 0.587, 0.114));
         vec3 milky = mix(vec3(0.80, 0.82, 0.79), vec3(0.20, 0.21, 0.20), uDark);
+        float blank = 1.0 - smoothstep(0.0, 0.3, uDevelop);
+        if (blank > 0.0) {
+          // The water over the print: its slope bends the print beneath it
+          // (refraction) and catches a light from above-left.
+          // Measured across a few texels, for a smooth surface.
+          vec2 slope = vec2(
+            texture2D(uWater, st + vec2(WATER_TEXEL * 3.0, 0.0)).r - texture2D(uWater, st - vec2(WATER_TEXEL * 3.0, 0.0)).r,
+            texture2D(uWater, st + vec2(0.0, WATER_TEXEL * 3.0)).r - texture2D(uWater, st - vec2(0.0, WATER_TEXEL * 3.0)).r
+          ) / 3.0;
+          vec3 surface = normalize(vec3(-slope * 6.0, 1.0));
+          float lit = dot(surface, normalize(vec3(-0.45, 0.55, 0.7))) - 0.7;
+          float glint = pow(max(dot(reflect(vec3(0.0, 0.0, -1.0), surface), normalize(vec3(-0.3, 0.4, 0.86))), 0.0), 60.0);
+          vec2 drift = st * 2.6 + vec2(uTime * 0.05, -uTime * 0.035) - slope * 1.5;
+          float warp = emulsionNoise(drift * 1.7 + uTime * 0.08);
+          float blotch = emulsionNoise(drift + warp * 1.6);
+          // The scene's background, seen through the water: refracted by
+          // its slope, so the wake and rings bend it.
+          float ghost = dot(panel(3.0, vec2(localX, st.y - offsetY) - slope * 1.2).rgb, vec3(0.299, 0.587, 0.114));
+          float surfacing = 0.5 + 0.5 * sin(uTime * 0.9 + blotch * 3.0);
+          vec3 tint = mix(vec3(1.0, 0.97, 0.92), vec3(0.92, 0.96, 1.0), blotch);
+          vec3 emulsion = milky * tint + (blotch - 0.5) * mix(0.09, 0.05, uDark);
+          // Clearly there, breathing a little with the emulsion.
+          emulsion = mix(emulsion, vec3(ghost) * 0.75 + milky * 0.25, 0.4 + 0.15 * surfacing * blotch);
+          emulsion += lit * mix(0.16, 0.11, uDark) + glint * mix(0.18, 0.12, uDark);
+          milky = mix(milky, emulsion, blank);
+        }
         vec3 tone = mix(milky, vec3(luma) * 0.85 + milky * 0.15, smoothstep(0.0, 0.55, uDevelop));
         image.rgb = mix(tone, image.rgb, smoothstep(0.35, 1.0, uDevelop));
       }
@@ -433,6 +513,11 @@ export const VideoMaterial = shaderMaterial(
         float a = gl_FragColor.a;
         gl_FragColor.a = mix(a, a >= ditherLimit() ? 1.0 : 0.0, uHash);
       }
+
+      // Nothing here: drawn, it would still write depth and hide whatever's
+      // behind — the avatar's square plane hid the polaroid as it lifted
+      // toward the camera mid-swap.
+      if(gl_FragColor.a < 0.004) discard;
     }
   `,
   (material) => {

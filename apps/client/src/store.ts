@@ -11,29 +11,12 @@ import {
 export type Resume = { dreamId: string; time: number }
 
 /** Swapping to another dream mid-song (see utils/swap-dream.ts): the
- *  polaroid animates `out`, waits off-screen (or face-down) while the next
- *  dream's video loads at the same playback position, then animates `in`. */
+ *  polaroid's photo fades to a blank print (`out`), waits while the next
+ *  dream's video loads at the same playback position (`loading`), then the
+ *  next develops in (`in`). */
 export type SwapPhase = 'idle' | 'out' | 'loading' | 'in'
 /** 1 = next dream, -1 = previous. */
 export type SwapDirection = 1 | -1
-export const SWAP_STYLES = ['snap', 'drop', 'slide', 'flip'] as const
-export type SwapStyle = (typeof SWAP_STYLES)[number]
-
-// The choose screen's carousel: the fan (components/slider.tsx), or one
-// of the experiments in components/carousels/. Picked with ?carousel= or
-// the dev picker.
-export const CAROUSEL_STYLES = ['fan', 'stack', 'scatter', 'lake', 'hand'] as const
-export type CarouselStyle = (typeof CAROUSEL_STYLES)[number]
-
-function initialCarouselStyle(): CarouselStyle {
-  const param = new URLSearchParams(location.search).get('carousel')
-  return CAROUSEL_STYLES.find((style) => style === param) ?? 'fan'
-}
-
-function initialSwapStyle(): SwapStyle {
-  const param = new URLSearchParams(location.search).get('swap')
-  return SWAP_STYLES.find((style) => style === param) ?? 'snap'
-}
 
 export interface AppState {
   dream: Dream | null
@@ -68,8 +51,6 @@ export interface AppState {
   resume: Resume | null
   swapPhase: SwapPhase
   swapDirection: SwapDirection
-  swapStyle: SwapStyle
-  carouselStyle: CarouselStyle
   /** Debug mode (Shift+D, or ?debug): the diagnostics overlay, and
    *  switches for performance experiments — the full-screen wake pass, and
    *  a cap on the canvas's pixel ratio (null = native, up to 2). */
@@ -103,8 +84,6 @@ export interface AppState {
   /** Starts a swap, unless one is already running or nothing's playing. */
   requestSwap: (direction: SwapDirection) => void
   setSwapPhase: (swapPhase: SwapPhase) => void
-  setSwapStyle: (swapStyle: SwapStyle) => void
-  setCarouselStyle: (carouselStyle: CarouselStyle) => void
   setDebug: (debug: boolean) => void
   setWakeEnabled: (wakeEnabled: boolean) => void
   setDprCap: (dprCap: number | null) => void
@@ -134,9 +113,10 @@ export const useStore = create<AppState>()((set) => ({
   resume: null,
   swapPhase: 'idle',
   swapDirection: 1,
-  swapStyle: initialSwapStyle(),
-  carouselStyle: initialCarouselStyle(),
   debug: new URLSearchParams(location.search).has('debug'),
+  // The liquid wake on the welcome and choose screens (components/
+  // wake-pass.tsx skips itself once a dream's playing). Shift+D's debug
+  // panel turns it off.
   wakeEnabled: true,
   // 1.5 rather than native: at 2x on a big display the canvas is ~12M
   // pixels, rendered twice a frame while the wake runs (debug mode's
@@ -183,9 +163,6 @@ export const useStore = create<AppState>()((set) => ({
         : {}
     ),
   setSwapPhase: (swapPhase: SwapPhase) => set(() => ({ swapPhase })),
-  setSwapStyle: (swapStyle: SwapStyle) => set(() => ({ swapStyle })),
-  setCarouselStyle: (carouselStyle: CarouselStyle) =>
-    set(() => ({ carouselStyle })),
   setDebug: (debug: boolean) => set(() => ({ debug })),
   setWakeEnabled: (wakeEnabled: boolean) => set(() => ({ wakeEnabled })),
   setDprCap: (dprCap: number | null) => set(() => ({ dprCap })),

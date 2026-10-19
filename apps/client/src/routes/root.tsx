@@ -18,7 +18,6 @@ import { startAudio } from '../utils/audio'
 import WaterVideo, { DIVE_MS, useWater } from '../components/water-video'
 import Cursor from '../components/cursor'
 import DebugOverlay from '../components/debug-overlay'
-import SwapStylePicker from '../components/swap-style-picker'
 
 // How long buffering has to last before offering the YouTube escape hatch.
 const TOO_SLOW_DELAY = 8000
@@ -125,7 +124,6 @@ function Root() {
   return (
     <>
       <KeyWhiteFilter />
-      <SwapStylePicker />
       <Cursor />
       <DebugOverlay />
       <div className="fixed z-10 top-1 right-1 flex items-center gap-1 font-sans text-sm">

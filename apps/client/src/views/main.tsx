@@ -1,5 +1,5 @@
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
-import { RefObject, useRef } from 'react'
+import { RefObject, useEffect, useMemo, useRef } from 'react'
 import { VideoMaterial, VideoMaterialProps } from '../materials/video-material'
 import Polaroid, { polaroidBend } from '../models/polaroid'
 import { isVideoPlaying } from '../utils'
@@ -16,12 +16,24 @@ import {
 import { suspend } from 'suspend-react'
 import { useIntersect } from '@react-three/drei'
 import { SwapPhase, useStore } from '../store'
-import { commitSwap, fadeOutAudio } from '../utils/swap-dream'
-import { SWAP_ANIMATIONS } from '../utils/swap-poses'
+import { adjacentDream, commitSwap, fadeOutAudio } from '../utils/swap-dream'
 import { readPulse } from '../utils/audio'
 import DreamGlow from '../components/dream-glow'
+import { createWaterSim } from '../utils/water-sim'
+import {
+  dreamElements,
+  dreamVideo,
+  backSlot,
+  frontReady,
+  isSplit,
+  playback,
+  snapCrossfade,
+  stepCrossfade,
+  warmDream,
+} from '../utils/dream-video'
 import {
   commitDistance,
+  directionOf,
   polaroidRect,
   swapDrag,
 } from '../utils/swap-gesture'
@@ -53,21 +65,20 @@ const AVATAR_SHARPEN = 1.2
 const POLAROID_Z = -1.0
 // Scale of the group the polaroid, avatar and lyrics sit in.
 const MAIN_SCALE = 1.1
-// Swap poses push the polaroid off-screen by the visible width or height
-// at its depth, times this. Measured, the tossed polaroid's tilt and
-// perspective cost about a third of that distance on screen, and its
-// frame reaches well past the photo, so 1.2 still let a corner peek in
-// while the next dream loaded.
-const OFFSCREEN_MARGIN = 1.8
-const SWAP_REST = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }
+// A swap (utils/swap-dream.ts): the polaroid springs back to rest as its
+// photo fades to a blank print over SWAP_OUT_SECONDS, holds there while the
+// next dream loads, and the next develops in (DEVELOP_SECONDS) as the swap
+// settles over SWAP_IN_SECONDS.
+const SWAP_OUT_SECONDS = 0.45
+const SWAP_IN_SECONDS = 0.6
 // While dragged, the polaroid follows the pointer 1:1 sideways, tilting
 // into the drag (radians per world unit) and dipping a little, like a
 // photo held by one corner. Let go short of a swap and it eases back.
 const DRAG_TILT = 0.25
 const DRAG_DIP = 0.06
 const DRAG_RETURN = 0.15
-// The avatar and lyrics dissolve as a drag goes — gone by this share of
-// the way to the release point — stay gone through the swap, and come
+// The avatar dissolves as a drag goes — gone by this share of
+// the way to the release point — stays gone through the swap, and comes
 // back as the new polaroid lands. All the way to the release point, so
 // the avatar can be seen trailing the drag (AVATAR_FOLLOW) as it goes.
 // FADE_EASE smooths the target per frame.
@@ -92,13 +103,6 @@ const BEND_PER_VELOCITY = 20
 const BEND_HELD = 0.7
 const BEND_MAX = 1
 const BEND_EASE = 0.2
-// How much of the avatar's pointer fade breaks into stipple (uHash).
-const AVATAR_HASH = 0.6
-// After a swap the avatar arrives at full strength, wherever the pointer
-// is, for REVEAL_HOLD seconds from the landing, then eases back to its
-// pointer fade over REVEAL_RELEASE seconds.
-const REVEAL_HOLD = 2
-const REVEAL_RELEASE = 1
 // While the polaroid's dragged, the avatar trails it: AVATAR_FOLLOW of the
 // way, eased by AVATAR_FOLLOW_EASE per frame so it lags behind, tilting
 // with it by AVATAR_FOLLOW_TILT radians per world unit.
@@ -107,6 +111,16 @@ const AVATAR_FOLLOW_EASE = 0.08
 const AVATAR_FOLLOW_TILT = 0.15
 // The polaroid swells this much (scale) on each beat.
 const PULSE_SCALE = 0.012
+// How much of the avatar's pointer fade breaks into stipple (uHash).
+const AVATAR_HASH = 0.6
+// After a swap the avatar arrives at full strength, wherever the pointer
+// is, for REVEAL_HOLD seconds from the landing, then eases back to its
+// pointer fade over REVEAL_RELEASE seconds.
+const REVEAL_HOLD = 2
+const REVEAL_RELEASE = 1
+// The blank print's water (utils/water-sim.ts): pointer speed (CSS px per
+// frame) for a full-strength stroke.
+const EMULSION_FULL_SPEED = 30
 
 function Main(
   props: ThreeElements['group'] & {
@@ -159,6 +173,31 @@ function Main(
   // Update colorspace
   texture.colorSpace = LinearSRGBColorSpace
 
+  // The split layout (utils/dream-video.ts): `texture` is the shared main
+  // video, panels 1-6, and the dream (panel 7) comes from its own two
+  // videos, crossfaded as dreams switch. Otherwise `texture` is the dream's
+  // own 7-panel video, as before.
+  // The last dream's layout holds while the player leaves (the dream's
+  // cleared first): falling back to 7 panels mid-exit read a panel 7 off
+  // the 6-panel main video, and flashed its outline panel up full-screen.
+  const lastDream = useRef(dream)
+  if (dream) lastDream.current = dream
+  const split = isSplit(dream ?? lastDream.current)
+  const frameTotal = split ? 6 : 7
+  const dreamTextures = useMemo(
+    () =>
+      dreamElements().map((el) => {
+        const dreamTexture = new VideoTexture(el)
+        dreamTexture.colorSpace = LinearSRGBColorSpace
+        return dreamTexture
+      }),
+    []
+  )
+  useEffect(
+    () => () => dreamTextures.forEach((dreamTexture) => dreamTexture.dispose()),
+    [dreamTextures]
+  )
+
   const idle = useIdle(5000)
 
   const polaroidMaterial = useRef<VideoMaterialProps>(null)
@@ -185,8 +224,7 @@ function Main(
   // satisfy, silently breaking it — that one needs a fresh Vector2.
   const pointerPositionRef = useRef(new Vector2())
 
-  // Swap animation progress (see utils/swap-poses.ts): 0 at rest, 1 fully
-  // out. Read from the store non-reactively, like everything else here.
+  // Swap progress (see SWAP_OUT_SECONDS): 0 at rest, 1 fully out. Read from the store non-reactively, like everything else here.
   const swapProgressRef = useRef(0)
   const swapPhaseRef = useRef<SwapPhase>('idle')
   // The drag offset actually applied, in CSS pixels (see swapDrag).
@@ -197,8 +235,17 @@ function Main(
   const velocityTarget = useRef(new Vector2())
   const bendTarget = useRef(new Vector2())
   const developRef = useRef(1)
+  // Whether the dream on show has started playing yet (it shows a blank,
+  // living print until then, as a swap does), and the blank print's water, with the pointer where it was last frame
+  // (CSS px, and on the photo in UV).
+  const startedRef = useRef(false)
   // Seconds since the last swap's arrival started (Infinity = none).
   const revealRef = useRef(Infinity)
+  const water = useMemo(() => createWaterSim(), [])
+  useEffect(() => () => water.dispose(), [water])
+  const lastPointerPx = useRef(new Vector2(-1, -1))
+  const lastPointerUv = useRef(new Vector2(-1, -1))
+  const pointerUv = useRef(new Vector2())
   const avatarFollow = useRef<Group>(null)
   const avatarOffsetRef = useRef(0)
   const rippleRef = useRef(-1)
@@ -306,28 +353,46 @@ function Main(
 
     scaleApi.start({ scale: MathUtils.clamp(time / 8.0, 1.05, 1.125) })
 
-    const { swapPhase, swapDirection, swapStyle, setSwapPhase } =
-      useStore.getState()
-    const animation = SWAP_ANIMATIONS[swapStyle]
+    const { swapPhase, swapDirection, setSwapPhase } = useStore.getState()
+    // Split, a swap only changes the dream video: the song plays on, and
+    // the new dream crossfades in rather than developing from blank.
+    const splitNow = isSplit(useStore.getState().dream ?? lastDream.current)
+    // Waiting on video: the first dream until it can play (a blank print,
+    // developing once it's ready), or a swap.
+    const currentDream = useStore.getState().dream
+    if (!currentDream) startedRef.current = false
+    else if (
+      video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA &&
+      (!splitNow || frontReady())
+    )
+      startedRef.current = true
+    const starting = !!currentDream && !startedRef.current
+    playback.waiting = starting || (!!currentDream && swapPhase !== 'idle')
+    if (starting) developRef.current = 0
+    // Mid-swap the photo's a blank print (uDevelop below), so the next
+    // dream can just be there when it develops.
+    if (splitNow && swapPhase !== 'idle') snapCrossfade()
+    else stepCrossfade(delta)
+    for (const material of [polaroidMaterial.current, lyricsMaterial.current])
+      if (material) material.uDreamMix = dreamVideo.mix
     if (swapPhase !== swapPhaseRef.current) {
-      if (swapPhase === 'out') fadeOutAudio(video)
+      if (swapPhase === 'out' && !splitNow) fadeOutAudio(video)
+      // The dream this swap brings, warm behind already if it's the one
+      // the last swap's direction pointed to; otherwise it starts now.
+      if (swapPhase === 'out' && splitNow) warmDream(adjacentDream(swapDirection))
+
       if (swapPhase === 'in') {
         developRef.current = 0
         revealRef.current = 0
         rippleRef.current = -1
       }
 
-      if (swapPhase === 'loading') {
-        // Off-screen now; the next one comes in from rest.
-        swapDrag.committed = false
-        dragOffsetRef.current = 0
-      }
 
       swapPhaseRef.current = swapPhase
     }
 
     if (swapDrag.active) dragOffsetRef.current = swapDrag.dx
-    else if (!swapDrag.committed || animation.inPlace)
+    else
       dragOffsetRef.current = MathUtils.lerp(
         dragOffsetRef.current,
         0,
@@ -338,36 +403,26 @@ function Main(
     // its group. `w` and `h` are the viewport at z = 0; the polaroid sits
     // further back (and inside the 1.1x scaled group below), where more is
     // in view, and the camera zooms out on narrow screens. Used to keep the
-    // drag 1:1 with the pointer and to push swap poses truly off-screen.
+    // drag 1:1 with the pointer.
     const cameraZ = state.camera.position.z
     const depth = (cameraZ - POLAROID_Z * MAIN_SCALE) / cameraZ
     const view = depth / MAIN_SCALE / (state.camera.zoom || 1)
-    const poseW = w * view * OFFSCREEN_MARGIN
-    const poseH = h * view * OFFSCREEN_MARGIN
 
-    let pose
     if (swapPhase === 'out') {
       swapProgressRef.current = Math.min(
         1,
-        swapProgressRef.current + delta / animation.outDuration
+        swapProgressRef.current + delta / SWAP_OUT_SECONDS
       )
-      pose = animation.exit(swapProgressRef.current, swapDirection, poseW, poseH)
       if (swapProgressRef.current === 1) commitSwap(video)
-    } else if (swapPhase === 'loading') {
-      const held = animation.exit(1, swapDirection, poseW, poseH)
-      const hold = animation.hold?.(state.clock.elapsedTime, swapDirection)
-      pose = { ...held, ry: held.ry + (hold?.ry ?? 0) }
     } else if (swapPhase === 'in') {
       swapProgressRef.current = Math.max(
         0,
-        swapProgressRef.current - delta / animation.inDuration
+        swapProgressRef.current - delta / SWAP_IN_SECONDS
       )
-      pose = animation.enter(swapProgressRef.current, swapDirection, poseW, poseH)
       if (swapProgressRef.current === 0) setSwapPhase('idle')
     }
 
     if (swapGroup.current) {
-      const { x, y, z, rx, ry, rz } = pose ?? SWAP_REST
       // Drag offset in CSS px, to world units at the polaroid (see `view`).
       const drag = (dragOffsetRef.current * w * view) / state.size.width
 
@@ -384,16 +439,11 @@ function Main(
       }
 
       swapGroup.current.position.set(
-        x + drag,
-        y - Math.abs(drag) * DRAG_DIP,
-        z + POLAROID_Z
+        drag,
+        -Math.abs(drag) * DRAG_DIP,
+        POLAROID_Z
       )
-      swapGroup.current.rotation.set(rx, ry, rz - drag * DRAG_TILT)
-      // Off-screen while the next dream loads anyway; hidden too, so
-      // nothing can peek in however the screen is shaped. Not for a style
-      // that shows something while it waits (flip rocks face-down).
-      swapGroup.current.visible =
-        swapPhase !== 'loading' || !!animation.hold || !!animation.inPlace
+      swapGroup.current.rotation.set(0, 0, -drag * DRAG_TILT)
 
       const step = (1 / 60 / Math.max(delta, 1e-3)) / PHOTO_WIDTH
       const target = velocityTarget.current
@@ -433,13 +483,18 @@ function Main(
       polaroidMaterial.current.uDevelop =
         swapPhase === 'in' || swapPhase === 'idle'
           ? developRef.current
-          : animation.inPlace
-            ? swapPhase === 'out'
-              ? 1 - swapProgressRef.current
-              : 0
-            : 1
+          : swapPhase === 'out'
+            ? 1 - swapProgressRef.current
+            : 0
       rippleUniform.current.z = rippleRef.current
       polaroidMaterial.current.uRipple = rippleUniform.current
+    }
+
+    // Dragging toward the previous dream warms it instead of the next, so
+    // either way the swap has it ready.
+    if (splitNow && swapDrag.active && Math.abs(swapDrag.dx) > 24 && swapPhase === 'idle') {
+      const target = adjacentDream(directionOf(swapDrag.dx))
+      if (target && backSlot().id !== target.id) warmDream(target)
     }
 
     // The music's pulse. (The cursor's liquid wake is drawn over the whole
@@ -466,11 +521,20 @@ function Main(
         0,
         1
       )
-    fadeRef.current = MathUtils.lerp(fadeRef.current, fadeTarget, FADE_EASE)
+    fadeRef.current = MathUtils.lerp(
+      fadeRef.current,
+      fadeTarget,
+      swapPhase === 'out' ? FADE_EASE * 2 : FADE_EASE
+    )
     if (fadeRef.current > 0.999) fadeRef.current = 1
-    for (const material of [avatarMaterial.current, lyricsMaterial.current]) {
-      if (material) material.uFade = fadeRef.current
-    }
+    // Gone, not nearly: a last trace of the dissolve read as a ghost of
+    // the avatar over the polaroid while the next dream loaded.
+    if (swapPhase === 'loading') fadeRef.current = 0
+    const avatarFade = fadeRef.current
+    if (avatarFollow.current) avatarFollow.current.visible = avatarFade > 0.01
+    // Only the avatar: the song plays on through a swap, so its words do
+    // too.
+    if (avatarMaterial.current) avatarMaterial.current.uFade = avatarFade
 
     // Full strength for a while after a swap, then back to the pointer.
     revealRef.current += delta
@@ -507,6 +571,37 @@ function Main(
       }
     }
 
+    // The blank print's water: stirred where the pointer moves over it,
+    // run only while the print's blank (and stilled once it isn't).
+    if (polaroidMaterial.current) {
+      const px = ((state.pointer.x + 1) / 2) * state.size.width
+      const py = ((1 - state.pointer.y) / 2) * state.size.height
+      const uv = pointerUv.current.set(
+        (px - polaroidRect.left) / (polaroidRect.right - polaroidRect.left),
+        (polaroidRect.bottom - py) / (polaroidRect.bottom - polaroidRect.top)
+      )
+      const over =
+        polaroidRect.visible && uv.x >= 0 && uv.x <= 1 && uv.y >= 0 && uv.y <= 1
+      const speed =
+        lastPointerPx.current.x < 0
+          ? 0
+          : Math.hypot(px - lastPointerPx.current.x, py - lastPointerPx.current.y)
+      lastPointerPx.current.set(px, py)
+      const blank = (polaroidMaterial.current.uDevelop ?? 1) < 0.3
+      if (blank) {
+        const from = lastPointerUv.current.x < 0 ? uv : lastPointerUv.current
+        water.step(
+          state.gl,
+          from,
+          uv,
+          over ? Math.min(speed / EMULSION_FULL_SPEED, 1) : 0
+        )
+      } else water.clear(state.gl)
+      if (over) lastPointerUv.current.copy(uv)
+      else lastPointerUv.current.set(-1, -1)
+      polaroidMaterial.current.uWater = water.texture
+    }
+
     if (!isMobile && !isTouch) {
       idleOpacityRef.current = MathUtils.lerp(
         idleOpacityRef.current,
@@ -530,7 +625,13 @@ function Main(
             animation moves this outer group; the pointer tilt (above)
             turns the polaroid inside it. */}
         {/* The dream, filling the screen behind everything */}
-        <DreamGlow video={videoElement} texture={texture} fade={fadeRef} />
+        <DreamGlow
+          video={videoElement}
+          texture={texture}
+          dreamTextures={split ? dreamTextures : null}
+          fade={fadeRef}
+          develop={developRef}
+        />
 
         <group ref={swapGroup} position={[0, 0, POLAROID_Z]}>
           <Polaroid
@@ -542,8 +643,11 @@ function Main(
                 ref={polaroidMaterial}
                 key={VideoMaterial.key}
                 uTexture={texture}
+                uDream={dreamTextures[0]}
+                uDreamNext={dreamTextures[1]}
+                uSplit={split ? 1 : 0}
                 uFrameSelected={7}
-                uFrameTotal={7}
+                uFrameTotal={frameTotal}
                 uFrameMask={3}
                 uOpacity={1}
                 uFrameOverlay={3}
@@ -570,7 +674,7 @@ function Main(
               uFrameSketch={6}
               uFrameMask={4}
               uFrameDepth={5}
-              uFrameTotal={7}
+              uFrameTotal={frameTotal}
               uAvatar={1}
               uOpacity={1}
               uMaskIntensity={1}
@@ -591,10 +695,13 @@ function Main(
             ref={lyricsMaterial}
             key={VideoMaterial.key}
             uTexture={texture}
+            uDream={dreamTextures[0]}
+            uDreamNext={dreamTextures[1]}
+            uSplit={split ? 1 : 0}
             uFrameSelected={7}
             uFrameMask={1}
             uMaskIntensity={1}
-            uFrameTotal={7}
+            uFrameTotal={frameTotal}
             uInvert={1}
             uOpacity={1}
             uBackgroundMix={0.5}

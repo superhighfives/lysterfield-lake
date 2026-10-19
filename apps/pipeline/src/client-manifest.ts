@@ -69,7 +69,7 @@ async function upsertDreamsJson(clientDir: string, id: string): Promise<void> {
  * - `dreams/main/main{,-small}.{webm,mov}`: the shared 6-panel video with the audio.
  * - `dreams/<id>/dream{,-small}.{webm,mov}`: each take's silent dream clip, `<id>` being the take's name.
  *
- * See plans/ready/split-dream-video-client.md for how the client plays them.
+ * See plans/in-progress/split-dream-video-client.md for how the client plays them.
  */
 export async function writeSplitClientAssets(clientDir: string, result: ComposeSplitResult): Promise<string[]> {
   const files = ['', '-small'].flatMap((size) => ['webm', 'mov'].map((ext) => `${size}.${ext}`))

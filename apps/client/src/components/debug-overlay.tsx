@@ -81,7 +81,6 @@ function DebugOverlay() {
   const setAutoDpr = useStore((state) => state.setAutoDpr)
   const dream = useStore((state) => state.dream)
   const swapPhase = useStore((state) => state.swapPhase)
-  const carouselStyle = useStore((state) => state.carouselStyle)
   const colorScheme = useStore((state) => state.colorScheme)
   const isMobile = useStore((state) => state.isMobile)
   const isTouch = useStore((state) => state.isTouch)
@@ -173,7 +172,6 @@ function DebugOverlay() {
     ['versions', `react ${reactVersion} · three r${REVISION}`],
     ['dream', dream ? dream.id : '—'],
     ['swap', swapPhase],
-    ['carousel', carouselStyle],
     ['device', `${colorScheme}${isMobile ? ' · tilt' : ''}${isTouch ? ' · touch' : ''}`],
   ]
 

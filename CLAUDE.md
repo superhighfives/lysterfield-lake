@@ -55,13 +55,19 @@ re-renders a stretch that still shows a person with new seeds, up to
 failing frame twice within a run. Don't raise those caps or add others like
 them without asking.
 
-## The client's 7-panel output order is load-bearing, not a convention
+## The client's panel order is load-bearing, not a convention
 
-`apps/client/src/materials/video-material.tsx` and `apps/client/src/views/main.tsx`
-read a fixed `uFrameTotal={7}` atlas at hardcoded indices: 1 = lyrics,
-2 = portrait, 3 = portrait background, 4 = matte, 5 = depth, 6 = outline,
-7 = dream video. Don't reorder or resize the pipeline's composite output
-without updating both those files to match.
+The client plays a shared **main video** of 6 panels side by side, in a
+fixed order — 1 = lyrics, 2 = portrait, 3 = portrait background,
+4 = matte, 5 = depth, 6 = outline — plus each dream's own **dream video**,
+panel 7 on its own (`compose-split`, `dreams/main/` and
+`dreams/<id>/dream*`). `apps/client/src/materials/video-material.tsx` reads
+every panel through one `panel()` lookup (7 from the dream video, 1-6 from
+the main video at `uFrameTotal={6}`), and `apps/client/src/views/main.tsx`
+picks panels by those hardcoded indices. The older 7-panel files
+(`dreams/<id>/video*`, panel 7 last in the same atlas) still play with
+`?split=0` until the split path is checked on real devices. Don't reorder
+or resize either layout without updating both those files to match.
 
 ## Dream panel (7) must never show a person
 

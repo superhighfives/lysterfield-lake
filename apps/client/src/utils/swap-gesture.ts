@@ -1,12 +1,14 @@
 import { useEffect } from 'react'
 import { SwapDirection, useStore } from '../store'
+import { playback } from './dream-video'
 import { adjacentDream } from './swap-dream'
 
 // Dragging the player's polaroid sideways to swap dreams (see
 // utils/swap-dream.ts). While a drag is held the polaroid follows it
 // (views/main.tsx) and the cursor previews where letting go will land
-// (components/cursor.tsx); let go far enough, or flick, and it's tossed
-// away. A tap on the polaroid, and the arrow keys, swap too.
+// (components/cursor.tsx); let go far enough, or flick, and it springs
+// back as the next dream develops in. A tap on the polaroid, and the arrow
+// keys, swap too.
 //
 // These two objects are mutated in place and read every frame by the scene
 // and the cursor, never through React — same reasoning as the per-frame
@@ -22,13 +24,11 @@ export const polaroidRect = {
   visible: false,
 }
 
-/** The drag in progress, in CSS pixels. `committed` holds from letting go
- *  until the polaroid is off-screen, so it's tossed from where it was let
- *  go rather than snapping back first. */
+/** The drag in progress, in CSS pixels. Let go, and the polaroid springs
+ *  back to rest, swapping or not. */
 export const swapDrag = {
   active: false,
   dx: 0,
-  committed: false,
 }
 
 // How close (CSS pixels) the pointer has to be for the cursor to offer a
@@ -59,7 +59,8 @@ export function canSwap() {
   return (
     state.showPlayhead &&
     state.polaroidPillVisible &&
-    state.swapPhase === 'idle'
+    state.swapPhase === 'idle' &&
+    !playback.waiting
   )
 }
 
@@ -155,7 +156,6 @@ export function useSwapInput() {
         Math.abs(dx) >= FLICK_MIN_PX &&
         Math.sign(velocity) === Math.sign(dx)
       if ((Math.abs(dx) >= commitDistance() || flicked) && canSwap()) {
-        swapDrag.committed = true
         useStore.getState().requestSwap(directionOf(dx))
       }
     }

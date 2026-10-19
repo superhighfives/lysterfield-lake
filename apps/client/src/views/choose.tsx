@@ -1,8 +1,7 @@
  
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
 import { MathUtils, Mesh, MeshBasicMaterial, Vector3 } from 'three'
-import type { Dream } from '../utils/types'
 import {
   useIntersect,
   useScroll,
@@ -11,23 +10,17 @@ import {
 } from '@react-three/drei'
 import { animated, useSpring, config } from '@react-spring/three'
 import { useStore } from '../store'
-import Slider from '../components/slider'
-import DreamCard from '../components/dream-card'
-import { CAROUSELS } from '../components/carousels'
+import Stack from '../components/carousels/stack'
 import dreams from '../dreams.json'
 
 // Warms suspend-react's cache (the mechanism behind every useTexture call in
-// this file and in Slider's per-card render prop below) at module-evaluation
-// time, before Choose ever renders. A cache hit inside a component's render
-// body returns synchronously without calling TextureLoader.load(), so it
-// never reaches THREE's LoadingManager.itemStart() — which is what
-// synchronously updates drei's useProgress() store (Loading's data source)
-// while Choose/Slider are still mid-render, tripping React 19's "Cannot
-// update a component while rendering a different component" check. Same
-// family of render-phase-side-effect bug as this file's `doubledCollection`
-// memoization and slider.tsx's `runSprings`/state-in-useFrame comments —
-// just the one instance those passes didn't catch, since useTexture itself
-// (not a state update built on top of it) is the actual culprit here.
+// this file and in each stacked card) at module-evaluation time, before
+// Choose ever renders. A cache hit inside a component's render body returns
+// synchronously without calling TextureLoader.load(), so it never reaches
+// THREE's LoadingManager.itemStart() — which is what synchronously updates
+// drei's useProgress() store (Loading's data source) while Choose is still
+// mid-render, tripping React 19's "Cannot update a component while
+// rendering a different component" check.
 useTexture.preload('images/welcome.png')
 useTexture.preload('images/action-scroll.png')
 useTexture.preload('images/choose.png')
@@ -44,8 +37,7 @@ const invertInk = (shader: { fragmentShader: string }) => {
 
 // How far the whole carousel sits toward the camera, in world units —
 // making the cards bigger on screen without changing their spacing or
-// fan. Applied to the group around Slider, like the scale below, so
-// drei's <Center> inside it is unaffected.
+// pile. Applied to the group around the stack, like the scale below.
 const CAROUSEL_FORWARD = 0.25
 
 // Frames between nudges while arriving at the player (see useFrame).
@@ -56,9 +48,6 @@ const CAROUSEL_MIN_SCALE = 0.6
 
 function Choose(props: ThreeElements['group']) {
   const collection = useStore((state) => state.collection)
-  const carouselStyle = useStore((state) => state.carouselStyle)
-  const Experiment = carouselStyle === 'fan' ? null : CAROUSELS[carouselStyle]
-  const isMobile = useStore((state) => state.isMobile)
   const dream = useStore((state) => state.dream)
   const setDream = useStore((state) => state.setDream)
   const colorScheme = useStore((state) => state.colorScheme)
@@ -83,19 +72,6 @@ function Choose(props: ThreeElements['group']) {
 
   const titleImage = useVideoTexture(`/assets/${collection[0].id}/loop.mov`)
 
-  // `[...collection, ...collection]` created a brand-new array every render
-  // — Slider's internal useCallback chain (idx -> getPos -> runSprings) all
-  // depend on `items`, so a fresh reference every render meant `runSprings`
-  // never stabilized, its consuming effect kept re-firing, and combined
-  // with drei's useTexture render-phase side effect (see the per-item
-  // texture load below) that cascaded into a real "Maximum update depth
-  // exceeded" loop under React 19. Memoized so the reference only changes
-  // when `collection` itself actually does.
-  const doubledCollection = useMemo(
-    () => [...collection, ...collection],
-    [collection]
-  )
-
   // Choosing a card already leaves the page scrolled down to the player,
   // but a dream restored from the URL or browser history (see
   // utils/use-history-sync.ts) arrives with the page at the top — scroll
@@ -119,9 +95,8 @@ function Choose(props: ThreeElements['group']) {
   // the canvas height — as tall a share on a big external monitor as on a
   // laptop, where it reads as enormous. Past CAROUSEL_REFERENCE_HEIGHT CSS
   // pixels of canvas, it's scaled down to hold roughly that on-screen size.
-  // Applied to the group *around* Slider, not inside it: drei's <Center>
-  // in Slider measures in its own local space, so an ancestor's scale
-  // doesn't disturb the offset it bakes in at mount.
+  // Applied to the group around the stack, which lays its cards out in
+  // its own local space.
   const canvasHeight = useThree((state) => state.size.height)
   const carouselScale = MathUtils.clamp(
     CAROUSEL_REFERENCE_HEIGHT / canvasHeight,
@@ -131,7 +106,7 @@ function Choose(props: ThreeElements['group']) {
 
   const data = useScroll()
   // These all used to be React state, recomputed every frame via useFrame —
-  // Choose renders the whole Slider (up to ~20 polaroid cards, each with
+  // Choose renders the whole stack (up to ~20 polaroid cards, each with
   // its own useTexture call) underneath it, so a state update here 60x/sec
   // was re-rendering all of that every frame. None of these values are
   // read reactively in a way that needs a React re-render: the two opacity
@@ -144,8 +119,6 @@ function Choose(props: ThreeElements['group']) {
   const polaroidVisibilityRef = useRef(0)
   const welcomeMaterial = useRef<MeshBasicMaterial>(null)
   const whichMaterial = useRef<MeshBasicMaterial>(null)
-
-  const POLAROID_WIDTH = 0.3
 
   const [{ opacity: actionScrollOpacity }, actionScrollApi] = useSpring(
     () => ({
@@ -246,34 +219,6 @@ function Choose(props: ThreeElements['group']) {
   const actionScroll = useTexture('images/action-scroll.png')
   const which = useTexture('images/choose.png')
 
-  const isDragging = useRef(false)
-  const isDoubleClicked = useRef(false)
-  const previousClickTimestamp = useRef(performance.now())
-  const DOUBLE_CLICK_TIME_THRESHOLD = 250
-
-  function handleClick(e: Event, dream: Dream) {
-    e.stopPropagation()
-
-    if (!isMobile) {
-      if (isDragging.current) return
-      const now = performance.now()
-      const clickDeltaTime = now - previousClickTimestamp.current
-      if (
-        isDoubleClicked.current ||
-        clickDeltaTime >= DOUBLE_CLICK_TIME_THRESHOLD
-      ) {
-        setDream(dream)
-        isDoubleClicked.current = false
-      } else {
-        isDoubleClicked.current = true
-      }
-
-      previousClickTimestamp.current = now
-    } else {
-      setDream(dream)
-    }
-  }
-
   return (
     <group {...props}>
       {/* Title */}
@@ -312,7 +257,7 @@ function Choose(props: ThreeElements['group']) {
         />
       </mesh>
 
-      {/* Choose — the carousel's card layers (see slider.tsx) draw over
+      {/* Choose — the stack's cards draw over
           this where they overlap it, which is intended. */}
       <mesh position={[0, -h * 1.4, 0]}>
         <planeGeometry args={[1, which.image.height / which.image.width, 1]} />
@@ -328,23 +273,11 @@ function Choose(props: ThreeElements['group']) {
         position={polaroidPosition as unknown as Vector3}
         scale={carouselScale}
       >
-        {Experiment ? (
-          <Experiment items={collection} onSelect={setDream} />
-        ) : (
-          <Slider
-            items={doubledCollection}
-            isDragging={isDragging}
-            width={POLAROID_WIDTH}
-            visible={collection.length * 2 - 1}
-          >
-            {(dream: Dream) => (
-              <DreamCard
-                dream={dream}
-                onSelect={(e) => handleClick(e as unknown as Event, dream)}
-              />
-            )}
-          </Slider>
-        )}
+        <Stack
+          items={collection}
+          onSelect={setDream}
+          presence={polaroidVisibilityRef}
+        />
       </animated.group>
     </group>
   )

@@ -1,6 +1,6 @@
 ---
 title: Play the dream as its own video beside a shared 6-panel main video
-status: Ready
+status: In progress
 created: 2026-10-18
 updated: 2026-10-18
 ---
@@ -190,20 +190,23 @@ once the split path is the only one in use.
 
 ## Tasks
 
-- [ ] Shader: `uDream`, a `panel()` lookup for every sample, `uFrameTotal` 6
+- [x] Shader: `uDream`, a `panel()` lookup for every sample, `uFrameTotal` 6
       for the main texture; `uSplit` fallback to the 7-panel layout
-- [ ] CLAUDE.md: update the load-bearing panel-order section
-- [ ] `main.tsx`: dream `VideoTexture` for the polaroid and lyrics
-- [ ] `playhead.tsx`: the main video plays `main{,-small}`; add the dream
-      video(s), mirroring play, pause and seeks, plus the sync loop
-- [ ] Switching dreams: preload, seek, then crossfade (`uDreamNext` and
-      `uDreamMix`), and retire the old video
-- [ ] First choose waits for both videos; Reset and `ended` unchanged
-- [ ] `use-history-sync.ts`: a popstate to another dream is a switch plus a seek
+      (`?split=0`, and always for a take's dev preview)
+- [x] CLAUDE.md: update the load-bearing panel-order section
+- [x] `main.tsx`: dream `VideoTexture`s for the polaroid and lyrics (and
+      the backdrop, `dream-glow.tsx`)
+- [x] `playhead.tsx`: the main video plays `main{,-small}`; the dream videos
+      (`utils/dream-video.ts`) mirror play, pause and seeks, plus the sync loop
+- [x] Switching dreams: preload, seek, then switch (the snap swap's blank
+      print covers it), with the next dream kept warm in the back slot
+- [x] First choose waits for both videos; Reset and `ended` unchanged
+- [x] A popstate to another dream is a switch plus a seek (handled in
+      `playhead.tsx`; `use-history-sync.ts` needed no change)
 - [x] Publishing: `compose-split` copies `main/` and each `split/` into
       `apps/client/dreams/` (done for all ten, 2026-10-18)
 - [ ] R2: copy, deploy the client, then delete the datestamp folders, with
-      the user's go-ahead
+      the user's go-ahead; check `Accept-Ranges` and `Cache-Control` there
 - [ ] Check on real devices:
   - iPhone Safari, including Low Power Mode
   - an Android phone
@@ -214,6 +217,14 @@ once the split path is the only one in use.
       happens to drift over the whole song on iPhone
 
 ## Things to watch
+
+- **Seeks on the dev server (seen 2026-10-18):** on Vite (HTTP/1.1), a
+  dream video loading while the main video, another dream video and the
+  choose screen's loop videos all stream can wait seconds for a seek — six
+  connections per host. A seek once wedged (seeking, network idle) when the
+  main video's own seek re-seeked a dream video mid-load; mirrored seeks
+  now skip loading videos, and a seek stuck for 4s reloads once. Measure on
+  R2 (HTTP/2) before reading much into dev-server timings.
 
 - **iOS:** several inline videos can play at once if all but one are muted
   (here, the dream). Low Power Mode can refuse autoplay, as it already can

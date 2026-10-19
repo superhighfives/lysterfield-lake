@@ -1,37 +1,37 @@
-import { CanvasTexture, LinearFilter, Vector4 } from 'three'
+import { Vector4 } from 'three'
 
 // The cursor's wake, as if it were dragged through water: a small
 // screen-shaped map of which way the pointer has been moving, fading as it
-// settles. The scene's final pass (components/wake-pass.tsx) pulls the
-// whole rendered image along it, so everything the pointer passes over —
-// photos, frames, text — is dragged a little with it, centred on its path.
+// settles. The scene's final pass (components/wake-pass.tsx) keeps that
+// map on the GPU — in floats, so it fades exactly to nothing (an 8-bit
+// canvas, as this used to be, can't fade the last few levels at a slow
+// rate, and left blotches of stuck flow that frayed every edge into
+// steps) — and pulls the rendered image along it. This module measures
+// the pointer: each frame's stroke, and the ripple drops.
 //
-// Encoded around a neutral mid-grey: red and green are the flow's x and y
-// (128 = still, in canvas space, so y is down), blue is how much wake
-// there is. Strokes are painted over it with ordinary blending, so each
-// pulls the flow toward its own direction, and a wash of neutral each
-// frame lets it all settle back.
+// The map holds the flow's x and y (y up, -1 to 1) and how much wake
+// there is. Each frame's stroke is painted over it, pulling the flow
+// toward its own direction, and the whole map fades by SETTLE.
 
-// Trail resolution (its long side, in texels), how fast it settles (alpha
-// of the neutral wash per frame), and a stroke's radius as a share of the
-// canvas width, at rest and at full speed.
-const TRAIL_SIZE = 160
-const SETTLE = 0.012
+// Trail resolution (its long side, in texels), how fast it settles (the
+// share lost per frame), and a stroke's radius as a share of the screen
+// width, at rest and at full speed.
+export const TRAIL_SIZE = 160
+export const SETTLE = 0.015
 const RADIUS = 0.05
 const RADIUS_FAST = 0.1
 // Pointer speed (CSS px per frame) that counts as full speed. The wake
 // follows speed on a curve (SPEED_CURVE > 1), so a slow drift barely
-// stirs it and a fast flick drags hard. A stroke's opacity runs from
+// stirs it and a fast flick drags hard. A stroke's strength runs from
 // STROKE_ALPHA_SLOW to STROKE_ALPHA_FAST along the same curve.
 const FULL_SPEED = 60
 const SPEED_CURVE = 1.6
-const STROKE_ALPHA_SLOW = 0.2
-const STROKE_ALPHA_FAST = 0.65
-const NEUTRAL = 'rgb(128, 128, 0)'
-// Frames for a full-strength stroke to wash out to (8-bit) nothing at
+const STROKE_ALPHA_SLOW = 0.3
+const STROKE_ALPHA_FAST = 0.8
+// Frames for a full-strength stroke to fade below a visible trace at
 // SETTLE per frame, plus a margin; the trail counts as active that long
 // after its last stroke.
-const ACTIVE_FRAMES = Math.ceil(Math.log(1 / 255) / Math.log(1 - SETTLE)) + 30
+const ACTIVE_FRAMES = Math.ceil(Math.log(1 / 500) / Math.log(1 - SETTLE)) + 30
 let activeFrames = 0
 
 // Ripple drops: the pointer drops a ring every DROP_SPACING CSS px it
@@ -60,12 +60,6 @@ export const dropUniform = Array.from({ length: MAX_DROPS }, () => new Vector4()
  *  wake pass skips itself and the scene draws straight to the screen. */
 export const trailActive = () =>
   activeFrames > 0 || performance.now() - lastDropBorn < DROP_SECONDS * 1000
-
-const canvas = document.createElement('canvas')
-const context = canvas.getContext('2d')!
-export const trailTexture = new CanvasTexture(canvas)
-trailTexture.minFilter = LinearFilter
-trailTexture.magFilter = LinearFilter
 
 const pointer = { x: -1, y: -1 }
 const last = { x: -1, y: -1 }
@@ -103,61 +97,44 @@ export function writeDrops(height: number) {
   })
 }
 
-function resize(width: number, height: number) {
-  const aspect = width / height
-  const w = aspect >= 1 ? TRAIL_SIZE : Math.round(TRAIL_SIZE * aspect)
-  const h = aspect >= 1 ? Math.round(TRAIL_SIZE / aspect) : TRAIL_SIZE
-  if (canvas.width === w && canvas.height === h) return
-  canvas.width = w
-  canvas.height = h
-  context.fillStyle = NEUTRAL
-  context.fillRect(0, 0, w, h)
+/** One frame's stroke, in screen UV (0-1, y up): the segment the pointer
+ *  covered, its radius (a share of the screen width), its flow (unit
+ *  direction times speed, y up), and how strongly it paints. */
+export type Stroke = {
+  from: [number, number]
+  to: [number, number]
+  radius: number
+  flow: [number, number]
+  presence: number
+  alpha: number
 }
 
-/** Advances the trail one frame, for a canvas of this CSS size. */
-export function updateTrail(width: number, height: number) {
-  // The canvas is 0x0 for its first frames; nothing to size the trail by.
-  if (!width || !height) return
-  resize(width, height)
-  const scale = canvas.width / width
-
-  context.globalAlpha = SETTLE
-  context.fillStyle = NEUTRAL
-  context.fillRect(0, 0, canvas.width, canvas.height)
-  context.globalAlpha = 1
-
-  if (pointer.x >= 0 && last.x >= 0) {
+/** Measures this frame's stroke for a canvas this many CSS px across, or
+ *  null if the pointer's barely moved; and counts down the trail's
+ *  activity. Call once per frame. */
+export function takeStroke(width: number, height: number): Stroke | null {
+  let stroke: Stroke | null = null
+  if (width && height && pointer.x >= 0 && last.x >= 0) {
     const dx = pointer.x - last.x
     const dy = pointer.y - last.y
     const distance = Math.hypot(dx, dy)
     const speed = Math.min(distance / FULL_SPEED, 1) ** SPEED_CURVE
     if (speed > 0.005) {
       activeFrames = ACTIVE_FRAMES
-      const radius = canvas.width * (RADIUS + (RADIUS_FAST - RADIUS) * speed)
-      const r = Math.round(128 + 127 * (dx / distance) * speed)
-      const g = Math.round(128 + 127 * (dy / distance) * speed)
-      const b = Math.round(255 * speed)
-      const alpha =
-        STROKE_ALPHA_SLOW + (STROKE_ALPHA_FAST - STROKE_ALPHA_SLOW) * speed
-      // Stamped along the path since last frame, so a fast stroke is a
-      // continuous wake rather than a dotted line.
-      const steps = Math.max(1, Math.ceil((distance * scale) / (radius / 2)))
-      for (let i = 1; i <= steps; i++) {
-        const x = (last.x + (dx * i) / steps) * scale
-        const y = (last.y + (dy * i) / steps) * scale
-        const gradient = context.createRadialGradient(x, y, 0, x, y, radius)
-        gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${alpha})`)
-        gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`)
-        context.fillStyle = gradient
-        context.fillRect(x - radius, y - radius, radius * 2, radius * 2)
+      stroke = {
+        from: [last.x / width, 1 - last.y / height],
+        to: [pointer.x / width, 1 - pointer.y / height],
+        radius: RADIUS + (RADIUS_FAST - RADIUS) * speed,
+        flow: [(dx / distance) * speed, (-dy / distance) * speed],
+        presence: speed,
+        alpha:
+          STROKE_ALPHA_SLOW + (STROKE_ALPHA_FAST - STROKE_ALPHA_SLOW) * speed,
       }
     }
   }
 
   last.x = pointer.x
   last.y = pointer.y
-  if (activeFrames > 0) {
-    activeFrames--
-    trailTexture.needsUpdate = true
-  }
+  if (activeFrames > 0) activeFrames--
+  return stroke
 }
