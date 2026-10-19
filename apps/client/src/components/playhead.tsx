@@ -36,7 +36,9 @@ import {
   startDream,
   stopDreams,
   switchDream,
+  warmDream,
 } from '../utils/dream-video'
+import { adjacentDream } from '../utils/swap-dream'
 
 // If the dream video still isn't ready this long after asking — the first
 // one, or a switch — carry on anyway: play the main video (the polaroid
@@ -102,7 +104,10 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       // main video waits for it — so the polaroid doesn't come in blank.
       const dreamReady = isSplit(dream)
         ? Promise.race([
-            startDream(dream, resumeTime ?? 0),
+            // Then the next one warms behind it (the card peeking out).
+            startDream(dream, resumeTime ?? 0).then(() =>
+              warmDream(adjacentDream(1))
+            ),
             new Promise((resolve) => setTimeout(resolve, DREAM_READY_TIMEOUT_MS)),
           ])
         : Promise.resolve()
@@ -174,7 +179,11 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
         if (swapPhase === 'loading') setSwapPhase('in')
       }
 
-      switchDream(dream, time).then(finish)
+      switchDream(dream, time).then(() => {
+        finish()
+        // The next one along, the way this swap went, warms behind.
+        warmDream(adjacentDream(useStore.getState().swapDirection))
+      })
       const timeout = setTimeout(finish, DREAM_READY_TIMEOUT_MS)
       return () => clearTimeout(timeout)
     }, [dream, ref])

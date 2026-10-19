@@ -16,19 +16,28 @@ import {
 import { suspend } from 'suspend-react'
 import { useIntersect } from '@react-three/drei'
 import { SwapPhase, useStore } from '../store'
-import { commitSwap, fadeOutAudio } from '../utils/swap-dream'
-import { SWAP_ANIMATIONS } from '../utils/swap-poses'
+import { adjacentDream, commitSwap, fadeOutAudio } from '../utils/swap-dream'
+import {
+  BEHIND_Z,
+  PASS_WIDE,
+  PEEK,
+  SWAP_ANIMATIONS,
+  passDepth,
+} from '../utils/swap-poses'
 import { readPulse } from '../utils/audio'
 import DreamGlow from '../components/dream-glow'
 import {
   dreamElements,
   dreamVideo,
+  backSlot,
   isSplit,
   snapCrossfade,
   stepCrossfade,
+  warmDream,
 } from '../utils/dream-video'
 import {
   commitDistance,
+  directionOf,
   polaroidRect,
   swapDrag,
 } from '../utils/swap-gesture'
@@ -223,6 +232,13 @@ function Main(
   // Seconds since the last swap's arrival started (Infinity = none).
   const revealRef = useRef(Infinity)
   const avatarFollow = useRef<Group>(null)
+  // The card behind (the `jump` swap, utils/swap-poses.ts): its group and
+  // material, which side it peeks out on (1 = right, the next dream), and
+  // how far out from behind the polaroid it is (0 = tucked right behind).
+  const peekGroup = useRef<Group>(null)
+  const peekMaterial = useRef<VideoMaterialProps>(null)
+  const peekSide = useRef<1 | -1>(1)
+  const peekOutRef = useRef(0)
   const avatarOffsetRef = useRef(0)
   const rippleRef = useRef(-1)
   // The polaroid's own, not the material's default: shaderMaterial shares
@@ -283,6 +299,7 @@ function Main(
       polaroidMaterial.current,
       avatarMaterial.current,
       lyricsMaterial.current,
+      peekMaterial.current,
     ]) {
       if (!material) continue
       material.uTime = time
@@ -341,8 +358,17 @@ function Main(
     else stepCrossfade(delta)
     for (const material of [polaroidMaterial.current, lyricsMaterial.current])
       if (material) material.uDreamMix = dreamVideo.mix
+    // The card behind shows the other slot: the dream warm behind.
+    if (peekMaterial.current) peekMaterial.current.uDreamMix = 1 - dreamVideo.mix
     if (swapPhase !== swapPhaseRef.current) {
       if (swapPhase === 'out' && !splitNow) fadeOutAudio(video)
+      // A swap from the buttons or keys, not a drag: the card behind turns
+      // to that side, with that dream (already warm, for the next one).
+      if (swapPhase === 'out' && splitNow) {
+        peekSide.current = swapDirection
+        warmDream(adjacentDream(swapDirection))
+      }
+
       if (swapPhase === 'in') {
         if (!splitNow) developRef.current = 0
         revealRef.current = 0
@@ -476,13 +502,64 @@ function Main(
       // Split, the dream burns away to the background as the swap goes
       // out, stays gone while the next loads, and burns back in.
       const progress = swapProgressRef.current
-      polaroidMaterial.current.uDreamHide = !splitNow
+      polaroidMaterial.current.uDreamHide = !splitNow || swapStyle === 'jump'
         ? 0
         : swapPhase === 'loading'
           ? 1
           : swapPhase === 'out' || swapPhase === 'in'
             ? progress * progress * (3 - 2 * progress)
             : 0
+    }
+
+    // The card behind, for the `jump` swap: the dream a swap would bring,
+    // playing along, peeking out from behind the polaroid on the side the
+    // drag goes toward. Through a swap it swings out and round to the
+    // front as the polaroid goes behind it; once the switch lands they
+    // trade (the polaroid's now showing that same dream, at the front, and
+    // this card's tucked behind it), and it slides back out with the next
+    // neighbour once that's warm.
+    const peek = peekGroup.current
+    if (peek) {
+      const showPeek = splitNow && swapStyle === 'jump' && !!dream
+      peek.visible = showPeek
+      if (showPeek) {
+        // Dragging toward the other side warms that neighbour instead.
+        if (swapDrag.active && Math.abs(swapDrag.dx) > 24 && swapPhase === 'idle') {
+          const direction = directionOf(swapDrag.dx)
+          peekSide.current = direction
+          const target = adjacentDream(direction)
+          if (target && backSlot().id !== target.id) warmDream(target)
+        }
+
+        const side = peekSide.current
+        const back = backSlot()
+        const ready = !!back.id && back.settled
+        if (swapPhase === 'in') peekOutRef.current = 0
+        else if (swapPhase === 'idle')
+          peekOutRef.current = MathUtils.lerp(peekOutRef.current, ready ? 1 : 0, 0.08)
+        const out = peekOutRef.current
+        const drag = (dragOffsetRef.current * w * view) / state.size.width
+
+        let x = side * PEEK.x * out
+        let y = PEEK.y * out
+        let z = -BEHIND_Z + (BEHIND_Z - PEEK.z) * out
+        let rz = side * PEEK.rz * out
+        if (swapPhase === 'out' || swapPhase === 'loading') {
+          // Swinging wide past the polaroid, then in to the front.
+          const p = swapPhase === 'out' ? swapProgressRef.current : 1
+          const along = 1 - (1 - p) ** 3
+          x = side * (PEEK.x * (1 - along) + Math.sin(Math.PI * p) * PASS_WIDE)
+          y = PEEK.y * (1 - along)
+          z = -PEEK.z * (1 - passDepth(p))
+          rz = side * (PEEK.rz * (1 - along) + Math.sin(Math.PI * p) * 0.05)
+        } else if (swapDrag.active) {
+          // Leans out a little as the polaroid's dragged off it.
+          x += drag * 0.15
+        }
+
+        peek.position.set(x, y, z + POLAROID_Z)
+        peek.rotation.set(0, 0, rz)
+      }
     }
 
     // The music's pulse. (The cursor's liquid wake is drawn over the whole
@@ -492,6 +569,7 @@ function Main(
       polaroidMaterial.current,
       avatarMaterial.current,
       lyricsMaterial.current,
+      peekMaterial.current,
     ]) {
       if (material) material.uPulse = pulse
     }
@@ -587,6 +665,30 @@ function Main(
           dreamTextures={split ? dreamTextures : null}
           fade={fadeRef}
         />
+
+        {/* The card behind (the jump swap): the next dream, peeking out */}
+        <group ref={peekGroup} position={[0, 0, POLAROID_Z]} visible={false}>
+          <Polaroid
+            name="peek"
+            scale={0.35}
+            passthroughMaterial={
+              <videoMaterial
+                ref={peekMaterial}
+                key={VideoMaterial.key}
+                uTexture={texture}
+                uDream={dreamTextures[0]}
+                uDreamNext={dreamTextures[1]}
+                uSplit={1}
+                uFrameSelected={7}
+                uFrameTotal={6}
+                uFrameMask={3}
+                uOpacity={1}
+                uFrameOverlay={3}
+                uDark={dark}
+              />
+            }
+          />
+        </group>
 
         <group ref={swapGroup} position={[0, 0, POLAROID_Z]}>
           <Polaroid

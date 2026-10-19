@@ -8,10 +8,13 @@ import type { Dream } from './types'
 // dream video only follows it. Switching dreams swaps only the dream
 // video, so the song, the avatar and the lyrics never stop.
 //
-// There are two dream videos, so the next one can load and catch up while
-// the current one plays; the polaroid crossfades from one to the other
-// (`mix`, read by views/main.tsx), and the old one's then emptied to free
-// its decoder.
+// There are two dream videos: the front one, on the polaroid, and the back
+// one, kept warm with the dream a swap would bring next — playing along in
+// sync, on the polaroid peeking out from behind (views/main.tsx). A swap
+// brings that card forward, and since its video's already there, the
+// switch is instant. Then the back slot warms the next neighbour. A
+// switch to a dream that isn't warm (back/forward) loads it into the back
+// slot first, and the polaroid crossfades to it (`mix`).
 
 /** The split layout, unless `?split=0` asks for the 7-panel one — the
  *  fallback while it's checked on real devices. Dev previews of a take
@@ -85,8 +88,8 @@ type Slot = {
   /** The dream this slot holds, or null when it's empty. */
   id: string | null
   ready: Promise<void> | null
-  /** Loading toward a switch: not to be retired. */
-  loading: boolean
+  /** Loaded, sought and playing along. */
+  settled: boolean
   /** How far ahead (s) a seek aims: the last seek's duration. */
   lead: number
 }
@@ -124,7 +127,7 @@ function slots() {
       el: createDreamElement(),
       id: null,
       ready: null,
-      loading: false,
+      settled: false,
       lead: SEEK_LEAD,
     }))
   return dreamVideo.slots
@@ -139,7 +142,7 @@ function empty(slot: Slot) {
   slot.el.load()
   slot.id = null
   slot.ready = null
-  slot.loading = false
+  slot.settled = false
 }
 
 /** Loads a dream into a slot and brings it to `time` (or wherever the main
@@ -147,6 +150,7 @@ function empty(slot: Slot) {
 function load(slot: Slot, dream: Dream, time: number) {
   if (slot.id === dream.id && slot.ready) return slot.ready
   slot.id = dream.id
+  slot.settled = false
   const el = slot.el
   el.src = `${dreamsUrl}/${dream.id}/dream${small()}.${extension}`
   el.load()
@@ -170,6 +174,7 @@ function load(slot: Slot, dream: Dream, time: number) {
           if (slot.id !== dream.id) return
           if (dreamVideo.main && !dreamVideo.main.paused)
             el.play().catch(() => {})
+          slot.settled = true
           resolve()
         },
         { once: true }
@@ -192,19 +197,34 @@ export function startDream(dream: Dream, time: number) {
   return load(first, dream, time)
 }
 
-/** Switches to another dream mid-song: the other slot loads it at the
- *  main video's time, then the polaroid crossfades across to it. Resolves
- *  once it's showing. */
+/** Switches to another dream mid-song: the back slot loads it at the main
+ *  video's time (if it isn't already warm there), then it becomes the
+ *  front. Resolves once it's showing. */
 export async function switchDream(dream: Dream, time: number) {
   const all = slots()
   if (all[dreamVideo.front].id === dream.id) return
   const back = 1 - dreamVideo.front
-  all[back].loading = true
   await load(all[back], dream, time)
   // Superseded by a later switch while this one loaded.
   if (all[back].id !== dream.id) return
-  all[back].loading = false
   dreamVideo.front = back
+}
+
+/** Warms a dream in the back slot — the one a swap would bring next —
+ *  playing along in sync, ready to come to the front. */
+export function warmDream(dream: Dream | undefined) {
+  if (!dream) return
+  const all = slots()
+  if (all[dreamVideo.front].id === dream.id) return
+  const back = all[1 - dreamVideo.front]
+  const main = dreamVideo.main
+  load(back, dream, main ? main.currentTime : 0)
+}
+
+/** The dream warm in the back slot, and whether it's ready to show. */
+export function backSlot() {
+  const back = slots()[1 - dreamVideo.front]
+  return { id: back.id, settled: back.settled }
 }
 
 /** Stops and empties both dream videos (back to the choose screen). */
@@ -214,8 +234,7 @@ export function stopDreams() {
   dreamVideo.mix = 0
 }
 
-/** Eases the crossfade toward the front slot; once it's all the way
- *  across, the slot behind is emptied. Call every frame. */
+/** Eases the crossfade toward the front slot. Call every frame. */
 export function stepCrossfade(delta: number) {
   const target = dreamVideo.front
   const step = delta / CROSSFADE_SECONDS
@@ -223,13 +242,11 @@ export function stepCrossfade(delta: number) {
     target > dreamVideo.mix
       ? Math.min(target, dreamVideo.mix + step)
       : Math.max(target, dreamVideo.mix - step)
-  const behind = slots()[1 - target]
-  // A slot that's loading toward a switch isn't retired.
-  if (dreamVideo.mix === target && behind.id && !behind.loading) empty(behind)
 }
 
-/** Jumps the crossfade straight to the front slot — while the polaroid's
- *  dream is burnt away for a swap, there's nothing to fade between. */
+/** Jumps the crossfade straight to the front slot — mid-swap the card
+ *  coming forward already shows the new dream, so there's nothing to fade
+ *  between. */
 export function snapCrossfade() {
   dreamVideo.mix = dreamVideo.front
 }
