@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState , MutableRefObject } from 'react'
+import {
+  MutableRefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { ThreeEvent, useFrame, useThree } from '@react-three/fiber'
 import { useTexture } from '@react-three/drei'
 import { CanvasTexture, Group } from 'three'
@@ -22,10 +28,10 @@ import { CarouselProps, easeTo, seeded } from './shared'
 //
 // The pile lies on a surface rather than floating: tipped back a little
 // (TABLE_TILT), with one broad soft shadow beneath it all (PILE_SHADOW,
-// offset away from the light), and
-// the top card's dream big behind it all, through the same cinema screen as
-// the player's (materials/dream-screen.ts), so the shadow has somewhere to
-// fall. It crossfades to each new top card's (SCREEN_EASE per frame).
+// offset away from the light). Hovering (or dragging) the top card brings
+// its dream up big behind it all, through the same cinema screen as the
+// player's (materials/dream-screen.ts), crossfading to each new top
+// card's — fading in and out at SCREEN_EASE per frame.
 
 // Each card's jitter in the pile (position, turn), the gap between cards
 // in depth, how far (CSS px) a drag has to go to toss the top card, how
@@ -89,10 +95,13 @@ function StackScreen({
   items,
   top,
   presence,
+  active,
 }: {
   items: Dream[]
   top: number
   presence: MutableRefObject<number>
+  /** Whether the top card's hovered or being dragged. */
+  active: MutableRefObject<boolean>
 }) {
   const scheme = useStore((state) => state.colorScheme)
   // Already loaded: choose.tsx preloads every hero.
@@ -129,7 +138,8 @@ function StackScreen({
 
   useFrame((state) => {
     // Behind the choose screen only; the player has its own.
-    const showing = useStore.getState().dream ? 0 : presence.current
+    const showing =
+      useStore.getState().dream || !active.current ? 0 : presence.current
     screens.forEach(({ material }, i) => {
       const goal = i === front.current ? SCREEN_OPACITY[scheme] * showing : 0
       opacity.current[i] += (goal - opacity.current[i]) * SCREEN_EASE
@@ -180,6 +190,7 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
 
   const top = order[order.length - 1]
   const [topHovered, setTopHovered] = useState(false)
+  const screenActive = useRef(false)
   // A new card on top starts unhovered.
   useEffect(() => setTopHovered(false), [top])
 
@@ -224,6 +235,7 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
   useFrame(() => {
     const pxToWorld = viewport.width / size.width / PILE_SCALE
     const dragging = !!drag.current?.moved
+    screenActive.current = topHovered || dragging
     // The stack stays mounted under the player; the hint's only its own
     // while the choose screen's showing.
     cursorHint.active = !useStore.getState().dream
@@ -262,7 +274,12 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
 
   return (
     <group scale={PILE_SCALE} rotation={[TABLE_TILT, 0, 0]}>
-      <StackScreen items={items} top={top} presence={presence} />
+      <StackScreen
+        items={items}
+        top={top}
+        presence={presence}
+        active={screenActive}
+      />
       <mesh position={PILE_SHADOW.offset}>
         <planeGeometry args={PILE_SHADOW.size} />
         <meshBasicMaterial
