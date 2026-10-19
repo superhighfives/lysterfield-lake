@@ -1,5 +1,4 @@
 import {
-  AdditiveBlending,
   CustomBlending,
   Mesh,
   OneFactor,
@@ -26,8 +25,13 @@ import {
 // band at the edges, as it was, left the image bright almost to the rim,
 // where it read as a hard rounded frame. Colour near the pointer,
 // grey beyond: GREY_NEAR to GREY_FAR from it (short-side units). Its
-// strength per scheme — additive in dark mode, so it lights the dark page;
-// a plain wash in light mode, where adding would just clip to white — and
+// strength per scheme — light in dark mode, so it lights the dark page
+// (premultiplied: the light as colour, its brightest channel as alpha,
+// which composites over the page as a screen blend; plain additive
+// blending left colour in pixels with no alpha, which the browser drops
+// from a premultiplied canvas, so the faint fade-out vanished and the
+// screen began at a hard edge); a plain wash in light mode, where adding
+// would just clip to white — and
 // in light mode it's lifted LIGHT_LIFT toward white first, so the wash
 // stays light rather than greying the page.
 const LENS_CORE = 0.3
@@ -54,6 +58,7 @@ const fragmentShader = (panels: number, panel: number) => /* glsl */ `
   uniform float uOpacity;
   uniform float uAspect;
   uniform float uLift;
+  uniform float uScreenBlend;
   uniform vec2 uPointerRelative;
 
   vec3 panelAt(vec2 uv) {
@@ -94,7 +99,13 @@ const fragmentShader = (panels: number, panel: number) => /* glsl */ `
       ${(1 / FADE_ROUNDNESS).toFixed(3)}
     );
     float fade = 1.0 - smoothstep(${FADE_START.toFixed(2)}, 1.0, out_);
-    gl_FragColor = vec4(color, uOpacity * fade);
+    float alpha = uOpacity * fade;
+    if (uScreenBlend > 0.5) {
+      vec3 light = color * alpha;
+      gl_FragColor = vec4(light, max(light.r, max(light.g, light.b)));
+    } else {
+      gl_FragColor = vec4(color, alpha);
+    }
   }
 `
 
@@ -114,6 +125,7 @@ export function createDreamScreen(
       uOpacity: { value: 0 },
       uAspect: { value: 1 },
       uLift: { value: 0 },
+      uScreenBlend: { value: 0 },
       uPointerRelative: { value: new Vector2(1, 1) },
     },
     // Not in the transparent pass, so with the lowest renderOrder it draws
@@ -136,13 +148,16 @@ export function setScreenScheme(
   material: ShaderMaterial,
   scheme: 'light' | 'dark'
 ) {
-  // Light mode's wash is normal blending spelled out: three.js skips
-  // NormalBlending on a material outside the transparent pass.
-  material.blending = scheme === 'dark' ? AdditiveBlending : CustomBlending
-  material.blendSrc = SrcAlphaFactor
+  // Blending spelled out (three.js skips NormalBlending on a material
+  // outside the transparent pass): dark mode's light is already
+  // premultiplied (see the shader), light mode's wash isn't.
+  const dark = scheme === 'dark'
+  material.blending = CustomBlending
+  material.blendSrc = dark ? OneFactor : SrcAlphaFactor
   material.blendDst = OneMinusSrcAlphaFactor
   material.blendSrcAlpha = OneFactor
   material.blendDstAlpha = OneMinusSrcAlphaFactor
+  material.uniforms.uScreenBlend.value = dark ? 1 : 0
   material.uniforms.uLift.value = LIGHT_LIFT[scheme]
   material.needsUpdate = true
 }
