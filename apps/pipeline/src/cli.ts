@@ -3,7 +3,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { writeClientAssets } from './client-manifest.ts'
+import { writeClientAssets, writeSplitClientAssets } from './client-manifest.ts'
 import { compose, composePreview, composeSplit } from './compose.ts'
 import { gpuServerUrl } from './gpu-server.ts'
 import { loadJob, videoPath, type Job } from './job.ts'
@@ -456,7 +456,14 @@ switch (step) {
     const takes = flags.takes ? flags.takes.split(',') : await composedTakes(job)
     const badTake = takes.find((t) => !t || t !== path.basename(t) || t === '.' || t === '..')
     if (badTake !== undefined) throw new Error(`--takes "${badTake}" isn't a take folder name under 7-dreams/`)
-    console.log(JSON.stringify(await composeSplit(job, takes), null, 2))
+    const result = await composeSplit(job, takes)
+    console.log(JSON.stringify(result, null, 2))
+    // Into apps/client/dreams/ for the R2 sync, as compose does with the 7-panel files (--skip-client true to leave it).
+    if (flags['skip-client'] !== 'true') {
+      const clientDir = flags['client-dir'] ? path.resolve(flags['client-dir']) : DEFAULT_CLIENT_DIR
+      const written = await writeSplitClientAssets(clientDir, result)
+      console.log(`Wrote ${written.length} split files to ${path.join(clientDir, 'dreams')}`)
+    }
     break
   }
 
