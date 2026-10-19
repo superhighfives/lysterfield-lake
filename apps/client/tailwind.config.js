@@ -23,8 +23,23 @@ export default {
       animation: {
         background: 'background 30s linear infinite',
         'fade-in': 'fade-in 0.3s linear forwards',
+        // A loading polaroid falling onto the pile (components/loading.tsx),
+        // overshooting a touch as it lands.
+        'card-drop': 'card-drop 0.55s cubic-bezier(0.3, 1.35, 0.5, 1) both',
       },
       keyframes: {
+        'card-drop': {
+          '0%': {
+            transform:
+              'translate(var(--x), calc(var(--y) - 55vh)) rotate(calc(var(--r) + 28deg)) scale(1.12)',
+            opacity: '0',
+          },
+          '40%': { opacity: '1' },
+          '100%': {
+            transform: 'translate(var(--x), var(--y)) rotate(var(--r))',
+            opacity: '1',
+          },
+        },
         'fade-in': {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
