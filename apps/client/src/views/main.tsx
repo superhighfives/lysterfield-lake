@@ -178,7 +178,12 @@ function Main(
   // video, panels 1-6, and the dream (panel 7) comes from its own two
   // videos, crossfaded as dreams switch. Otherwise `texture` is the dream's
   // own 7-panel video, as before.
-  const split = isSplit(dream)
+  // The last dream's layout holds while the player leaves (the dream's
+  // cleared first): falling back to 7 panels mid-exit read a panel 7 off
+  // the 6-panel main video, and flashed its outline panel up full-screen.
+  const lastDream = useRef(dream)
+  if (dream) lastDream.current = dream
+  const split = isSplit(dream ?? lastDream.current)
   const frameTotal = split ? 6 : 7
   const dreamTextures = useMemo(
     () =>
@@ -345,7 +350,7 @@ function Main(
     const { swapPhase, swapDirection, setSwapPhase } = useStore.getState()
     // Split, a swap only changes the dream video: the song plays on, and
     // the new dream crossfades in rather than developing from blank.
-    const splitNow = isSplit(useStore.getState().dream)
+    const splitNow = isSplit(useStore.getState().dream ?? lastDream.current)
     // Waiting on video: the first dream until it can play (a blank print,
     // developing once it's ready), or a swap.
     const currentDream = useStore.getState().dream
@@ -613,6 +618,7 @@ function Main(
           texture={texture}
           dreamTextures={split ? dreamTextures : null}
           fade={fadeRef}
+          develop={developRef}
         />
 
         <group ref={swapGroup} position={[0, 0, POLAROID_Z]}>

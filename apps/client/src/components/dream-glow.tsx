@@ -26,8 +26,11 @@ const TINT_ALPHA = { light: 0.15, dark: 0.1 }
 // The spill and tint fade in (and out) at this much per frame, once the
 // dream's own colour has been sampled — so entering a dream doesn't flash
 // whatever colour was last seen. Samples taken within SETTLE_MS of a new
-// dream are skipped, while its video is still loading or seeking.
+// dream are skipped, while its video is still loading or seeking. Leaving
+// the player, they go faster (PRESENCE_LEAVE), out of the choose screen's
+// way.
 const PRESENCE_EASE = 0.02
+const PRESENCE_LEAVE = 0.08
 const SETTLE_MS = 400
 // The composite video's panel count, and the dream panel (1-based).
 const PANELS = 7
@@ -42,6 +45,7 @@ function DreamGlow({
   texture,
   dreamTextures,
   fade,
+  develop,
 }: {
   video: HTMLVideoElement
   /** The composite video's texture, for the spill. */
@@ -55,6 +59,9 @@ function DreamGlow({
    *  swap, with them. Followed directly, not through the slow presence
    *  ease below. */
   fade: MutableRefObject<number>
+  /** 0-1: how developed the polaroid's photo is (main.tsx's developRef);
+   *  the screen stays grey until the colour comes up in it. */
+  develop: MutableRefObject<number>
 }) {
   const scheme = useStore((state) => state.colorScheme)
   const split = !!dreamTextures
@@ -161,12 +168,16 @@ function DreamGlow({
 
     shown.current.lerp(target.current, EASE)
     const goal = dream && hasSample.current ? 1 : 0
-    presenceRef.current += (goal - presenceRef.current) * PRESENCE_EASE
+    presenceRef.current +=
+      (goal - presenceRef.current) * (dream ? PRESENCE_EASE : PRESENCE_LEAVE)
     const presence = presenceRef.current * fade.current
 
     material.uniforms.uOpacity.value = SCREEN_OPACITY[scheme] * presence
     // The pointer as the polaroid's photo sees it (set by main.tsx).
     material.uniforms.uPointerRelative.value = useStore.getState().globalPointer
+    // Grey while the photo's blank, the colour coming up as it develops.
+    const developed = Math.min(Math.max((develop.current - 0.35) / 0.65, 0), 1)
+    material.uniforms.uSaturation.value = developed * developed * (3 - 2 * developed)
 
     // The page tint: the shown colour, a little more saturated, at a
     // gentle alpha. Only written when it changes (it repaints the page).

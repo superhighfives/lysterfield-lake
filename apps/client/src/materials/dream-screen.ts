@@ -60,6 +60,8 @@ const fragmentShader = (panels: number, panel: number) => /* glsl */ `
   uniform float uLift;
   uniform float uScreenBlend;
   uniform vec2 uPointerRelative;
+  // 1 = colour (near the pointer), 0 = grey everywhere.
+  uniform float uSaturation;
 
   vec3 panelAt(vec2 uv) {
     float x = clamp(uv.x, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
@@ -87,7 +89,10 @@ const fragmentShader = (panels: number, panel: number) => /* glsl */ `
     vec2 imageUv = 0.5 + vec2(lens(p.x, extent.x * 0.5), lens(p.y, extent.y * 0.5));
 
     vec2 pointer = (uPointerRelative / 2.0 - 0.5) * extent;
-    float grey = smoothstep(${GREY_NEAR.toFixed(2)}, ${GREY_FAR.toFixed(2)}, distance(p, pointer));
+    float grey = max(
+      smoothstep(${GREY_NEAR.toFixed(2)}, ${GREY_FAR.toFixed(2)}, distance(p, pointer)),
+      1.0 - uSaturation
+    );
     vec3 image = panelAt(imageUv);
     vec3 color = mix(image, vec3(dot(image, vec3(0.299, 0.587, 0.114))), grey);
     color = mix(color, vec3(1.0), uLift);
@@ -127,6 +132,7 @@ export function createDreamScreen(
       uLift: { value: 0 },
       uScreenBlend: { value: 0 },
       uPointerRelative: { value: new Vector2(1, 1) },
+      uSaturation: { value: 1 },
     },
     // Not in the transparent pass, so with the lowest renderOrder it draws
     // first, behind everything, blending onto the clear page.
