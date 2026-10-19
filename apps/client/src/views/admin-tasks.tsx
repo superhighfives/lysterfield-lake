@@ -13,6 +13,9 @@ const LABELS: Record<string, string> = {
   rerender: 'Re-render frames',
   hold: 'Hold frames',
   restore: 'Put originals back',
+  'polaroid-panels': 'Portrait, matte, depth and outline',
+  'polaroid-background': 'Background',
+  'polaroid-atlas': 'Polaroid',
 }
 const TONES: Record<Task['status'], string> = {
   queued: 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300',

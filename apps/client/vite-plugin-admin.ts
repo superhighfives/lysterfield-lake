@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
@@ -57,10 +57,41 @@ function readJson(file: string): unknown {
   return JSON.parse(readFileSync(file, 'utf8'))
 }
 
-function listJobs() {
+function listJobs(kind?: 'polaroid') {
   return readdirSync(JOBS_DIR, { withFileTypes: true })
     .filter((d) => d.isDirectory() && d.name !== 'spikes' && existsSync(path.join(JOBS_DIR, d.name, 'job.json')))
     .map((d) => d.name)
+    .filter((name) => (readJson(path.join(JOBS_DIR, name, 'job.json')) as { kind?: string }).kind === kind)
+}
+
+const countFrames = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((f) => /\.(png|jpg)$/.test(f)).length : 0)
+
+/** Bria's price: $0.05 per output second. */
+const BRIA_PER_SECOND = 0.05
+
+/**
+ * A polaroid job's stages (plans/in-progress/polaroid-admin-flow.md), each read from the files on disk: panels 2, 4, 5
+ * and 6 from the polaroid model, panel 3 from Bria, then the atlas and the flattened loop. `withCost` adds
+ * what the paid stages would cost to run now, from `polaroid-run --plan` (which knows what's already done).
+ */
+function polaroidDetail(job: string, withCost: boolean) {
+  const dir = jobDir(job)
+  const config = readJson(path.join(dir, 'job.json')) as { fps: number; source?: { crop?: unknown } }
+  const frames = countFrames(path.join(dir, '0-source/frames'))
+  const panels = Math.min(...['2-portrait/upscaled', '4-matte/frames', '5-depth/frames', '6-outline/frames'].map((d) => countFrames(path.join(dir, d))))
+  const background = countFrames(path.join(dir, '3-background/frames'))
+  const stages = {
+    panels: { done: frames > 0 && panels >= frames, frames: panels },
+    background: { done: frames > 0 && background >= frames, frames: background },
+    atlas: { done: existsSync(path.join(dir, 'polaroid', 'atlas.mp4')) && existsSync(path.join(dir, 'polaroid', 'loop.mp4')) },
+  }
+  let cost: { panels: string; background: string } | undefined
+  if (withCost) {
+    const plan = execFileSync('bun', ['run', 'src/cli.ts', 'polaroid-run', '--job', `.jobs/${job}`, '--plan', 'true'], { cwd: PIPELINE_DIR, env: pipelineEnv(), encoding: 'utf8' })
+    const estimate = plan.match(/"estimatedCost": "(\$[\d.]+)"/)?.[1] ?? '?'
+    cost = { panels: stages.panels.done ? '$0.00' : estimate, background: stages.background.done ? '$0.00' : `$${((frames / config.fps) * BRIA_PER_SECOND).toFixed(2)}` }
+  }
+  return { name: job, frames, fps: config.fps, stages, cost }
 }
 
 /** Where a take's frames, check.json and review.json live: the take folder for the full song, preview/dream for its 15s clip. */
@@ -281,6 +312,13 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
         ...(body.status ? ['--status', String(body.status)] : []),
         ...(body.notes !== undefined ? ['--notes', String(body.notes)] : []),
       ]
+    // A polaroid's stages (plans/in-progress/polaroid-admin-flow.md). The paid two run on Replicate, never the PC.
+    case 'polaroid-panels':
+      return ['polaroid-run', ...base]
+    case 'polaroid-background':
+      return ['background-video', ...base]
+    case 'polaroid-atlas':
+      return ['polaroid', ...base]
     default:
       throw new Error(`Unknown action "${String(body.action)}"`)
   }
@@ -326,7 +364,7 @@ async function createRecordingJob(body: Record<string, unknown>): Promise<{ job:
   const source = path.join(realpathSync(RECORDINGS_DIR), `${name}.${ext}`)
   writeFileSync(source, Buffer.from(data, 'base64'))
   try {
-    await promisify(execFile)('bun', ['run', 'src/cli.ts', 'init', '--job', path.join(JOBS_DIR, name), '--source', source, '--length', '5', ...cropArgs], { cwd: PIPELINE_DIR, env: pipelineEnv() })
+    await promisify(execFile)('bun', ['run', 'src/cli.ts', 'init', '--job', path.join(JOBS_DIR, name), '--source', source, '--length', '5', '--kind', 'polaroid', ...cropArgs], { cwd: PIPELINE_DIR, env: pipelineEnv() })
   } catch (error) {
     throw new Error(`init failed: ${(error as { stderr?: string }).stderr?.trim() || (error as Error).message}`)
   }
@@ -410,8 +448,12 @@ export default function adminPlugin(): Plugin {
             writeFileSync(file, Buffer.from(data, 'base64'))
             return send(res, 200, { name })
           }
-          // Jobs with a polaroid atlas (the pipeline's `polaroid` step), for /admin/polaroid.
-          if (parts[1] === 'polaroids' && req.method === 'GET') return send(res, 200, listJobs().filter((j) => existsSync(path.join(JOBS_DIR, j, 'polaroid', 'atlas.mp4'))))
+          // Polaroid jobs, newest first, and one job's stages with what the paid ones would cost, for /admin/polaroid.
+          if (parts[1] === 'polaroids' && parts.length === 2 && req.method === 'GET') {
+            const created = (j: string) => statSync(path.join(JOBS_DIR, j, 'job.json')).birthtimeMs
+            return send(res, 200, listJobs('polaroid').sort((a, b) => created(b) - created(a)).map((j) => polaroidDetail(j, false)))
+          }
+          if (parts[1] === 'polaroids' && parts[2] && req.method === 'GET') return send(res, 200, polaroidDetail(parts[2], true))
           if (parts[1] === 'recordings' && req.method === 'POST') return send(res, 200, await createRecordingJob(await readBody(req, MAX_RECORDING_UPLOAD)))
           if (parts[1] === 'jobs' && parts.length === 2) return send(res, 200, listJobs())
           if (parts[1] === 'jobs' && parts.length === 3 && req.method === 'GET') return send(res, 200, jobDetail(parts[2]))
