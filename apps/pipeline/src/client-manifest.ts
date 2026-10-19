@@ -1,6 +1,6 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import type { ComposeResult } from './compose.ts'
+import type { ComposeResult, ComposeSplitResult } from './compose.ts'
 
 export interface Dream {
   id: string
@@ -60,4 +60,35 @@ async function upsertDreamsJson(clientDir: string, id: string): Promise<void> {
   }
 
   await writeFile(dreamsJsonPath, JSON.stringify(dreams))
+}
+
+/**
+ * Copies compose-split()'s output into `apps/client/dreams/`, next to the
+ * 7-panel files, for the same R2 sync:
+ *
+ * - `dreams/main/main{,-small}.{webm,mov}`: the shared 6-panel video with the audio.
+ * - `dreams/<id>/dream{,-small}.{webm,mov}`: each take's silent dream clip, `<id>` being the take's name.
+ *
+ * See plans/ready/split-dream-video-client.md for how the client plays them.
+ */
+export async function writeSplitClientAssets(clientDir: string, result: ComposeSplitResult): Promise<string[]> {
+  const files = ['', '-small'].flatMap((size) => ['webm', 'mov'].map((ext) => `${size}.${ext}`))
+  const written: string[] = []
+  const copy = async (from: string, toDir: string, name: string) => {
+    await mkdir(toDir, { recursive: true })
+    await copyFile(path.join(from, name), path.join(toDir, name))
+    written.push(path.join(toDir, name))
+  }
+
+  // `<job>/7-dreams/<take>/split`
+  const takes = result.dreamDirs.map((dir) => ({ dir, id: path.basename(path.dirname(dir)) }))
+  if (takes.some((t) => t.id === 'main')) {
+    throw new Error('A take named "main" would overwrite the shared main video in dreams/main/')
+  }
+
+  for (const f of files) await copy(result.mainDir, path.join(clientDir, 'dreams', 'main'), `main${f}`)
+  for (const { dir, id } of takes) {
+    for (const f of files) await copy(dir, path.join(clientDir, 'dreams', id), `dream${f}`)
+  }
+  return written
 }
