@@ -50,7 +50,7 @@ const CAMERA_DISTANCE = 6 / SCALE
  * How much of the background, from each edge, is kept for the part of the bowl outside the window: face-on the
  * window shows the rest, and turning the card reveals the band, stretched more toward the rim.
  */
-const BAND = 0.12
+const BAND = 0.04
 /** How far the person's plane reaches past the window, so their edges (shoulders) stretch out to the walls. */
 const PERSON_REACH = 1.8
 /** The back and walls with the background panel turned off, by theme. */
