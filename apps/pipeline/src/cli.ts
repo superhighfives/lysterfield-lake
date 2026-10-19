@@ -22,6 +22,7 @@ import { matte } from './steps/matte.ts'
 import { outline } from './steps/outline.ts'
 import { polaroid } from './steps/polaroid.ts'
 import { polaroidPanels } from './steps/polaroid-panels.ts'
+import { polaroidRun } from './steps/polaroid-run.ts'
 import { portrait } from './steps/portrait.ts'
 import { upscale } from './steps/upscale.ts'
 import { words } from './steps/words.ts'
@@ -103,6 +104,7 @@ switch (step) {
       length: flags.length ? Number(flags.length) : undefined,
       // --crop x,y,zoom: the square's centre (fractions of the frame) and zoom; see job.ts's Crop.
       crop: flags.crop ? parseCrop(flags.crop) : undefined,
+      kind: flags.kind === 'polaroid' ? 'polaroid' : undefined,
     })
     console.log(JSON.stringify(result, null, 2))
     break
@@ -204,6 +206,21 @@ switch (step) {
       concurrency
     )
     console.log(JSON.stringify(result, null, 2))
+    break
+  }
+
+  case 'polaroid-run': {
+    // Panels 2, 4, 5 and 6 of a polaroid job on the lysterfield-polaroid Replicate deployment, split into
+    // frame ranges run at once. --plan true: what would run, and its cost, without running anything.
+    const job = await loadJob(requireFlag('job'))
+    const result = await polaroidRun(job, {
+      ranges: flags.ranges ? Number(flags.ranges) : undefined,
+      inversionSteps: flags['inversion-steps'] ? Number(flags['inversion-steps']) : undefined,
+      planOnly: flags.plan === 'true',
+      concurrency,
+    })
+    console.log(JSON.stringify(result, null, 2))
+    if (result.failed.length > 0) process.exitCode = 1
     break
   }
 
@@ -458,11 +475,11 @@ switch (step) {
     if (badTake !== undefined) throw new Error(`--takes "${badTake}" isn't a take folder name under 7-dreams/`)
     const result = await composeSplit(job, takes)
     console.log(JSON.stringify(result, null, 2))
-    // Into apps/client/dreams/ for playback, unless --skip-client true.
+    // Into apps/client/dreams/ for the R2 sync, as compose does with the 7-panel files (--skip-client true to leave it).
     if (flags['skip-client'] !== 'true') {
       const clientDir = flags['client-dir'] ? path.resolve(flags['client-dir']) : DEFAULT_CLIENT_DIR
-      await writeSplitClientAssets(clientDir, result)
-      console.log(`Wrote the split videos to ${path.join(clientDir, 'dreams')}`)
+      const written = await writeSplitClientAssets(clientDir, result)
+      console.log(`Wrote ${written.length} split files to ${path.join(clientDir, 'dreams')}`)
     }
     break
   }

@@ -19,6 +19,8 @@ export interface Crop {
 export interface JobConfig {
   /** Frame rate used throughout this job — matches the source video's extraction rate. */
   fps: number
+  /** A visitor's polaroid loop (plans/in-progress/polaroid-admin-flow.md) rather than a song's footage. Unset: a song. */
+  kind?: 'polaroid'
   /**
    * What `init` was given, so the job can be rebuilt from its own footage:
    * `path` is the job's local copy of the original (relative to the job
@@ -204,11 +206,13 @@ export async function extractFrames(
   sourceVideoPath: string,
   outputDir: string,
   fps: number,
-  ext: 'png' | 'jpg' = 'png'
+  ext: 'png' | 'jpg' = 'png',
+  maxFrames?: number
 ): Promise<void> {
   await mkdir(outputDir, { recursive: true })
   const args = ['-y', '-i', sourceVideoPath, '-r', String(fps)]
   if (ext === 'jpg') args.push('-q:v', '2')
+  if (maxFrames) args.push('-frames:v', String(maxFrames))
   args.push(path.join(outputDir, `%04d.${ext}`))
   await execFileAsync('ffmpeg', args)
 }

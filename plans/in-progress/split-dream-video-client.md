@@ -169,10 +169,12 @@ dreams/<id>/dream.webm, dream.mov, dream-small.webm, dream-small.mov
 dreams/<id>/video*.{webm,mov}   (the 7-panel files, kept until the switch ships)
 ```
 
-Copy them from the job folder, for example as a `compose-split` option or
-a small `publish-split` step that copies into `apps/client/dreams/`, as
-`writeClientAssets` does for the 7-panel files. `dreams/` is gitignored; the
-R2 sync needs the user's go-ahead.
+`compose-split` copies them there itself (`writeSplitClientAssets`, as
+`compose` does for the 7-panel files; `--skip-client true` to leave it), and
+all ten dreams plus `main/` are in `apps/client/dreams/` now. `dreams/` is
+gitignored. Publish in the order in `plans/in-progress/dreams.md`: copy to R2
+without deleting, deploy the client, then `deploy-dreams` to delete the old
+datestamp folders. The R2 steps need the user's go-ahead.
 
 Check that R2 serves these with `Accept-Ranges` and a long `Cache-Control`,
 so seeking into a dream video doesn't download it from the start.
@@ -196,17 +198,15 @@ once the split path is the only one in use.
       the backdrop, `dream-glow.tsx`)
 - [x] `playhead.tsx`: the main video plays `main{,-small}`; the dream videos
       (`utils/dream-video.ts`) mirror play, pause and seeks, plus the sync loop
-- [x] Switching dreams: preload, seek, then crossfade (`uDreamNext` and
-      `uDreamMix`), and retire the old video. A swap no longer fades the
-      audio, and the snap style crossfades rather than developing from blank
+- [x] Switching dreams: preload, seek, then switch (the snap swap's blank
+      print covers it), with the next dream kept warm in the back slot
 - [x] First choose waits for both videos; Reset and `ended` unchanged
 - [x] A popstate to another dream is a switch plus a seek (handled in
       `playhead.tsx`; `use-history-sync.ts` needed no change)
 - [x] Publishing: `compose-split` copies `main/` and each `split/` into
-      `apps/client/dreams/` (`--skip-client true` to skip)
-- [ ] R2 sync, with the user's go-ahead, and check `Accept-Ranges` and
-      `Cache-Control` there
-- [ ] Keep a neighbour warm (optional; not done)
+      `apps/client/dreams/` (done for all ten, 2026-10-18)
+- [ ] R2: copy, deploy the client, then delete the datestamp folders, with
+      the user's go-ahead; check `Accept-Ranges` and `Cache-Control` there
 - [ ] Check on real devices:
   - iPhone Safari, including Low Power Mode
   - an Android phone

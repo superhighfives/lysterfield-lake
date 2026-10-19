@@ -212,6 +212,8 @@ export default function AdminRecord() {
     setStage({ ...stage, kind: 'saving' })
     try {
       const { job } = await api<{ job: string }>('/__admin/api/recordings', { name, type: stage.blob.type, crop: clampCrop(crop, size), data: await toBase64(stage.blob) })
+      // Straight on to making it.
+      location.assign(`/admin/polaroid?job=${encodeURIComponent(job)}`)
       setStage({ kind: 'saved', job, url: stage.url })
     } catch (e) {
       setError((e as Error).message)

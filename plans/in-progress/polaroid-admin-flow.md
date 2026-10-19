@@ -1,6 +1,6 @@
 ---
 title: Polaroid loops end to end in /admin
-status: Ready
+status: In Progress
 created: 2026-10-18
 updated: 2026-10-18
 ---
@@ -134,25 +134,34 @@ address as `POLAROID_URL` in `apps/pipeline/.env` (never in code). Both containe
 
 ## Tasks
 
-- [ ] Rebase `polaroid-prototype` onto `main`; open the pipeline-and-models PR
-- [ ] Decide the order with `polaroid-swap`; open the admin PR
-- [ ] Finish the Replicate deployment test (L40S, 4-way split): wall clock and real cost
-- [ ] `polaroid-run` (PC and Replicate), with cost printed first and resumable predictions
-- [ ] `kind: "polaroid"` in `job.json`, from `/admin/record`
-- [ ] First real run of `background-video` on a polaroid job (needs `R2_*` in `.env`)
-- [ ] Admin actions, lanes and the polaroid job detail API
-- [ ] `/admin/polaroid` list, job view with stages, costs and tasks; record → polaroid hand-off
-- [ ] `polaroid-video` (flattened MP4) and its download link
-- [ ] Polaroid container as a standing service on the PC; `POLAROID_URL`
-- [ ] CLAUDE.md: `models/polaroid`, the polaroid atlas layout (separate from the player's 7 panels), PC notes
-- [ ] Switch `models.ts`'s portrait to the optimised DiffusionCLIP version once pushed (same output, faster
-      song runs too)
+- [x] Rebase `polaroid-prototype` onto `main` and land it (#37, as one PR, after `polaroid-swap` #36)
+- [x] Replicate deployment test (L40S, 4-way split): 9 minutes cold, about $2 (`backlog/user-polaroid-loops.md`)
+- [x] `polaroid-run` on the Replicate deployment, with cost printed first and resumable predictions
+      (Replicate only for now, by decision 2026-10-18; the PC runner below is deferred)
+- [x] `kind: "polaroid"` in `job.json`, from `/admin/record`
+- [ ] First real run of `background-video` on a polaroid job (needs `R2_*` in `.env`; the bucket
+      `lysterfield-bria-temp` exists, the R2 API token doesn't yet)
+- [x] Admin actions, lanes (polaroid generation pinned to Replicate) and the polaroid job detail API
+- [x] `/admin/polaroid` list, job view with stages, costs and tasks; record → polaroid hand-off
+- [x] Flattened loop (`polaroid/loop.mp4`, from the `polaroid` step, cut from the atlas) and its download link
+- [x] End-to-end run of a fresh recording through `/admin` on Replicate (`park-party-2`: ~10 minutes, $2.13)
+- [x] Moderation: approve to make, approve to show, reject, reopen, delete (job folder and recording).
+      Paid stages refuse anything not approved; delete refuses song jobs
+- [x] Viewer: the photo as a stencilled window into a rounded-rectangle tub, so the person sits inside the
+      polaroid rather than over it. The background lines the tub (its middle face-on, its outer band eased
+      round toward the rim), the person wraps round the tub's walls, and the card follows the pointer. Also
+      fixes the video dropping out as the card turned
+- [x] Loop: cut where the clip's two ends look most alike, crossfading 6 frames (`polaroid/loop.json`); the
+      downloadable loop has the outline baked in
+- [x] CLAUDE.md: polaroid jobs, their atlas layout, Replicate only, the R2 bucket, building on the PC
+- [x] Switch `models.ts`'s portrait to the optimised DiffusionCLIP version `fd60b4d9…`
+- [ ] Later: the polaroid container as a standing service on the PC (`POLAROID_URL`), for free runs
 
 ## Choices made (say if any are wrong)
 
-- **The PC is the default runner when it's up:** free, and about 17 minutes a loop. Replicate is the
-  fallback, at about $1.25 a loop including Bria and ~4-5 minutes split four ways (to be confirmed by the
-  deployment test).
+- **Replicate only for polaroid generation, for now** (decided 2026-10-18): about $2.15 a loop from cold
+  including Bria, and 9 minutes split four ways (measured 2026-10-18), most of the wait being four 2-3
+  minute boots. The free PC runner can come later.
 - **20 inversion steps** by default, with 40 available as an option.
 - **The atlas trims 3 frames and crossfades 12**, as the prototype does.
 - **No automatic checks yet** (the leak detector failed on `park-party`); the person looks at the result.
