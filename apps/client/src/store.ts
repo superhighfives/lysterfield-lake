@@ -16,12 +16,12 @@ export type Resume = { dreamId: string; time: number }
 export type SwapPhase = 'idle' | 'out' | 'loading' | 'in'
 /** 1 = next dream, -1 = previous. */
 export type SwapDirection = 1 | -1
-export const SWAP_STYLES = ['drop', 'snap', 'slide', 'flip'] as const
+export const SWAP_STYLES = ['snap', 'drop', 'slide', 'flip'] as const
 export type SwapStyle = (typeof SWAP_STYLES)[number]
 
 function initialSwapStyle(): SwapStyle {
   const param = new URLSearchParams(location.search).get('swap')
-  return SWAP_STYLES.find((style) => style === param) ?? 'drop'
+  return SWAP_STYLES.find((style) => style === param) ?? 'snap'
 }
 
 export interface AppState {

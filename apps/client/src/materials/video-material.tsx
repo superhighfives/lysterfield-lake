@@ -17,10 +17,6 @@ const uniforms = {
   uDreamNext: null as Texture | null,
   uDreamMix: 0,
   uSplit: 0,
-  // The polaroid's dream burning away to the background (panel 3), like a
-  // card dissolving in Balatro: 0 = all dream, 1 = all background. Swaps
-  // run it out and back in (see main.tsx).
-  uDreamHide: 0,
   uFrameSelected: 0,
   uFrameMask: 0,
   uFrameTotal: 0,
@@ -175,7 +171,6 @@ export const VideoMaterial = shaderMaterial(
     uniform sampler2D uDreamNext;
     uniform float uDreamMix;
     uniform float uSplit;
-    uniform float uDreamHide;
     uniform float uOpacity;
     uniform float uFrameSelected;
     uniform float uFrameTotal;
@@ -207,9 +202,6 @@ export const VideoMaterial = shaderMaterial(
     // channels split either side of it.
     const int SMEAR_TAPS = 10;
     const float SPLIT_AMOUNT = 0.15;
-    // The burn's glowing rim: its width (in noise units) and colour.
-    const float BURN_RIM = 0.08;
-    const vec3 BURN_GLOW = vec3(1.0, 0.62, 0.25);
     uniform float uHash;
     uniform float uDevelop;
     uniform vec3 uRipple;
@@ -274,29 +266,6 @@ export const VideoMaterial = shaderMaterial(
         return mix(texture2D(uDream, d), texture2D(uDreamNext, d), uDreamMix);
       }
       return texture2D(uTexture, vec2((uv.x + (p - 1.0)) / uFrameTotal, uv.y));
-    }
-
-    // Smooth value noise, a few octaves, 0-1: the burn's pattern.
-    float burnHash(vec2 p) {
-      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-    }
-    float burnNoise(vec2 p) {
-      float total = 0.0;
-      float amplitude = 0.5;
-      for (int i = 0; i < 4; i++) {
-        vec2 cell = floor(p);
-        vec2 f = fract(p);
-        vec2 u = f * f * (3.0 - 2.0 * f);
-        float n = mix(
-          mix(burnHash(cell), burnHash(cell + vec2(1.0, 0.0)), u.x),
-          mix(burnHash(cell + vec2(0.0, 1.0)), burnHash(cell + vec2(1.0, 1.0)), u.x),
-          u.y
-        );
-        total += n * amplitude;
-        p *= 2.03;
-        amplitude *= 0.5;
-      }
-      return total / 0.9375;
     }
 
     float ditherLimit() {
@@ -380,16 +349,6 @@ export const VideoMaterial = shaderMaterial(
           smear += vec3(r, g, b);
         }
         image.rgb = smear / float(SMEAR_TAPS);
-      }
-
-      // The burn (uDreamHide): where the noise is under the threshold the
-      // dream's gone to the background; a thin warm rim glows at the edge.
-      if (uDreamHide > 0.0 && uFrameSelected == 7.0) {
-        float burn = burnNoise(st * 5.0) - (uDreamHide * (1.0 + BURN_RIM) - BURN_RIM);
-        float kept = smoothstep(0.0, 0.015, burn);
-        float rim = kept * (1.0 - smoothstep(0.0, BURN_RIM, burn));
-        vec3 background = panel(3.0, vec2(localX, st.y - offsetY)).rgb;
-        image.rgb = mix(background, image.rgb, kept) + rim * BURN_GLOW;
       }
 
       vec4 mask = panel(uFrameMask, vec2(localX, st.y - offsetY));

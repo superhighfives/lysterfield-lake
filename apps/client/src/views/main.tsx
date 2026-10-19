@@ -338,8 +338,8 @@ function Main(
     // Split, a swap only changes the dream video: the song plays on, and
     // the new dream crossfades in rather than developing from blank.
     const splitNow = isSplit(useStore.getState().dream)
-    // Mid-swap the dream's burnt away (uDreamHide below), so the next one
-    // can just be there when it burns back in.
+    // Mid-swap the photo's a blank print (uDevelop below), so the next
+    // dream can just be there when it develops.
     if (splitNow && swapPhase !== 'idle') snapCrossfade()
     else stepCrossfade(delta)
     for (const material of [polaroidMaterial.current, lyricsMaterial.current])
@@ -351,7 +351,7 @@ function Main(
       if (swapPhase === 'out' && splitNow) warmDream(adjacentDream(swapDirection))
 
       if (swapPhase === 'in') {
-        if (!splitNow) developRef.current = 0
+        developRef.current = 0
         revealRef.current = 0
         rippleRef.current = -1
       }
@@ -468,30 +468,17 @@ function Main(
     else if (rippleRef.current >= 0) rippleRef.current += delta
     if (polaroidMaterial.current) {
       // Staying put, the photo fades to a blank print on the way out, and
-      // stays blank until the next develops — unless it's split, when the
-      // next dream crossfades straight in instead.
+      // stays blank until the next develops.
       polaroidMaterial.current.uDevelop =
         swapPhase === 'in' || swapPhase === 'idle'
           ? developRef.current
-          : animation.inPlace && !splitNow
+          : animation.inPlace
             ? swapPhase === 'out'
               ? 1 - swapProgressRef.current
               : 0
             : 1
       rippleUniform.current.z = rippleRef.current
       polaroidMaterial.current.uRipple = rippleUniform.current
-      // Split, a swap that keeps the polaroid on screen (snap) burns the
-      // dream away to the background on the way out, holds it there while
-      // the next loads, and burns the next back in. One that throws it
-      // off-screen doesn't need to.
-      const progress = swapProgressRef.current
-      polaroidMaterial.current.uDreamHide = !splitNow || !animation.inPlace
-        ? 0
-        : swapPhase === 'loading'
-          ? 1
-          : swapPhase === 'out' || swapPhase === 'in'
-            ? progress * progress * (3 - 2 * progress)
-            : 0
     }
 
     // Dragging toward the previous dream warms it instead of the next, so
