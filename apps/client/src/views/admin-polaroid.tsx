@@ -257,7 +257,8 @@ function JobView({ job }: { job: string }) {
 
   const queued = (action: string) => tasks.some((t) => active(t) && t.action === action)
   const todo = STAGES.filter((s) => !detail.stages[s.key].done && !queued(s.action))
-  const total = detail.cost ? (parseFloat(detail.cost.panels.slice(1)) + parseFloat(detail.cost.background.slice(1))).toFixed(2) : '?'
+  const sum = detail.cost ? parseFloat(detail.cost.panels.slice(1)) + parseFloat(detail.cost.background.slice(1)) : NaN
+  const total = Number.isNaN(sum) ? '?' : sum.toFixed(2)
 
   return (
     <Page>

@@ -61,7 +61,10 @@ export async function polaroidRun(job: Job, opts: PolaroidRunOptions): Promise<P
     let done = start !== 1 || matteDone
     for (const dir of RAW) {
       if (!done) break
-      const have = new Set((await listFrames(path.join(job.dir, dir)).catch(() => [])).map((f) => path.parse(f).name))
+      // A missing folder is a range not run yet; any other read error throws, rather than reading as
+      // "not done" and paying for the range again.
+      const raw = path.join(job.dir, dir)
+      const have = new Set(((await exists(raw)) ? await listFrames(raw) : []).map((f) => path.parse(f).name))
       done = names.every((n) => have.has(n))
     }
     ranges.push({ start, frames: names.length, done })
