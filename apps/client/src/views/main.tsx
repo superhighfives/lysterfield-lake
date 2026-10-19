@@ -1,5 +1,5 @@
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
-import { RefObject, useMemo, useRef } from 'react'
+import { RefObject, useEffect, useMemo, useRef } from 'react'
 import { VideoMaterial, VideoMaterialProps } from '../materials/video-material'
 import Polaroid, { polaroidBend } from '../models/polaroid'
 import { isVideoPlaying } from '../utils'
@@ -11,7 +11,6 @@ import {
   Group,
   Mesh,
   Vector3,
-  Vector4,
   Box3,
 } from 'three'
 import { suspend } from 'suspend-react'
@@ -20,6 +19,7 @@ import { SwapPhase, useStore } from '../store'
 import { adjacentDream, commitSwap, fadeOutAudio } from '../utils/swap-dream'
 import { readPulse } from '../utils/audio'
 import DreamGlow from '../components/dream-glow'
+import { createWaterSim } from '../utils/water-sim'
 import {
   dreamElements,
   dreamVideo,
@@ -112,23 +112,21 @@ const AVATAR_FOLLOW_TILT = 0.15
 // The polaroid swells this much (scale) on each beat.
 const PULSE_SCALE = 0.012
 // The avatar dissolves (through the same stipple as a drag) as the pointer
-// moves away from the middle of the screen: whole within AVATAR_NEAR of it
-// (pointer units, 1 = the screen's edge), gone by AVATAR_FAR, eased by
-// AVATAR_EASE per frame — quick, so it moves with the pointer. As it
-// fades it warps and drifts away from the pointer (the shader, uAvatar).
-// Not on touch, where the pointer's the tilt.
-const AVATAR_NEAR = 0.3
-const AVATAR_FAR = 0.95
+// comes over the polaroid, out of the way of the photo: gone over its
+// middle, returning toward its edge and whole again just past it. Measured
+// as the pointer's distance from the photo's centre, where 1 is the
+// polaroid's edge (the frame reaches AVATAR_FRAME, a share of the photo's
+// width, past the photo): gone within AVATAR_HIDDEN, whole from
+// AVATAR_WHOLE, eased by AVATAR_EASE per frame — quick, so it moves with
+// the pointer. As it fades it warps and drifts away from the pointer (the
+// shader, uAvatar). Not on touch, where the pointer's the tilt.
+const AVATAR_FRAME = 0.08
+const AVATAR_HIDDEN = 0.35
+const AVATAR_WHOLE = 1.15
 const AVATAR_EASE = 0.3
-// The blank print's ripples: the pointer drops one every EMULSION_SPACING
-// (photo UV) it moves over the print, each spreading out from where it
-// fell and fading over EMULSION_SECONDS, at most EMULSION_DROPS at once
-// (the oldest makes way). Faster moves drop stronger ones, full at
-// EMULSION_FULL_SPEED (CSS px per frame).
-const EMULSION_DROPS = 8
-const EMULSION_SPACING = 0.06
-const EMULSION_SECONDS = 2
-const EMULSION_FULL_SPEED = 25
+// The blank print's water (utils/water-sim.ts): pointer speed (CSS px per
+// frame) for a full-strength stroke.
+const EMULSION_FULL_SPEED = 30
 
 function Main(
   props: ThreeElements['group'] & {
@@ -241,16 +239,15 @@ function Main(
   const developRef = useRef(1)
   // Whether the dream on show has started playing yet (it shows a blank,
   // living print until then, as a swap does), the avatar's pointer fade,
-  // and the blank print's ripples: each drop's place on the photo (UV),
-  // birth and strength, and the uniform they're written to — the
-  // polaroid's own array, like rippleUniform below.
+  // and the blank print's water, with the pointer where it was last frame
+  // (CSS px, and on the photo in UV).
   const startedRef = useRef(false)
   const avatarPointerFade = useRef(1)
-  const emulsionDrops = useRef<{ u: number; v: number; born: number; strength: number }[]>([])
-  const emulsionUniform = useRef(
-    Array.from({ length: EMULSION_DROPS }, () => new Vector4())
-  )
+  const water = useMemo(() => createWaterSim(), [])
+  useEffect(() => () => water.dispose(), [water])
   const lastPointerPx = useRef(new Vector2(-1, -1))
+  const lastPointerUv = useRef(new Vector2(-1, -1))
+  const pointerUv = useRef(new Vector2())
   const avatarFollow = useRef<Group>(null)
   const avatarOffsetRef = useRef(0)
   const rippleRef = useRef(-1)
@@ -534,17 +531,25 @@ function Main(
     // Gone, not nearly: a last trace of the dissolve read as a ghost of
     // the avatar over the polaroid while the next dream loaded.
     if (swapPhase === 'loading') fadeRef.current = 0
-    // And as the pointer leaves the middle of the screen.
+    // And as the pointer comes over the polaroid (its photo's bounds on
+    // screen, from last frame — see below).
+    let pointerFade = 1
+    if (!isMobile && !isTouch && polaroidRect.visible) {
+      const px = ((state.pointer.x + 1) / 2) * state.size.width
+      const py = ((1 - state.pointer.y) / 2) * state.size.height
+      const width = polaroidRect.right - polaroidRect.left
+      const height = polaroidRect.bottom - polaroidRect.top
+      const frame = width * AVATAR_FRAME
+      const reach = Math.hypot(
+        (px - (polaroidRect.left + polaroidRect.right) / 2) / (width / 2 + frame),
+        (py - (polaroidRect.top + polaroidRect.bottom) / 2) / (height / 2 + frame)
+      )
+      pointerFade = MathUtils.smoothstep(reach, AVATAR_HIDDEN, AVATAR_WHOLE)
+    }
+
     avatarPointerFade.current = MathUtils.lerp(
       avatarPointerFade.current,
-      isMobile || isTouch
-        ? 1
-        : 1 -
-            MathUtils.smoothstep(
-              Math.hypot(pointerX - 1, pointerY - 1),
-              AVATAR_NEAR,
-              AVATAR_FAR
-            ),
+      pointerFade,
       AVATAR_EASE
     )
     const avatarFade = fadeRef.current * avatarPointerFade.current
@@ -579,37 +584,35 @@ function Main(
       }
     }
 
-    // The blank print ripples where the pointer moves over it.
+    // The blank print's water: stirred where the pointer moves over it,
+    // run only while the print's blank (and stilled once it isn't).
     if (polaroidMaterial.current) {
       const px = ((state.pointer.x + 1) / 2) * state.size.width
       const py = ((1 - state.pointer.y) / 2) * state.size.height
-      const u = (px - polaroidRect.left) / (polaroidRect.right - polaroidRect.left)
-      const v = (polaroidRect.bottom - py) / (polaroidRect.bottom - polaroidRect.top)
-      const over = polaroidRect.visible && u >= 0 && u <= 1 && v >= 0 && v <= 1
+      const uv = pointerUv.current.set(
+        (px - polaroidRect.left) / (polaroidRect.right - polaroidRect.left),
+        (polaroidRect.bottom - py) / (polaroidRect.bottom - polaroidRect.top)
+      )
+      const over =
+        polaroidRect.visible && uv.x >= 0 && uv.x <= 1 && uv.y >= 0 && uv.y <= 1
       const speed =
         lastPointerPx.current.x < 0
           ? 0
           : Math.hypot(px - lastPointerPx.current.x, py - lastPointerPx.current.y)
       lastPointerPx.current.set(px, py)
-      const now = performance.now() / 1000
-      const drops = emulsionDrops.current
-      const last = drops[drops.length - 1]
-      if (
-        over &&
-        speed > 0.5 &&
-        (!last || Math.hypot(u - last.u, v - last.v) >= EMULSION_SPACING)
-      ) {
-        drops.push({ u, v, born: now, strength: Math.min(speed / EMULSION_FULL_SPEED, 1) })
-        if (drops.length > EMULSION_DROPS) drops.shift()
-      }
-
-      emulsionUniform.current.forEach((uniform, i) => {
-        const drop = drops[i]
-        const age = drop ? now - drop.born : Infinity
-        if (!drop || age > EMULSION_SECONDS) uniform.set(0, 0, 0, 0)
-        else uniform.set(drop.u, drop.v, age, drop.strength)
-      })
-      polaroidMaterial.current.uEmulsionDrops = emulsionUniform.current
+      const blank = (polaroidMaterial.current.uDevelop ?? 1) < 0.3
+      if (blank) {
+        const from = lastPointerUv.current.x < 0 ? uv : lastPointerUv.current
+        water.step(
+          state.gl,
+          from,
+          uv,
+          over ? Math.min(speed / EMULSION_FULL_SPEED, 1) : 0
+        )
+      } else water.clear(state.gl)
+      if (over) lastPointerUv.current.copy(uv)
+      else lastPointerUv.current.set(-1, -1)
+      polaroidMaterial.current.uWater = water.texture
     }
 
     if (!isMobile && !isTouch) {

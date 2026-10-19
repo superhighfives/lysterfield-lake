@@ -1,6 +1,6 @@
 import { shaderMaterial } from '@react-three/drei'
 import { extend, ThreeElement } from '@react-three/fiber'
-import { ShaderMaterial, Texture, Vector2, Vector3, Vector4 } from 'three'
+import { ShaderMaterial, Texture, Vector2, Vector3 } from 'three'
 
 const uniforms = {
   uOpacity: 0,
@@ -59,9 +59,10 @@ const uniforms = {
   // The polaroid developing after it lands (see main.tsx): 0 = a blank,
   // milky print, 1 = fully developed.
   uDevelop: 1,
-  // Ripples in the blank print, dropped where the pointer moves over it:
-  // xy = where on the photo (UV), z = age (s), w = strength (0 = none).
-  uEmulsionDrops: Array.from({ length: 8 }, () => new Vector4()),
+  // The blank print's water (utils/water-sim.ts): a height field over the
+  // photo, red = height, that the print refracts through and catches the
+  // light on. Null when there's none.
+  uWater: null as Texture | null,
   // A landing ripple through the photo: xy = origin in UV, z = seconds
   // since it started (negative = none).
   uRipple: new Vector3(0.5, 0.5, -1),
@@ -201,7 +202,9 @@ export const VideoMaterial = shaderMaterial(
     const int SMEAR_TAPS = 10;
     const float SPLIT_AMOUNT = 0.15;
     uniform float uDevelop;
-    uniform vec4 uEmulsionDrops[8];
+    uniform sampler2D uWater;
+    // One texel of the water's height field (utils/water-sim.ts's SIZE).
+    const float WATER_TEXEL = 1.0 / 192.0;
     uniform vec3 uRipple;
     uniform float uPulse;
     // Landing ripple: ring speed (UV/s), wavelength, peak UV displacement,
@@ -441,31 +444,24 @@ export const VideoMaterial = shaderMaterial(
         vec3 milky = mix(vec3(0.80, 0.82, 0.79), vec3(0.20, 0.21, 0.20), uDark);
         float blank = 1.0 - smoothstep(0.0, 0.3, uDevelop);
         if (blank > 0.0) {
-          // Ripples dropped along the pointer's path: each a ring spreading
-          // out from where it fell, softening and fading as it goes.
-          float ring = 0.0;
-          vec2 push = vec2(0.0);
-          for (int i = 0; i < 8; i++) {
-            vec4 drop = uEmulsionDrops[i];
-            if (drop.w <= 0.0) continue;
-            vec2 away = st - drop.xy;
-            float front = length(away) - drop.z * 0.3;
-            float width = 0.03 + drop.z * 0.03;
-            float band = exp(-(front * front) / (width * width));
-            float fade = max(0.0, 1.0 - drop.z / 2.0);
-            float wave = sin(front * 70.0) * band * fade * fade * drop.w;
-            ring += wave;
-            push += normalize(away + 1e-5) * wave;
-          }
-          vec2 drift = st * 2.6 + vec2(uTime * 0.05, -uTime * 0.035) + push * 0.08;
+          // The water over the print: its slope bends the print beneath it
+          // (refraction) and catches a light from above-left.
+          vec2 slope = vec2(
+            texture2D(uWater, st + vec2(WATER_TEXEL, 0.0)).r - texture2D(uWater, st - vec2(WATER_TEXEL, 0.0)).r,
+            texture2D(uWater, st + vec2(0.0, WATER_TEXEL)).r - texture2D(uWater, st - vec2(0.0, WATER_TEXEL)).r
+          );
+          vec3 surface = normalize(vec3(-slope * 6.0, 1.0));
+          float lit = dot(surface, normalize(vec3(-0.45, 0.55, 0.7))) - 0.7;
+          float glint = pow(max(dot(reflect(vec3(0.0, 0.0, -1.0), surface), normalize(vec3(-0.3, 0.4, 0.86))), 0.0), 60.0);
+          vec2 drift = st * 2.6 + vec2(uTime * 0.05, -uTime * 0.035) - slope * 1.5;
           float warp = emulsionNoise(drift * 1.7 + uTime * 0.08);
           float blotch = emulsionNoise(drift + warp * 1.6);
-          float ghost = dot(panel(3.0, vec2(localX, st.y - offsetY)).rgb, vec3(0.299, 0.587, 0.114));
+          float ghost = dot(panel(3.0, vec2(localX, st.y - offsetY) - slope * 0.25).rgb, vec3(0.299, 0.587, 0.114));
           float surfacing = 0.5 + 0.5 * sin(uTime * 0.9 + blotch * 3.0);
           vec3 tint = mix(vec3(1.0, 0.97, 0.92), vec3(0.92, 0.96, 1.0), blotch);
           vec3 emulsion = milky * tint + (blotch - 0.5) * mix(0.09, 0.05, uDark);
           emulsion = mix(emulsion, vec3(ghost) * 0.5 + milky * 0.5, 0.18 * surfacing * blotch);
-          emulsion += ring * mix(0.11, 0.08, uDark);
+          emulsion += lit * mix(0.16, 0.11, uDark) + glint * mix(0.18, 0.12, uDark);
           milky = mix(milky, emulsion, blank);
         }
         vec3 tone = mix(milky, vec3(luma) * 0.85 + milky * 0.15, smoothstep(0.0, 0.55, uDevelop));
