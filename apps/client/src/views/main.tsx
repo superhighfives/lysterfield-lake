@@ -490,6 +490,12 @@ function Main(
       polaroidMaterial.current.uRipple = rippleUniform.current
     }
 
+    // The lyrics lose the last dream's colour with it, and take on the
+    // next's as it develops.
+    if (lyricsMaterial.current)
+      lyricsMaterial.current.uFillDevelop =
+        polaroidMaterial.current?.uDevelop ?? 1
+
     // Dragging toward the previous dream warms it instead of the next, so
     // either way the swap has it ready.
     if (splitNow && swapDrag.active && Math.abs(swapDrag.dx) > 24 && swapPhase === 'idle') {

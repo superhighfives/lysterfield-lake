@@ -183,6 +183,20 @@ function load(slot: Slot, dream: Dream, time: number) {
       )
     }
 
+    // A dream that won't load (missing, say) mustn't leave the player
+    // waiting on it for good: it counts as settled, and the song plays on
+    // without it.
+    el.addEventListener(
+      'error',
+      () => {
+        if (slot.id !== dream.id) return
+        console.warn(`Dream video for ${dream.id} failed to load`, el.error)
+        slot.settled = true
+        resolve()
+      },
+      { once: true }
+    )
+
     if (el.readyState >= HTMLMediaElement.HAVE_METADATA) settle()
     else el.addEventListener('loadedmetadata', settle, { once: true })
   })
