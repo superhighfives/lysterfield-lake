@@ -80,11 +80,14 @@ export async function writeSplitClientAssets(clientDir: string, result: ComposeS
     written.push(path.join(toDir, name))
   }
 
+  // `<job>/7-dreams/<take>/split`
+  const takes = result.dreamDirs.map((dir) => ({ dir, id: path.basename(path.dirname(dir)) }))
+  if (takes.some((t) => t.id === 'main')) {
+    throw new Error('A take named "main" would overwrite the shared main video in dreams/main/')
+  }
+
   for (const f of files) await copy(result.mainDir, path.join(clientDir, 'dreams', 'main'), `main${f}`)
-  for (const dir of result.dreamDirs) {
-    // `<job>/7-dreams/<take>/split`
-    const id = path.basename(path.dirname(dir))
-    if (id === 'main') throw new Error('A take named "main" would overwrite the shared main video in dreams/main/')
+  for (const { dir, id } of takes) {
     for (const f of files) await copy(dir, path.join(clientDir, 'dreams', id), `dream${f}`)
   }
   return written
