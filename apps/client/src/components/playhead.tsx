@@ -498,7 +498,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                       className="!w-5 !h-5 xs:!w-4 xs:!h-4 !max-w-none !min-w-0"
                     />
                   </MediaMuteButton>
-                  <Tooltip text="Toggle mute" />
+                  <Tooltip text="Toggle mute" placement="below" />
                 </div>
                 <div className="group flex relative">
                   <MediaPlayButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 pr-4 py-2 xs:px-2 xs:pr-3 xs:py-1">
@@ -511,7 +511,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                       className="!w-5 !h-5 xs:!w-4 xs:!h-4 !max-w-none !min-w-0"
                     />
                   </MediaPlayButton>
-                  <Tooltip text={videoPlaying ? 'Pause' : 'Play'} />
+                  <Tooltip text={videoPlaying ? 'Pause' : 'Play'} placement="below" />
                 </div>
               </div>
               <div className="flex w-full gap-2 items-center pl-3 xs:pl-0 pr-3 py-2 xs:py-1">
