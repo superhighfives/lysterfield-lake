@@ -142,10 +142,7 @@ function Cursor() {
       const hint = cursorHint.active ? cursorHint : null
       if (swapDrag.active || hint?.dragging) next = 'drag'
       else if (swapPhase !== 'idle' || playback.waiting) next = 'busy'
-      else if (
-        hint?.near ||
-        (canSwap() && nearPolaroid(pointer.x, pointer.y))
-      )
+      else if (hint?.near || (canSwap() && nearPolaroid(pointer.x, pointer.y)))
         next = 'polaroid'
       else if (
         hovered?.closest(INTERACTIVE) ||
@@ -212,20 +209,26 @@ function Cursor() {
     >
       {/* Ring, trailing the pointer */}
       <div ref={ring} className="absolute left-0 top-0">
+        {/* Centred and sized on the outside, so the busy spin (a transform
+            of its own) doesn't replace the centring translate. */}
         <div
-          className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border transition-all duration-300 ease-out ${
-            mode === 'busy'
-              ? 'border-dashed border-stone-900/60 dark:border-white/60 animate-spin'
-              : mode === 'hover'
-                ? 'border-yellow-500 bg-yellow-400/20'
-                : mode === 'polaroid' || mode === 'drag'
-                  ? // A faint halo of the opposite colour outside the ring,
-                    // so it reads over the photo whatever's in it.
-                    'border-stone-900/60 dark:border-white/60 bg-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]'
-                  : 'border-transparent'
-          }`}
+          className="absolute -translate-x-1/2 -translate-y-1/2 transition-[width,height] duration-300 ease-out"
           style={{ width: size, height: size }}
-        />
+        >
+          <div
+            className={`w-full h-full rounded-full border transition-[color,background-color,border-color,box-shadow] duration-300 ease-out ${
+              mode === 'busy'
+                ? 'border-dashed border-stone-900/60 dark:border-white/60 animate-spin'
+                : mode === 'hover'
+                  ? 'border-yellow-500 bg-yellow-400/20'
+                  : mode === 'polaroid' || mode === 'drag'
+                    ? // A faint halo of the opposite colour outside the ring,
+                      // so it reads over the photo whatever's in it.
+                      'border-stone-900/60 dark:border-white/60 bg-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]'
+                    : 'border-transparent'
+            }`}
+          />
+        </div>
 
         {/* Waiting: a label under the spinning ring */}
         <span
@@ -281,7 +284,9 @@ function Cursor() {
           <CaretRight
             weight="bold"
             size={14}
-            style={{ animation: 'cursor-nudge-right 1.4s ease-in-out infinite' }}
+            style={{
+              animation: 'cursor-nudge-right 1.4s ease-in-out infinite',
+            }}
           />
         </div>
 
