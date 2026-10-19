@@ -135,7 +135,7 @@ function Choose(props: ThreeElements['group']) {
   useFrame(() => {
     // Once a dream is playing and the page has arrived at the player,
     // scrolling is locked: scrolling back up mid-song used to drift the
-    // player off-screen toward the choose screen. "Return to home" (or the
+    // player off-screen toward the choose screen. "Home" (or the
     // video ending) clears the dream, which unlocks it.
     const lock = !!dream && !scrollToPlayer.current && data.offset > 0.98
     const overflow = lock ? 'hidden' : 'auto'

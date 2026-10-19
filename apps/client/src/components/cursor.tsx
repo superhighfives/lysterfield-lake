@@ -19,7 +19,8 @@ import { playback } from '../utils/dream-video'
 //   a faint ghost trailing behind — the ring is collapsed into it, so every
 //   other state grows out of the dot
 // - hover: a larger ring over anything clickable (HTML controls, and the
-//   carousel's cards, which flag it through drei's useCursor)
+//   carousel's cards, which flag it through drei's useCursor), labelled
+//   with the control's name when it has one (views/tooltip.tsx)
 // - polaroid: near the player's polaroid, a wide ring with arrows either
 //   side, offering a drag
 // - drag: the ring fills toward the point where letting go swaps, with
@@ -58,6 +59,7 @@ function Cursor() {
   const [enabled, setEnabled] = useState(finePointer)
   const [mode, setMode] = useState<Mode>('default')
   const [visible, setVisible] = useState(false)
+  const [label, setLabel] = useState('')
   const [preview, setPreview] = useState<{
     dream: Dream
     side: 'left' | 'right'
@@ -89,6 +91,7 @@ function Cursor() {
     let hovered: Element | null = null
     let currentMode: Mode = 'default'
     let previewKey = ''
+    let currentLabel = ''
     let frame = 0
 
     const handleMove = (event: PointerEvent) => {
@@ -152,6 +155,23 @@ function Cursor() {
       if (next !== currentMode) {
         currentMode = next
         setMode(next)
+      }
+
+      // The hovered control's name: its own, or a sibling's (the player's
+      // mute and play buttons sit beside theirs).
+      let nextLabel = currentLabel
+      if (next === 'hover') {
+        const control = hovered?.closest(INTERACTIVE)
+        nextLabel =
+          (
+            control?.querySelector('[data-cursor-label]') ??
+            control?.parentElement?.querySelector(':scope > [data-cursor-label]')
+          )?.textContent ?? ''
+      }
+
+      if (nextLabel !== currentLabel) {
+        currentLabel = nextLabel
+        setLabel(nextLabel)
       }
 
       if (next === 'drag') {
@@ -230,14 +250,16 @@ function Cursor() {
           />
         </div>
 
-        {/* Waiting: a label under the spinning ring */}
+        {/* A label under the ring: waiting, or the hovered control's name */}
         <span
           className={`absolute -translate-x-1/2 whitespace-nowrap font-mono text-[10px] uppercase tracking-widest text-stone-900 dark:text-white bg-white/80 dark:bg-stone-900/80 rounded-full px-2 transition-opacity duration-300 ${
-            mode === 'busy' ? 'opacity-100' : 'opacity-0'
+            mode === 'busy' || (mode === 'hover' && label)
+              ? 'opacity-100'
+              : 'opacity-0'
           }`}
-          style={{ top: RING_SIZE.busy / 2 + 10 }}
+          style={{ top: RING_SIZE[mode === 'hover' ? 'hover' : 'busy'] / 2 + 10 }}
         >
-          Loading…
+          {mode === 'busy' ? 'Loading…' : label}
         </span>
 
         {/* Drag progress: fills toward the point where letting go swaps */}

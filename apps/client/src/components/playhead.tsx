@@ -61,6 +61,8 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     // The dream's name and prompt show while the pointer's over the
     // controls (always on touch, which has no hover).
     const [pillHovered, setPillHovered] = useState(false)
+    // For the mute button's label.
+    const [muted, setMuted] = useState(false)
 
     const setResetInitialRotation = useStore(
       (state) => state.setResetInitialRotation
@@ -216,6 +218,14 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       const timeout = setTimeout(finish, DREAM_READY_TIMEOUT_MS)
       return () => clearTimeout(timeout)
     }, [dream, ref])
+
+    useEffect(() => {
+      const el = (ref as MutableRefObject<HTMLVideoElement>).current
+      const handleVolume = () => setMuted(el.muted)
+      handleVolume()
+      el.addEventListener('volumechange', handleVolume)
+      return () => el.removeEventListener('volumechange', handleVolume)
+    }, [ref])
 
     // The dream videos follow the main video's clock.
     useEffect(() => {
@@ -465,7 +475,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
               ref={(el) => el?.setAttribute('noautohide', '')}
               className="flex flex-col xs:flex-row w-full h-full xs:space-x-3 items-center"
             >
-              <div className="flex flex-1 xs:flex-none self-stretch items-center justify-center border-b xs:border-r xs:border-b-0 border-yellow-500">
+              <div className="flex flex-1 xs:flex-none self-stretch items-center justify-evenly xs:justify-center border-b xs:border-r xs:border-b-0 border-yellow-500">
                 <Footer />
                 <div className="group flex relative">
                   <MediaMuteButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 py-2 xs:px-2 xs:py-1">
@@ -498,10 +508,10 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                       className="!w-5 !h-5 xs:!w-4 xs:!h-4 !max-w-none !min-w-0"
                     />
                   </MediaMuteButton>
-                  <Tooltip text="Toggle mute" placement="below" />
+                  <Tooltip text={muted ? 'Unmute' : 'Mute'} />
                 </div>
                 <div className="group flex relative">
-                  <MediaPlayButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 pr-4 py-2 xs:px-2 xs:pr-3 xs:py-1">
+                  <MediaPlayButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 py-2 xs:px-2 xs:pr-3 xs:py-1">
                     <Play
                       slot="play"
                       className="!w-5 !h-5 xs:!w-4 xs:!h-4 !max-w-none !min-w-0"
@@ -511,10 +521,10 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                       className="!w-5 !h-5 xs:!w-4 xs:!h-4 !max-w-none !min-w-0"
                     />
                   </MediaPlayButton>
-                  <Tooltip text={videoPlaying ? 'Pause' : 'Play'} placement="below" />
+                  <Tooltip text={videoPlaying ? 'Pause' : 'Play'} />
                 </div>
               </div>
-              <div className="flex flex-1 w-full xs:w-auto min-w-0 gap-2 items-center pl-3 xs:pl-0 pr-4 py-2 xs:py-1">
+              <div className="flex flex-1 w-full xs:w-auto min-w-0 gap-2 items-center pl-3.5 xs:pl-0 pr-2 xs:pr-4 py-0 xs:py-1">
                 <MediaTimeDisplay className="font-mono text-xs [--media-control-padding:4px]" />
                 <MediaTimeRange
                   className="grow min-w-0 h-4
