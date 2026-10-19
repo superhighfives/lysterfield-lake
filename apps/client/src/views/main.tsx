@@ -23,7 +23,9 @@ import {
   dreamElements,
   dreamVideo,
   backSlot,
+  frontReady,
   isSplit,
+  playback,
   snapCrossfade,
   stepCrossfade,
   warmDream,
@@ -108,6 +110,18 @@ const AVATAR_FOLLOW_EASE = 0.08
 const AVATAR_FOLLOW_TILT = 0.15
 // The polaroid swells this much (scale) on each beat.
 const PULSE_SCALE = 0.012
+// The avatar dissolves (through the same stipple as a drag) as the pointer
+// moves away from the middle of the screen: whole within AVATAR_NEAR of it
+// (pointer units, 1 = the screen's edge), gone by AVATAR_FAR, eased by
+// AVATAR_EASE per frame. Not on touch, where the pointer's the tilt.
+const AVATAR_NEAR = 0.45
+const AVATAR_FAR = 1.1
+const AVATAR_EASE = 0.06
+// The blank print's ripples under the pointer: pointer speed (CSS px per
+// frame) for full strength, and how quickly strength follows (it lingers,
+// so rings carry on a moment after the pointer stops).
+const EMULSION_FULL_SPEED = 25
+const EMULSION_EASE = 0.06
 
 function Main(
   props: ThreeElements['group'] & {
@@ -213,6 +227,14 @@ function Main(
   const velocityTarget = useRef(new Vector2())
   const bendTarget = useRef(new Vector2())
   const developRef = useRef(1)
+  // Whether the dream on show has started playing yet (it shows a blank,
+  // living print until then, as a swap does), the avatar's pointer fade,
+  // and the blank print's ripple: the pointer on the photo (UV) and its
+  // strength — the polaroid's own Vector3, like rippleUniform below.
+  const startedRef = useRef(false)
+  const avatarPointerFade = useRef(1)
+  const emulsionPointer = useRef(new Vector3(0.5, 0.5, 0))
+  const lastPointerPx = useRef(new Vector2(-1, -1))
   const avatarFollow = useRef<Group>(null)
   const avatarOffsetRef = useRef(0)
   const rippleRef = useRef(-1)
@@ -324,6 +346,18 @@ function Main(
     // Split, a swap only changes the dream video: the song plays on, and
     // the new dream crossfades in rather than developing from blank.
     const splitNow = isSplit(useStore.getState().dream)
+    // Waiting on video: the first dream until it can play (a blank print,
+    // developing once it's ready), or a swap.
+    const currentDream = useStore.getState().dream
+    if (!currentDream) startedRef.current = false
+    else if (
+      video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA &&
+      (!splitNow || frontReady())
+    )
+      startedRef.current = true
+    const starting = !!currentDream && !startedRef.current
+    playback.waiting = starting || (!!currentDream && swapPhase !== 'idle')
+    if (starting) developRef.current = 0
     // Mid-swap the photo's a blank print (uDevelop below), so the next
     // dream can just be there when it develops.
     if (splitNow && swapPhase !== 'idle') snapCrossfade()
@@ -484,10 +518,24 @@ function Main(
     // Gone, not nearly: a last trace of the dissolve read as a ghost of
     // the avatar over the polaroid while the next dream loaded.
     if (swapPhase === 'loading') fadeRef.current = 0
-    if (avatarFollow.current) avatarFollow.current.visible = fadeRef.current > 0.01
+    // And as the pointer leaves the middle of the screen.
+    avatarPointerFade.current = MathUtils.lerp(
+      avatarPointerFade.current,
+      isMobile || isTouch
+        ? 1
+        : 1 -
+            MathUtils.smoothstep(
+              Math.hypot(pointerX - 1, pointerY - 1),
+              AVATAR_NEAR,
+              AVATAR_FAR
+            ),
+      AVATAR_EASE
+    )
+    const avatarFade = fadeRef.current * avatarPointerFade.current
+    if (avatarFollow.current) avatarFollow.current.visible = avatarFade > 0.01
     // Only the avatar: the song plays on through a swap, so its words do
     // too.
-    if (avatarMaterial.current) avatarMaterial.current.uFade = fadeRef.current
+    if (avatarMaterial.current) avatarMaterial.current.uFade = avatarFade
 
     // The photo's bounds on screen, for the cursor and tap detection.
     const photo = polaroidVisible.current
@@ -513,6 +561,28 @@ function Main(
         polaroidRect.top = Math.min(polaroidRect.top, sy)
         polaroidRect.bottom = Math.max(polaroidRect.bottom, sy)
       }
+    }
+
+    // The blank print ripples where the pointer moves over it.
+    if (polaroidMaterial.current) {
+      const px = ((state.pointer.x + 1) / 2) * state.size.width
+      const py = ((1 - state.pointer.y) / 2) * state.size.height
+      const u = (px - polaroidRect.left) / (polaroidRect.right - polaroidRect.left)
+      const v = (polaroidRect.bottom - py) / (polaroidRect.bottom - polaroidRect.top)
+      const over = polaroidRect.visible && u >= 0 && u <= 1 && v >= 0 && v <= 1
+      const speed =
+        lastPointerPx.current.x < 0
+          ? 0
+          : Math.hypot(px - lastPointerPx.current.x, py - lastPointerPx.current.y)
+      lastPointerPx.current.set(px, py)
+      const ripple = emulsionPointer.current
+      if (over) ripple.setX(u).setY(v)
+      ripple.z = MathUtils.lerp(
+        ripple.z,
+        over ? Math.min(speed / EMULSION_FULL_SPEED, 1) : 0,
+        EMULSION_EASE
+      )
+      polaroidMaterial.current.uEmulsionPointer = ripple
     }
 
     if (!isMobile && !isTouch) {

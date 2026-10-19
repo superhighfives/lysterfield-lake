@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { SwapDirection, useStore } from '../store'
+import { playback } from './dream-video'
 import { adjacentDream } from './swap-dream'
 
 // Dragging the player's polaroid sideways to swap dreams (see
@@ -58,7 +59,8 @@ export function canSwap() {
   return (
     state.showPlayhead &&
     state.polaroidPillVisible &&
-    state.swapPhase === 'idle'
+    state.swapPhase === 'idle' &&
+    !playback.waiting
   )
 }
 

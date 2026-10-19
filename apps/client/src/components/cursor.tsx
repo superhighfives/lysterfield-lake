@@ -10,6 +10,7 @@ import {
 } from '../utils/swap-gesture'
 import { latestPulse } from '../utils/audio'
 import { cursorHint } from '../utils/cursor-hint'
+import { playback } from '../utils/dream-video'
 
 // A custom cursor, on devices with a precise, hovering pointer (touch keeps
 // its own). A dot sits exactly under the pointer; a ring trails it and
@@ -23,7 +24,8 @@ import { cursorHint } from '../utils/cursor-hint'
 //   side, offering a drag
 // - drag: the ring fills toward the point where letting go swaps, with
 //   the dream it'll swap to shown beside it on the side it'll come from
-// - busy: a spinning dashed ring while the next dream loads
+// - busy: a spinning dashed ring, labelled, while the player waits on
+//   video (the first dream loading, or a swap) — no drag offered then
 
 type Mode = 'default' | 'hover' | 'polaroid' | 'drag' | 'busy'
 
@@ -139,7 +141,7 @@ function Cursor() {
       let next: Mode = 'default'
       const hint = cursorHint.active ? cursorHint : null
       if (swapDrag.active || hint?.dragging) next = 'drag'
-      else if (swapPhase === 'loading') next = 'busy'
+      else if (swapPhase !== 'idle' || playback.waiting) next = 'busy'
       else if (
         hint?.near ||
         (canSwap() && nearPolaroid(pointer.x, pointer.y))
@@ -224,6 +226,16 @@ function Cursor() {
           }`}
           style={{ width: size, height: size }}
         />
+
+        {/* Waiting: a label under the spinning ring */}
+        <span
+          className={`absolute -translate-x-1/2 whitespace-nowrap font-mono text-[10px] uppercase tracking-widest text-stone-900 dark:text-white bg-white/80 dark:bg-stone-900/80 rounded-full px-2 transition-opacity duration-300 ${
+            mode === 'busy' ? 'opacity-100' : 'opacity-0'
+          }`}
+          style={{ top: RING_SIZE.busy / 2 + 10 }}
+        >
+          Loading…
+        </span>
 
         {/* Drag progress: fills toward the point where letting go swaps */}
         <svg

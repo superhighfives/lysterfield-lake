@@ -59,6 +59,9 @@ const uniforms = {
   // The polaroid developing after it lands (see main.tsx): 0 = a blank,
   // milky print, 1 = fully developed.
   uDevelop: 1,
+  // The pointer over the blank print, rippling its emulsion: xy = where on
+  // the photo (UV), z = strength (from its speed).
+  uEmulsionPointer: new Vector3(0.5, 0.5, 0),
   // A landing ripple through the photo: xy = origin in UV, z = seconds
   // since it started (negative = none).
   uRipple: new Vector3(0.5, 0.5, -1),
@@ -194,6 +197,7 @@ export const VideoMaterial = shaderMaterial(
     const int SMEAR_TAPS = 10;
     const float SPLIT_AMOUNT = 0.15;
     uniform float uDevelop;
+    uniform vec3 uEmulsionPointer;
     uniform vec3 uRipple;
     uniform float uPulse;
     // Landing ripple: ring speed (UV/s), wavelength, peak UV displacement,
@@ -429,7 +433,12 @@ export const VideoMaterial = shaderMaterial(
         vec3 milky = mix(vec3(0.80, 0.82, 0.79), vec3(0.20, 0.21, 0.20), uDark);
         float blank = 1.0 - smoothstep(0.0, 0.3, uDevelop);
         if (blank > 0.0) {
-          vec2 drift = st * 2.6 + vec2(uTime * 0.05, -uTime * 0.035);
+          // Rings spreading from the pointer as it moves over the print.
+          vec2 fromPointer = st - uEmulsionPointer.xy;
+          float reach = length(fromPointer);
+          float ring = sin(reach * 42.0 - uTime * 6.0) * exp(-reach * 3.5) * uEmulsionPointer.z;
+          vec2 drift = st * 2.6 + vec2(uTime * 0.05, -uTime * 0.035)
+            + normalize(fromPointer + 1e-5) * ring * 0.12;
           float warp = emulsionNoise(drift * 1.7 + uTime * 0.08);
           float blotch = emulsionNoise(drift + warp * 1.6);
           float ghost = dot(panel(3.0, vec2(localX, st.y - offsetY)).rgb, vec3(0.299, 0.587, 0.114));
@@ -437,6 +446,7 @@ export const VideoMaterial = shaderMaterial(
           vec3 tint = mix(vec3(1.0, 0.97, 0.92), vec3(0.92, 0.96, 1.0), blotch);
           vec3 emulsion = milky * tint + (blotch - 0.5) * mix(0.09, 0.05, uDark);
           emulsion = mix(emulsion, vec3(ghost) * 0.5 + milky * 0.5, 0.18 * surfacing * blotch);
+          emulsion += ring * mix(0.11, 0.08, uDark);
           milky = mix(milky, emulsion, blank);
         }
         vec3 tone = mix(milky, vec3(luma) * 0.85 + milky * 0.15, smoothstep(0.0, 0.55, uDevelop));

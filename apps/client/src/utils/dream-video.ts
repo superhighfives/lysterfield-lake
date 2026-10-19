@@ -221,6 +221,17 @@ export function warmDream(dream: Dream | undefined) {
   load(back, dream, main ? main.currentTime : 0)
 }
 
+/** Whether the dream on show is ready: loaded, sought and playing along. */
+export const frontReady = () => {
+  const front = slots()[dreamVideo.front]
+  return !!front.id && front.settled
+}
+
+/** Whether the player's waiting on video — the first dream's still
+ *  loading, or a swap is under way. Written each frame by views/main.tsx,
+ *  read by the cursor (components/cursor.tsx). */
+export const playback = { waiting: false }
+
 /** The dream warm in the back slot, and whether it's ready to show. */
 export function backSlot() {
   const back = slots()[1 - dreamVideo.front]
