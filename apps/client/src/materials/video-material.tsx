@@ -56,14 +56,6 @@ const uniforms = {
   // the image back along it and splits its colour channels, so a moving
   // polaroid streaks and a still one is untouched.
   uVelocity: new Vector2(0, 0),
-  // How much of the avatar's pointer-driven fade (it clears as the pointer
-  // nears it) breaks up through the dissolve's dither rather than fading
-  // smoothly. 0 = smooth, 1 = all stipple.
-  uHash: 0,
-  // 1 = show the avatar at full strength whatever the pointer is doing (its
-  // pointer fade, and so the hashing, held off); eased back to 0. Used
-  // just after a dream swap, so the new dream's avatar arrives whole.
-  uReveal: 0,
   // The polaroid developing after it lands (see main.tsx): 0 = a blank,
   // milky print, 1 = fully developed.
   uDevelop: 1,
@@ -184,7 +176,6 @@ export const VideoMaterial = shaderMaterial(
     uniform float uTime;
     uniform float uAvatar;
     uniform float uIdle;
-    uniform float uReveal;
     uniform float uDark;
     uniform float uBackgroundMix;
     uniform float uSharpen;
@@ -202,7 +193,6 @@ export const VideoMaterial = shaderMaterial(
     // channels split either side of it.
     const int SMEAR_TAPS = 10;
     const float SPLIT_AMOUNT = 0.15;
-    uniform float uHash;
     uniform float uDevelop;
     uniform vec3 uRipple;
     uniform float uPulse;
@@ -266,6 +256,21 @@ export const VideoMaterial = shaderMaterial(
         return mix(texture2D(uDream, d), texture2D(uDreamNext, d), uDreamMix);
       }
       return texture2D(uTexture, vec2((uv.x + (p - 1.0)) / uFrameTotal, uv.y));
+    }
+
+    // Smooth value noise, 0-1, for the blank print's drifting emulsion.
+    float emulsionHash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    }
+    float emulsionNoise(vec2 p) {
+      vec2 cell = floor(p);
+      vec2 f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(
+        mix(emulsionHash(cell), emulsionHash(cell + vec2(1.0, 0.0)), u.x),
+        mix(emulsionHash(cell + vec2(0.0, 1.0)), emulsionHash(cell + vec2(1.0, 1.0)), u.x),
+        u.y
+      );
     }
 
     float ditherLimit() {
@@ -405,28 +410,35 @@ export const VideoMaterial = shaderMaterial(
 
         image = vec4(blendMultiply(vec3(image), vec3(outColor), 0.3), 1.0);
 
-        float minRadius = 0.15;
-        float maxRadius = 0.30;
-        float dist = distance(uPointerRelative / 2.0, vec2(0.5, 0.6));
-        float range = maxRadius - minRadius;
-        float mixAmount = clamp((dist - minRadius) / range, 0.15, 1.0);
+        // The avatar no longer clears as the pointer nears it (dragging the
+        // polaroid does that now); it only thins where idle (uIdle).
         float fadeIn = clamp(uTime / 4.0 - 1.5, 0.0, 1.0);
-        float radial = clamp((0.5 - st.y) * 1.0 - mixAmount, 0.0, 1.0);
-
-        opacityOverride = ((1.0 - (mixAmount - radial + (mask.r * uIdle))) * fadeIn);
-        // Held off while revealed (see uReveal): as if the pointer were
-        // well away from the avatar.
-        opacityOverride *= 1.0 - uReveal;
+        opacityOverride = -mask.r * uIdle * fadeIn;
       }
 
       image = mix(image, white, fadeAmount);
 
 
       // Developing: a blank milky print, then the tones come up, then the
-      // colour — the way an instant photo develops.
+      // colour — the way an instant photo develops. While it's blank
+      // (waiting on the next dream), the emulsion isn't still: soft blotches
+      // drift through it, and the scene's background ghosts in and out, as
+      // if the picture's about to surface.
       if(uDevelop < 1.0) {
         float luma = dot(image.rgb, vec3(0.299, 0.587, 0.114));
         vec3 milky = mix(vec3(0.80, 0.82, 0.79), vec3(0.20, 0.21, 0.20), uDark);
+        float blank = 1.0 - smoothstep(0.0, 0.3, uDevelop);
+        if (blank > 0.0) {
+          vec2 drift = st * 2.6 + vec2(uTime * 0.05, -uTime * 0.035);
+          float warp = emulsionNoise(drift * 1.7 + uTime * 0.08);
+          float blotch = emulsionNoise(drift + warp * 1.6);
+          float ghost = dot(panel(3.0, vec2(localX, st.y - offsetY)).rgb, vec3(0.299, 0.587, 0.114));
+          float surfacing = 0.5 + 0.5 * sin(uTime * 0.9 + blotch * 3.0);
+          vec3 tint = mix(vec3(1.0, 0.97, 0.92), vec3(0.92, 0.96, 1.0), blotch);
+          vec3 emulsion = milky * tint + (blotch - 0.5) * mix(0.09, 0.05, uDark);
+          emulsion = mix(emulsion, vec3(ghost) * 0.5 + milky * 0.5, 0.18 * surfacing * blotch);
+          milky = mix(milky, emulsion, blank);
+        }
         vec3 tone = mix(milky, vec3(luma) * 0.85 + milky * 0.15, smoothstep(0.0, 0.55, uDevelop));
         image.rgb = mix(tone, image.rgb, smoothstep(0.35, 1.0, uDevelop));
       }
@@ -454,13 +466,6 @@ export const VideoMaterial = shaderMaterial(
       // threshold, so the mesh breaks up into the sketch's own stipple.
       if(uFade < 1.0) {
         gl_FragColor.a *= uFade >= ditherLimit() ? 1.0 : 0.0;
-      }
-
-      // The avatar's pointer fade, partly broken into the same stipple:
-      // where it's half-faded, cells snap to shown or gone.
-      if(uHash > 0.0 && uAvatar == 1.0) {
-        float a = gl_FragColor.a;
-        gl_FragColor.a = mix(a, a >= ditherLimit() ? 1.0 : 0.0, uHash);
       }
 
       // Nothing here: drawn, it would still write depth and hide whatever's

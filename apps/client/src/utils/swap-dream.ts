@@ -13,13 +13,12 @@ import { isSplit } from './dream-video'
 // Otherwise every dream is one composite video (all seven panels plus the
 // audio), so a swap really means loading another video and seeking it to
 // where this one was — the same resume path a history restore takes (see
-// Playhead). The polaroid's out/in animation (views/main.tsx,
-// utils/swap-poses.ts) covers the load, and the audio fades out and back
-// in around the gap.
+// Playhead). The polaroid's blank print (views/main.tsx) covers the load,
+// and the audio fades out and back in around the gap.
 
-// How long the audio takes to fade out (as the polaroid leaves) and back
-// in (as the next one arrives). The out fade should finish before the
-// out animation does, or the load cuts the tail of it off.
+// How long the audio takes to fade out (as the photo fades to blank) and
+// back in (as the next develops). The out fade should finish before the
+// photo's blank, or the load cuts the tail of it off.
 const FADE_OUT_MS = 300
 const FADE_IN_MS = 600
 // If the next video still hasn't started after this long, bring the
@@ -74,7 +73,7 @@ function fadeInAudio(el: HTMLVideoElement) {
   fadeVolume(el, restoreVolume ?? 1, FADE_IN_MS, () => (restoreVolume = null))
 }
 
-/** Called once the polaroid's out animation has finished: loads the next
+/** Called once the polaroid's photo has faded to blank: loads the next
  *  dream at the current playback position, and moves the swap on to `in`
  *  once it's actually playing there. */
 export function commitSwap(el: HTMLVideoElement) {
