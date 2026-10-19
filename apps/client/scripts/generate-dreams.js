@@ -24,7 +24,9 @@ if (dreams.length === 0 && existingDreams.length > 0) {
 }
 
 const dreamsOutput = dreams
-  .filter((dream) => dream != 'archive')
+  // Not dreams: old takes, and the split layout's shared main video
+  // (dreams/main/, see src/utils/dream-video.ts).
+  .filter((dream) => dream != 'archive' && dream != 'main')
   .map((dream) => {
     const existingDream = existingDreams.find((d) => d.id === dream)
     if (existingDream) {
