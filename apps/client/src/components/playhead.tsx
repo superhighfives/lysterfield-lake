@@ -58,6 +58,9 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     const isMobile = useStore((state) => state.isMobile)
     const isTouch = useStore((state) => state.isTouch)
     const [recalibrateMobile, setRecalibrateMobile] = useState(false)
+    // The dream's name and prompt show while the pointer's over the
+    // controls (always on touch, which has no hover).
+    const [pillHovered, setPillHovered] = useState(false)
 
     const setResetInitialRotation = useStore(
       (state) => state.setResetInitialRotation
@@ -326,13 +329,18 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
             <span className="font-serif text-lg">Reorient mobile</span>
           </button>
         </div>
-        {/* The dream's name and prompt, just above the controls. Fades out
-            as a swap starts, and in again (keyed on the dream) with the
-            new one. Placed above the pill at either of its heights. */}
+        {/* The dream's name and prompt, just above the controls, while
+            they're hovered. Fades out as a swap starts, and in again
+            (keyed on the dream) with the new one. Placed above the pill at
+            either of its heights. */}
         <div
           aria-live="polite"
           className={`fixed z-10 left-1/2 -translate-x-1/2 bottom-[calc(2.5rem+104px+0.75rem)] xs:bottom-[calc(2.5rem+34px+0.75rem)] flex flex-col items-center text-center pointer-events-none transition-opacity duration-300 ${
-            showPlayhead && polaroidPillVisible && dream && !swapping
+            showPlayhead &&
+            polaroidPillVisible &&
+            dream &&
+            !swapping &&
+            (pillHovered || isTouch)
               ? 'opacity-100'
               : 'opacity-0'
           }`}
@@ -356,6 +364,8 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
               ? ''
               : 'pointer-events-none opacity-0'
           }`}
+          onPointerEnter={() => setPillHovered(true)}
+          onPointerLeave={() => setPillHovered(false)}
           // media-chrome renders our unslotted controls div (see below)
           // inside an internal `part="vertical-layer"` span that it makes
           // `position: absolute; inset: 0` by default — built for
