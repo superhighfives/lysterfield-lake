@@ -112,17 +112,14 @@ const AVATAR_FOLLOW_TILT = 0.15
 // The polaroid swells this much (scale) on each beat.
 const PULSE_SCALE = 0.012
 // The avatar dissolves (through the same stipple as a drag) as the pointer
-// comes over the polaroid, out of the way of the photo: gone over its
-// middle, returning toward its edge and whole again just past it. Measured
-// as the pointer's distance from the photo's centre, where 1 is the
-// polaroid's edge (the frame reaches AVATAR_FRAME, a share of the photo's
-// width, past the photo): gone within AVATAR_HIDDEN, whole from
-// AVATAR_WHOLE, eased by AVATAR_EASE per frame — quick, so it moves with
-// the pointer. As it fades it warps and drifts away from the pointer (the
-// shader, uAvatar). Not on touch, where the pointer's the tilt.
+// leaves the polaroid: whole over it, starting to go at its edge — the
+// frame reaches AVATAR_FRAME (a share of the photo's width) past the photo
+// — and gone AVATAR_GONE further out, eased by AVATAR_EASE per frame:
+// quick, so it moves with the pointer. As it fades it warps and drifts
+// away from the pointer (the shader, uAvatar). Not on touch, where the
+// pointer's the tilt.
 const AVATAR_FRAME = 0.08
-const AVATAR_HIDDEN = 0.35
-const AVATAR_WHOLE = 1.15
+const AVATAR_GONE = 0.25
 const AVATAR_EASE = 0.3
 // The blank print's water (utils/water-sim.ts): pointer speed (CSS px per
 // frame) for a full-strength stroke.
@@ -531,20 +528,24 @@ function Main(
     // Gone, not nearly: a last trace of the dissolve read as a ghost of
     // the avatar over the polaroid while the next dream loaded.
     if (swapPhase === 'loading') fadeRef.current = 0
-    // And as the pointer comes over the polaroid (its photo's bounds on
-    // screen, from last frame — see below).
+    // And as the pointer leaves the polaroid (its photo's bounds on screen,
+    // from last frame — see below).
     let pointerFade = 1
     if (!isMobile && !isTouch && polaroidRect.visible) {
       const px = ((state.pointer.x + 1) / 2) * state.size.width
       const py = ((1 - state.pointer.y) / 2) * state.size.height
       const width = polaroidRect.right - polaroidRect.left
-      const height = polaroidRect.bottom - polaroidRect.top
-      const frame = width * AVATAR_FRAME
-      const reach = Math.hypot(
-        (px - (polaroidRect.left + polaroidRect.right) / 2) / (width / 2 + frame),
-        (py - (polaroidRect.top + polaroidRect.bottom) / 2) / (height / 2 + frame)
+      const outside = Math.hypot(
+        Math.max(polaroidRect.left - px, 0, px - polaroidRect.right),
+        Math.max(polaroidRect.top - py, 0, py - polaroidRect.bottom)
       )
-      pointerFade = MathUtils.smoothstep(reach, AVATAR_HIDDEN, AVATAR_WHOLE)
+      pointerFade =
+        1 -
+        MathUtils.smoothstep(
+          outside,
+          width * AVATAR_FRAME,
+          width * (AVATAR_FRAME + AVATAR_GONE)
+        )
     }
 
     avatarPointerFade.current = MathUtils.lerp(

@@ -456,11 +456,14 @@ export const VideoMaterial = shaderMaterial(
           vec2 drift = st * 2.6 + vec2(uTime * 0.05, -uTime * 0.035) - slope * 1.5;
           float warp = emulsionNoise(drift * 1.7 + uTime * 0.08);
           float blotch = emulsionNoise(drift + warp * 1.6);
-          float ghost = dot(panel(3.0, vec2(localX, st.y - offsetY) - slope * 0.25).rgb, vec3(0.299, 0.587, 0.114));
+          // The scene's background, seen through the water: refracted by
+          // its slope, so the wake and rings bend it.
+          float ghost = dot(panel(3.0, vec2(localX, st.y - offsetY) - slope * 1.2).rgb, vec3(0.299, 0.587, 0.114));
           float surfacing = 0.5 + 0.5 * sin(uTime * 0.9 + blotch * 3.0);
           vec3 tint = mix(vec3(1.0, 0.97, 0.92), vec3(0.92, 0.96, 1.0), blotch);
           vec3 emulsion = milky * tint + (blotch - 0.5) * mix(0.09, 0.05, uDark);
-          emulsion = mix(emulsion, vec3(ghost) * 0.5 + milky * 0.5, 0.18 * surfacing * blotch);
+          // Clearly there, breathing a little with the emulsion.
+          emulsion = mix(emulsion, vec3(ghost) * 0.75 + milky * 0.25, 0.4 + 0.15 * surfacing * blotch);
           emulsion += lit * mix(0.16, 0.11, uDark) + glint * mix(0.18, 0.12, uDark);
           milky = mix(milky, emulsion, blank);
         }
