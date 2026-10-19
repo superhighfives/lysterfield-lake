@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { ComposeResult } from './compose.ts'
 
@@ -44,6 +44,37 @@ export async function writeClientAssets(
   for (const still of result.stillPaths) await copyFile(still, path.join(assetsDir, path.basename(still)))
 
   await upsertDreamsJson(clientDir, id)
+}
+
+/**
+ * Copies compose-split's output into `apps/client/dreams/` (gitignored,
+ * synced to R2 like the 7-panel files): the shared main video to
+ * `dreams/main/`, and each take's silent dream clip to `dreams/<id>/`
+ * (the take's folder name is the client's dream id). A file already there
+ * at the same size is left alone — they're hundreds of MB.
+ */
+export async function writeSplitClientAssets(
+  clientDir: string,
+  result: { mainDir: string; dreamDirs: string[] }
+): Promise<void> {
+  const copyAll = async (fromDir: string, toDir: string, names: string[]) => {
+    await mkdir(toDir, { recursive: true })
+    for (const name of names) {
+      const from = path.join(fromDir, name)
+      const to = path.join(toDir, name)
+      const existing = await stat(to).catch(() => null)
+      if (existing && existing.size === (await stat(from)).size) continue
+      await copyFile(from, to)
+    }
+  }
+
+  const variants = (base: string) =>
+    ['.mov', '.webm', '-small.mov', '-small.webm'].map((suffix) => `${base}${suffix}`)
+  await copyAll(result.mainDir, path.join(clientDir, 'dreams', 'main'), variants('main'))
+  for (const dreamDir of result.dreamDirs) {
+    const id = path.basename(path.dirname(dreamDir))
+    await copyAll(dreamDir, path.join(clientDir, 'dreams', id), variants('dream'))
+  }
 }
 
 async function upsertDreamsJson(clientDir: string, id: string): Promise<void> {

@@ -5,6 +5,18 @@ import { ShaderMaterial, Texture, Vector2, Vector3 } from 'three'
 const uniforms = {
   uOpacity: 0,
   uTexture: new Texture(),
+  // The split layout (plans/ready/split-dream-video-client.md): uTexture
+  // is the shared main video, panels 1-6 (uFrameTotal 6), and panel 7, the
+  // dream, comes from its own videos — uDream and uDreamNext, crossfaded
+  // by uDreamMix (0 = uDream). uSplit 0 is the 7-panel layout, panel 7
+  // read from uTexture like the rest.
+  // Null, not an empty Texture, when unset (the avatar never reads panel
+  // 7): drei clones default uniforms, and a cloned empty Texture is flagged
+  // for upload with no image, which three.js warns about every frame.
+  uDream: null as Texture | null,
+  uDreamNext: null as Texture | null,
+  uDreamMix: 0,
+  uSplit: 0,
   uFrameSelected: 0,
   uFrameMask: 0,
   uFrameTotal: 0,
@@ -88,8 +100,10 @@ export const VideoMaterial = shaderMaterial(
     // Half the polaroid model's width and height, to normalise the bend.
     const vec2 BEND_EXTENT = vec2(1.83, 2.3);
 
-    // Samples one panel of the 7-panel atlas, clamped (like the fragment
-    // shader's localX) so a lookup never bleeds into the neighbouring panel.
+    // Samples one panel of the atlas (uFrameTotal panels: 7, or the split
+    // layout's main video, 6 — only the matte and depth are read here, both
+    // in the main video), clamped (like the fragment shader's localX) so a
+    // lookup never bleeds into the neighbouring panel.
     float samplePanel(float panel, vec2 uv) {
       float x = clamp(uv.x, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
       return texture2D(uTexture, vec2((x + (panel - 1.0)) / uFrameTotal, clamp(uv.y, 0.0, 1.0))).r;
@@ -153,6 +167,10 @@ export const VideoMaterial = shaderMaterial(
     varying vec2 vUv;
     varying vec2 texCoord;
     uniform sampler2D uTexture;
+    uniform sampler2D uDream;
+    uniform sampler2D uDreamNext;
+    uniform float uDreamMix;
+    uniform float uSplit;
     uniform float uOpacity;
     uniform float uFrameSelected;
     uniform float uFrameTotal;
@@ -239,6 +257,17 @@ export const VideoMaterial = shaderMaterial(
     }
 
     // The ordered-dither threshold (0-1) for this pixel's cell.
+    // One panel's colour at a panel-local uv (x already kept a texel inside
+    // the panel, see localX). Every fragment lookup goes through this, so
+    // the dream panel can come from its own videos in the split layout.
+    vec4 panel(float p, vec2 uv) {
+      if (uSplit > 0.5 && p == 7.0) {
+        vec2 d = clamp(uv, 0.0, 1.0);
+        return mix(texture2D(uDream, d), texture2D(uDreamNext, d), uDreamMix);
+      }
+      return texture2D(uTexture, vec2((uv.x + (p - 1.0)) / uFrameTotal, uv.y));
+    }
+
     float ditherLimit() {
       vec2 cell = gl_FragCoord.xy / DISSOLVE_CELL;
       int index = int(mod(cell.x, 8.0)) + int(mod(cell.y, 8.0)) * 8;
@@ -289,7 +318,7 @@ export const VideoMaterial = shaderMaterial(
       // conservative two.
       float localX = clamp(st.x - offsetX, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
 
-      vec4 image = texture2D(uTexture, vec2((localX + (uFrameSelected - 1.0)) / uFrameTotal, uInvert == 1.0 ? 1.0 - st.y : st.y - offsetY));
+      vec4 image = panel(uFrameSelected, vec2(localX, uInvert == 1.0 ? 1.0 - st.y : st.y - offsetY));
 
       // Unsharp mask: push each pixel away from the average of its four
       // neighbours (SHARPEN_TEXELS atlas texels away). The portrait panel
@@ -314,15 +343,15 @@ export const VideoMaterial = shaderMaterial(
         for (int i = 0; i < SMEAR_TAPS; i++) {
           float t = float(i) / float(SMEAR_TAPS - 1);
           vec2 tap = local - uVelocity * t;
-          float r = texture2D(uTexture, vec2((clamp(tap.x + uVelocity.x * SPLIT_AMOUNT, 1.0 / 512.0, 1.0 - 1.0 / 512.0) + (uFrameSelected - 1.0)) / uFrameTotal, clamp(tap.y + uVelocity.y * SPLIT_AMOUNT, 0.0, 1.0))).r;
-          float g = texture2D(uTexture, vec2((clamp(tap.x, 1.0 / 512.0, 1.0 - 1.0 / 512.0) + (uFrameSelected - 1.0)) / uFrameTotal, clamp(tap.y, 0.0, 1.0))).g;
-          float b = texture2D(uTexture, vec2((clamp(tap.x - uVelocity.x * SPLIT_AMOUNT, 1.0 / 512.0, 1.0 - 1.0 / 512.0) + (uFrameSelected - 1.0)) / uFrameTotal, clamp(tap.y - uVelocity.y * SPLIT_AMOUNT, 0.0, 1.0))).b;
+          float r = panel(uFrameSelected, vec2(clamp(tap.x + uVelocity.x * SPLIT_AMOUNT, 1.0 / 512.0, 1.0 - 1.0 / 512.0), clamp(tap.y + uVelocity.y * SPLIT_AMOUNT, 0.0, 1.0))).r;
+          float g = panel(uFrameSelected, vec2(clamp(tap.x, 1.0 / 512.0, 1.0 - 1.0 / 512.0), clamp(tap.y, 0.0, 1.0))).g;
+          float b = panel(uFrameSelected, vec2(clamp(tap.x - uVelocity.x * SPLIT_AMOUNT, 1.0 / 512.0, 1.0 - 1.0 / 512.0), clamp(tap.y - uVelocity.y * SPLIT_AMOUNT, 0.0, 1.0))).b;
           smear += vec3(r, g, b);
         }
         image.rgb = smear / float(SMEAR_TAPS);
       }
 
-      vec4 mask = texture2D(uTexture, vec2((localX + (uFrameMask - 1.0)) / uFrameTotal, st.y - offsetY));
+      vec4 mask = panel(uFrameMask, vec2(localX, st.y - offsetY));
 
       float mixValue = uMaskIntensity;
       float shortenedFadeAmount = 1.0 - clamp((uTime / 4.0) - 0.75, 0.0, 1.0);
@@ -346,7 +375,7 @@ export const VideoMaterial = shaderMaterial(
       if(uFrameOverlay != 0.0) {
         fadeAmount = extendedFadeAmount;
 
-        vec4 overlay = texture2D(uTexture, vec2((localX + (uFrameOverlay - 1.0)) / uFrameTotal, st.y - offsetY));
+        vec4 overlay = panel(uFrameOverlay, vec2(localX, st.y - offsetY));
 
         float minRadius = 0.15;
         float maxRadius = 0.5;
@@ -367,7 +396,7 @@ export const VideoMaterial = shaderMaterial(
       if(uAvatar == 1.0) {
         fadeAmount = extendedFadeAmount;
 
-        vec4 sketch = texture2D(uTexture, vec2((localX + (uFrameSketch - 1.0)) / uFrameTotal, st.y - offsetY));
+        vec4 sketch = panel(uFrameSketch, vec2(localX, st.y - offsetY));
 
         vec4 luma = vec4(0.299, 0.587, 0.114, 0.0);
         float grayscale = dot(sketch, luma);

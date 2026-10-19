@@ -1,6 +1,7 @@
 import { MutableRefObject, useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Color, Texture } from 'three'
+import { Color, Texture, VideoTexture } from 'three'
+import { dreamVideo } from '../utils/dream-video'
 import { useStore } from '../store'
 import {
   SCREEN_OPACITY,
@@ -39,11 +40,16 @@ const scratchColor = new Color()
 function DreamGlow({
   video,
   texture,
+  dreamTextures,
   fade,
 }: {
   video: HTMLVideoElement
   /** The composite video's texture, for the spill. */
   texture: Texture
+  /** Split (utils/dream-video.ts): the two dream videos' textures, of
+   *  which the screen shows whichever is in front — whole frames, not a
+   *  panel of `texture`. */
+  dreamTextures: VideoTexture[] | null
   /** 0-1: how present the avatar and lyrics are (main.tsx's fadeRef), so
    *  the spill fades as the polaroid's dragged, and is gone through a
    *  swap, with them. Followed directly, not through the slow presence
@@ -51,6 +57,7 @@ function DreamGlow({
   fade: MutableRefObject<number>
 }) {
   const scheme = useStore((state) => state.colorScheme)
+  const split = !!dreamTextures
   const dream = useStore((state) => state.dream)
 
   const sampler = useMemo(() => {
@@ -71,8 +78,11 @@ function DreamGlow({
   // The composite video's dream panel, as the screen behind everything
   // (materials/dream-screen.ts).
   const screen = useMemo(
-    () => createDreamScreen(texture, { panels: PANELS, panel: DREAM_PANEL }),
-    [texture]
+    () =>
+      split
+        ? createDreamScreen(null)
+        : createDreamScreen(texture, { panels: PANELS, panel: DREAM_PANEL }),
+    [split, texture]
   )
   const { material } = screen
   useEffect(
@@ -93,6 +103,12 @@ function DreamGlow({
 
   useFrame((state) => {
     material.uniforms.uAspect.value = state.size.width / state.size.height
+    // The video the colour's sampled from, and how its frame's laid out.
+    const front = dreamTextures?.[dreamVideo.front]
+    if (front) material.uniforms.uTexture.value = front
+    const source = (front?.image as HTMLVideoElement | undefined) ?? video
+    const panels = front ? 1 : PANELS
+    const panelIndex = front ? 1 : DREAM_PANEL
     const now = performance.now()
     if ((dream?.id ?? null) !== sampledFor.current) {
       sampledFor.current = dream?.id ?? null
@@ -105,18 +121,18 @@ function DreamGlow({
       dream &&
       now - dreamSince.current > SETTLE_MS &&
       now - lastSample.current > SAMPLE_MS &&
-      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-      video.videoWidth
+      source.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+      source.videoWidth
     ) {
       lastSample.current = now
-      const panel = video.videoWidth / PANELS
+      const panel = source.videoWidth / panels
       try {
         sampler.drawImage(
-          video,
-          panel * (DREAM_PANEL - 1),
+          source,
+          panel * (panelIndex - 1),
           0,
           panel,
-          video.videoHeight,
+          source.videoHeight,
           0,
           0,
           8,

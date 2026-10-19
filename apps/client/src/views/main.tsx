@@ -1,5 +1,5 @@
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
-import { RefObject, useRef } from 'react'
+import { RefObject, useMemo, useRef } from 'react'
 import { VideoMaterial, VideoMaterialProps } from '../materials/video-material'
 import Polaroid, { polaroidBend } from '../models/polaroid'
 import { isVideoPlaying } from '../utils'
@@ -20,6 +20,12 @@ import { commitSwap, fadeOutAudio } from '../utils/swap-dream'
 import { SWAP_ANIMATIONS } from '../utils/swap-poses'
 import { readPulse } from '../utils/audio'
 import DreamGlow from '../components/dream-glow'
+import {
+  dreamElements,
+  dreamVideo,
+  isSplit,
+  stepCrossfade,
+} from '../utils/dream-video'
 import {
   commitDistance,
   polaroidRect,
@@ -158,6 +164,22 @@ function Main(
 
   // Update colorspace
   texture.colorSpace = LinearSRGBColorSpace
+
+  // The split layout (utils/dream-video.ts): `texture` is the shared main
+  // video, panels 1-6, and the dream (panel 7) comes from its own two
+  // videos, crossfaded as dreams switch. Otherwise `texture` is the dream's
+  // own 7-panel video, as before.
+  const split = isSplit(dream)
+  const frameTotal = split ? 6 : 7
+  const dreamTextures = useMemo(
+    () =>
+      dreamElements().map((el) => {
+        const dreamTexture = new VideoTexture(el)
+        dreamTexture.colorSpace = LinearSRGBColorSpace
+        return dreamTexture
+      }),
+    []
+  )
 
   const idle = useIdle(5000)
 
@@ -309,10 +331,16 @@ function Main(
     const { swapPhase, swapDirection, swapStyle, setSwapPhase } =
       useStore.getState()
     const animation = SWAP_ANIMATIONS[swapStyle]
+    // Split, a swap only changes the dream video: the song plays on, and
+    // the new dream crossfades in rather than developing from blank.
+    const splitNow = isSplit(useStore.getState().dream)
+    stepCrossfade(delta)
+    for (const material of [polaroidMaterial.current, lyricsMaterial.current])
+      if (material) material.uDreamMix = dreamVideo.mix
     if (swapPhase !== swapPhaseRef.current) {
-      if (swapPhase === 'out') fadeOutAudio(video)
+      if (swapPhase === 'out' && !splitNow) fadeOutAudio(video)
       if (swapPhase === 'in') {
-        developRef.current = 0
+        if (!splitNow) developRef.current = 0
         revealRef.current = 0
         rippleRef.current = -1
       }
@@ -429,11 +457,12 @@ function Main(
     else if (rippleRef.current >= 0) rippleRef.current += delta
     if (polaroidMaterial.current) {
       // Staying put, the photo fades to a blank print on the way out, and
-      // stays blank until the next develops.
+      // stays blank until the next develops — unless it's split, when the
+      // next dream crossfades straight in instead.
       polaroidMaterial.current.uDevelop =
         swapPhase === 'in' || swapPhase === 'idle'
           ? developRef.current
-          : animation.inPlace
+          : animation.inPlace && !splitNow
             ? swapPhase === 'out'
               ? 1 - swapProgressRef.current
               : 0
@@ -530,7 +559,12 @@ function Main(
             animation moves this outer group; the pointer tilt (above)
             turns the polaroid inside it. */}
         {/* The dream, filling the screen behind everything */}
-        <DreamGlow video={videoElement} texture={texture} fade={fadeRef} />
+        <DreamGlow
+          video={videoElement}
+          texture={texture}
+          dreamTextures={split ? dreamTextures : null}
+          fade={fadeRef}
+        />
 
         <group ref={swapGroup} position={[0, 0, POLAROID_Z]}>
           <Polaroid
@@ -542,8 +576,11 @@ function Main(
                 ref={polaroidMaterial}
                 key={VideoMaterial.key}
                 uTexture={texture}
+                uDream={dreamTextures[0]}
+                uDreamNext={dreamTextures[1]}
+                uSplit={split ? 1 : 0}
                 uFrameSelected={7}
-                uFrameTotal={7}
+                uFrameTotal={frameTotal}
                 uFrameMask={3}
                 uOpacity={1}
                 uFrameOverlay={3}
@@ -570,7 +607,7 @@ function Main(
               uFrameSketch={6}
               uFrameMask={4}
               uFrameDepth={5}
-              uFrameTotal={7}
+              uFrameTotal={frameTotal}
               uAvatar={1}
               uOpacity={1}
               uMaskIntensity={1}
@@ -591,10 +628,13 @@ function Main(
             ref={lyricsMaterial}
             key={VideoMaterial.key}
             uTexture={texture}
+            uDream={dreamTextures[0]}
+            uDreamNext={dreamTextures[1]}
+            uSplit={split ? 1 : 0}
             uFrameSelected={7}
             uFrameMask={1}
             uMaskIntensity={1}
-            uFrameTotal={7}
+            uFrameTotal={frameTotal}
             uInvert={1}
             uOpacity={1}
             uBackgroundMix={0.5}

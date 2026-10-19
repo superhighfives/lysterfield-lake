@@ -29,6 +29,20 @@ import {
 } from 'media-chrome/react'
 import Footer from '../views/footer'
 import { connectAudio } from '../utils/audio'
+import {
+  followMain,
+  isSplit,
+  mainVideoBase,
+  startDream,
+  stopDreams,
+  switchDream,
+} from '../utils/dream-video'
+
+// If the dream video still isn't ready this long after asking — the first
+// one, or a switch — carry on anyway: play the main video (the polaroid
+// shows its last frame, or nothing, until the dream catches up), or bring
+// a swapped polaroid back.
+const DREAM_READY_TIMEOUT_MS = 8000
 
 const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
   (_props, ref) => {
@@ -54,6 +68,13 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     const setVideoState = useStore((state) => state.setVideoState)
     const setResume = useStore((state) => state.setResume)
 
+    // The main video's source. Split (utils/dream-video.ts), it's the same
+    // shared video for every dream, so it's loaded once on the way into the
+    // player and a dream change mid-song doesn't touch it (see the switch
+    // effect below); otherwise it's each dream's own 7-panel video.
+    const mainBase = mainVideoBase(dream, isMobile || isTouch)
+    const loadedDream = useRef<string | null>(null)
+
     // load() and play() live in this one effect, in that order. They used to
     // be two separate `[dream]` effects in two components (this one and
     // views/main.tsx) with nothing ordering them — when load() landed after
@@ -62,7 +83,12 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     useEffect(() => {
       const el = (ref as MutableRefObject<HTMLVideoElement>).current
       el.load()
-      if (!dream) return
+      loadedDream.current = dream?.id ?? null
+      if (!dream) {
+        stopDreams()
+        return
+      }
+
       connectAudio(el)
 
       let cancelled = false
@@ -72,6 +98,14 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       // actually happens, so StrictMode's double-run doesn't drop it.
       const resume = useStore.getState().resume
       const resumeTime = resume?.dreamId === dream.id ? resume.time : null
+      // Split, the dream video loads alongside, from the same time, and the
+      // main video waits for it — so the polaroid doesn't come in blank.
+      const dreamReady = isSplit(dream)
+        ? Promise.race([
+            startDream(dream, resumeTime ?? 0),
+            new Promise((resolve) => setTimeout(resolve, DREAM_READY_TIMEOUT_MS)),
+          ])
+        : Promise.resolve()
       const seek = () => {
         if (resumeTime !== null && resumeTime < el.duration) {
           el.currentTime = resumeTime
@@ -100,13 +134,56 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
             console.warn(`Playback didn't start: ${error.name}`)
           }
         })
-      play(true)
+      dreamReady.then(() => {
+        if (!cancelled) play(true)
+      })
 
       return () => {
         cancelled = true
         el.removeEventListener('loadedmetadata', seek)
       }
-    }, [dream])
+      // Reloads only for a new main source; a dream change on the same one
+      // is the switch below.
+    }, [mainBase])
+
+    // A dream change on the same main video (split): a swap, or back/forward
+    // to another dream. Only the dream video changes: the next one loads at
+    // the song's time — or, from history, at its saved time, which the main
+    // video seeks to — and the polaroid crossfades to it. A swap waiting on
+    // it moves on once it's there.
+    useEffect(() => {
+      const el = (ref as MutableRefObject<HTMLVideoElement>).current
+      if (!dream || !isSplit(dream) || loadedDream.current === dream.id) return
+      // The main video's own load (above) handles a fresh one.
+      if (loadedDream.current === null) return
+      loadedDream.current = dream.id
+
+      const { resume, setResume } = useStore.getState()
+      let time = el.currentTime
+      if (resume?.dreamId === dream.id) {
+        time = resume.time
+        if (time < el.duration) el.currentTime = time
+        setResume(null)
+      }
+
+      let done = false
+      const finish = () => {
+        if (done) return
+        done = true
+        const { swapPhase, setSwapPhase } = useStore.getState()
+        if (swapPhase === 'loading') setSwapPhase('in')
+      }
+
+      switchDream(dream, time).then(finish)
+      const timeout = setTimeout(finish, DREAM_READY_TIMEOUT_MS)
+      return () => clearTimeout(timeout)
+    }, [dream, ref])
+
+    // The dream videos follow the main video's clock.
+    useEffect(() => {
+      const el = (ref as MutableRefObject<HTMLVideoElement>).current
+      return followMain(el)
+    }, [ref])
 
     // Syncs native <video> playback state into the store directly, rather
     // than through whichever library renders the visible controls — this
@@ -321,26 +398,14 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
               crossOrigin="anonymous"
             >
               <source
-                src={
-                  dream
-                    ? `${dream!.src ?? `${import.meta.env.VITE_APP_DREAMS}/${dream!.id}`}/video${
-                        isMobile || isTouch ? '-small' : ''
-                      }.webm`
-                    : `video/title.webm`
-                }
+                src={`${mainBase}.webm`}
                 type="video/webm"
-                key={dream ? `${dream!.id}-webm` : 'video-webm'}
+                key={`${mainBase}-webm`}
               />
               <source
-                src={
-                  dream
-                    ? `${dream!.src ?? `${import.meta.env.VITE_APP_DREAMS}/${dream!.id}`}/video${
-                        isMobile || isTouch ? '-small' : ''
-                      }.mov`
-                    : `video/title.mov`
-                }
+                src={`${mainBase}.mov`}
                 type="video/mp4"
-                key={dream ? `${dream!.id}-mov` : 'video-mov'}
+                key={`${mainBase}-mov`}
               />
             </video>
             {/* `noautohide` on this, the one slotted control element: even
