@@ -147,8 +147,12 @@ address as `POLAROID_URL` in `apps/pipeline/.env` (never in code). Both containe
 - [x] End-to-end run of a fresh recording through `/admin` on Replicate (`park-party-2`: ~10 minutes, $2.13)
 - [x] Moderation: approve to make, approve to show, reject, reopen, delete (job folder and recording).
       Paid stages refuse anything not approved; delete refuses song jobs
-- [x] Viewer: the photo as a window into a box (stencilled), so the person sits inside the polaroid
-      rather than over it, and the video no longer drops out when the card turns
+- [x] Viewer: the photo as a stencilled window into a rounded-rectangle tub, so the person sits inside the
+      polaroid rather than over it. The background lines the tub (its middle face-on, its outer band eased
+      round toward the rim), the person wraps round the tub's walls, and the card follows the pointer. Also
+      fixes the video dropping out as the card turned
+- [x] Loop: cut where the clip's two ends look most alike, crossfading 6 frames (`polaroid/loop.json`); the
+      downloadable loop has the outline baked in
 - [x] CLAUDE.md: polaroid jobs, their atlas layout, Replicate only, the R2 bucket, building on the PC
 - [x] Switch `models.ts`'s portrait to the optimised DiffusionCLIP version `fd60b4d9…`
 - [ ] Later: the polaroid container as a standing service on the PC (`POLAROID_URL`), for free runs
