@@ -66,8 +66,6 @@ function listJobs(kind?: 'polaroid') {
 
 const countFrames = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((f) => /\.(png|jpg)$/.test(f)).length : 0)
 
-/** Bria's price: $0.05 per output second. */
-const BRIA_PER_SECOND = 0.05
 
 /**
  * A polaroid job's stages (plans/in-progress/polaroid-admin-flow.md), each read from the files on disk: panels 2, 4, 5
@@ -88,8 +86,8 @@ function polaroidDetail(job: string, withCost: boolean) {
   let cost: { panels: string; background: string } | undefined
   if (withCost) {
     const plan = execFileSync('bun', ['run', 'src/cli.ts', 'polaroid-run', '--job', `.jobs/${job}`, '--plan', 'true'], { cwd: PIPELINE_DIR, env: pipelineEnv(), encoding: 'utf8' })
-    const estimate = plan.match(/"estimatedCost": "(\$[\d.]+)"/)?.[1] ?? '?'
-    cost = { panels: stages.panels.done ? '$0.00' : estimate, background: stages.background.done ? '$0.00' : `$${((frames / config.fps) * BRIA_PER_SECOND).toFixed(2)}` }
+    const estimate = (key: string) => plan.match(new RegExp(`"${key}": "(\\$[\\d.]+)"`))?.[1] ?? '?'
+    cost = { panels: stages.panels.done ? '$0.00' : estimate('estimatedCost'), background: stages.background.done ? '$0.00' : estimate('backgroundCost') }
   }
   return { name: job, frames, fps: config.fps, stages, cost }
 }

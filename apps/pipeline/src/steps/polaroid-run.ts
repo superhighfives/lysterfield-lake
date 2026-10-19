@@ -3,6 +3,7 @@ import path from 'node:path'
 import { exists, listFrames, videoPath, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
 import { readFileAsInput, runModelToFileResumable } from '../replicate.ts'
+import { planChunks } from './background-video.ts'
 import { polaroidPanels } from './polaroid-panels.ts'
 
 /**
@@ -13,6 +14,8 @@ import { polaroidPanels } from './polaroid-panels.ts'
 const L40S_PER_SECOND = 0.000975
 const SECONDS_PER_FRAME = 10.4
 const BOOT_SECONDS = 170
+/** Bria's price, per second of output (background-video.ts). */
+const BRIA_PER_SECOND = 0.05
 
 /** The panels' raw folders a range fills; a range is done when all its frames are in each. */
 const RAW = ['2-portrait/upscaled', '5-depth/raw', '6-outline/raw']
@@ -31,6 +34,8 @@ export interface PolaroidRunResult {
   ranges: { start: number; frames: number; done: boolean }[]
   toRun: number
   estimatedCost: string
+  /** What panel 3 (Bria, `background-video`) will cost, from the same chunk plan it makes. */
+  backgroundCost: string
   failed: { start: number; error: string }[]
 }
 
@@ -64,7 +69,14 @@ export async function polaroidRun(job: Job, opts: PolaroidRunOptions): Promise<P
 
   const todo = ranges.filter((r) => !r.done)
   const cost = todo.reduce((sum, r) => sum + (r.frames * SECONDS_PER_FRAME + BOOT_SECONDS) * L40S_PER_SECOND, 0)
-  const result: PolaroidRunResult = { ranges, toRun: todo.length, estimatedCost: `$${cost.toFixed(2)}`, failed: [] }
+  const briaSeconds = planChunks(frames.length, job.fps, job.cuts ?? []).reduce((sum, c) => sum + (c.end - c.start + 1) / job.fps, 0)
+  const result: PolaroidRunResult = {
+    ranges,
+    toRun: todo.length,
+    estimatedCost: `$${cost.toFixed(2)}`,
+    backgroundCost: `$${(briaSeconds * BRIA_PER_SECOND).toFixed(2)}`,
+    failed: [],
+  }
   console.log(`polaroid-run: ${todo.length} of ${ranges.length} ranges to run, about ${result.estimatedCost}`)
   if (opts.planOnly || todo.length === 0) return result
 

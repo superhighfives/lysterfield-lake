@@ -102,7 +102,10 @@ export async function init(jobDir: string, opts: InitOptions): Promise<InitResul
 
   const sourceFramesDir = await framesDir(job, '0-source/frames')
   if (!(await hasFiles(sourceFramesDir))) {
-    await extractFrames(sourceVideoPath, sourceFramesDir, fps, 'jpg')
+    // A polaroid is exactly its length: ffmpeg's rate conversion makes 122 frames of a 5s clip at 24fps,
+    // and 5.08s is just over Bria's 5s limit, so its background would cost two chunks instead of one.
+    const maxFrames = opts.kind === 'polaroid' && opts.length ? Math.round(opts.length * fps) : undefined
+    await extractFrames(sourceVideoPath, sourceFramesDir, fps, 'jpg', maxFrames)
   }
 
   return { job, sourceVideoPath, sourceFramesDir }
