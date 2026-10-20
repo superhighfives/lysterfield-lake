@@ -15,6 +15,7 @@
     "deploy": "bun run generate && bun run build-staging && rclone sync dist r2:lysterfield-lake --progress --transfers 24 --exclude-from ~/.gitignore_global",
     "deploy-dreams": "rclone sync dreams r2:lysterfield-lake-dreams --progress --transfers 24 --exclude-from ~/.gitignore_global",
     "deploy-prod": "bun run generate && bun run build && wrangler pages deploy dist --project-name lysterfield-lake",
+    "deploy-next": "bun run generate && vite build --mode next && wrangler pages deploy dist --project-name lysterfield-lake-next --branch main",
     "postinstall": "bun run generate"
   },
   "dependencies": {

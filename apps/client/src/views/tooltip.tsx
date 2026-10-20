@@ -1,21 +1,11 @@
-function Tooltip({
-  text,
-  placement = 'above',
-}: {
-  text: string
-  placement?: 'above' | 'below'
-}) {
-  const position =
-    placement === 'above'
-      ? '-translate-y-[calc(50%_+_22px)] top-0 left-0'
-      : 'top-full mt-1 left-1/2 -translate-x-1/2'
-
+// A control's one-word label. Not drawn here: the custom cursor
+// (components/cursor.tsx) shows it under its ring while the control's
+// hovered. It's still the control's text for screen readers.
+function Tooltip({ text }: { text: string }) {
   return (
-    <div
-      className={`group-hover:opacity-100 whitespace-nowrap text-yellow-800 font-sans transition opacity-0 bg-yellow-400 text-sm px-2 py-1 rounded absolute pointer-events-none ${position}`}
-    >
+    <span className="sr-only" data-cursor-label>
       {text}
-    </div>
+    </span>
   )
 }
 

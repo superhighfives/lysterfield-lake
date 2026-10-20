@@ -117,10 +117,18 @@ const fragmentShader = (panels: number, panel: number) => /* glsl */ `
 /** A screen for this texture — or, of a side-by-side atlas of `panels`,
  *  its `panel`th (1-based). Drawn before everything else, in screen
  *  space: never culled, never in the pointer's way. Later screens (higher
- *  `order`) draw over earlier ones. */
+ *  `order`) draw over earlier ones. Set up for `scheme` from the start
+ *  (setScreenScheme changes it later): until it is, it's drawn with no
+ *  blending at all, and its first frame wrote colour with no alpha, which
+ *  the premultiplied canvas showed as a flash of white. */
 export function createDreamScreen(
   texture: Texture | null,
-  { panels = 1, panel = 1, order = 0 } = {}
+  {
+    panels = 1,
+    panel = 1,
+    order = 0,
+    scheme = 'dark' as 'light' | 'dark',
+  } = {}
 ) {
   const material = new ShaderMaterial({
     vertexShader,
@@ -145,6 +153,8 @@ export function createDreamScreen(
   mesh.renderOrder = -1000 + order
   mesh.frustumCulled = false
   mesh.raycast = () => {}
+
+  setScreenScheme(material, scheme)
 
   return { mesh, material }
 }

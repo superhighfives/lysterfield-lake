@@ -33,18 +33,22 @@ import {
   followMain,
   isSplit,
   mainVideoBase,
+  shownDream,
   startDream,
   stopDreams,
   switchDream,
   warmDream,
 } from '../utils/dream-video'
 import { adjacentDream } from '../utils/swap-dream'
+import { HistoryState, urlFor } from '../utils/use-history-sync'
 
 // If the dream video still isn't ready this long after asking — the first
 // one, or a switch — carry on anyway: play the main video (the polaroid
 // shows its last frame, or nothing, until the dream catches up), or bring
 // a swapped polaroid back.
 const DREAM_READY_TIMEOUT_MS = 8000
+// How long a new dream's name and prompt show without hovering.
+const ANNOUNCE_MS = 3000
 
 const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
   (_props, ref) => {
@@ -57,6 +61,20 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     const isMobile = useStore((state) => state.isMobile)
     const isTouch = useStore((state) => state.isTouch)
     const [recalibrateMobile, setRecalibrateMobile] = useState(false)
+    // The dream's name and prompt show while the pointer's over the
+    // controls (always on touch, which has no hover), and for a moment
+    // (ANNOUNCE_MS) whenever the dream changes.
+    const [pillHovered, setPillHovered] = useState(false)
+    const [announcing, setAnnouncing] = useState(false)
+    // Counted from when the swap's done, since it's hidden until then.
+    useEffect(() => {
+      if (!dream || swapping) return
+      setAnnouncing(true)
+      const timeout = setTimeout(() => setAnnouncing(false), ANNOUNCE_MS)
+      return () => clearTimeout(timeout)
+    }, [dream, swapping])
+    // For the mute button's label.
+    const [muted, setMuted] = useState(false)
 
     const setResetInitialRotation = useStore(
       (state) => state.setResetInitialRotation
@@ -102,12 +120,17 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       const resumeTime = resume?.dreamId === dream.id ? resume.time : null
       // Split, the dream video loads alongside, from the same time, and the
       // main video waits for it — so the polaroid doesn't come in blank.
+      // If its video won't load, there's no dream to fall back to: back
+      // to the choose screen, as the home button does.
+      let failed = false
       const dreamReady = isSplit(dream)
         ? Promise.race([
             // Then the next one warms behind it (the card peeking out).
-            startDream(dream, resumeTime ?? 0).then(() =>
-              warmDream(adjacentDream(1))
-            ),
+            startDream(dream, resumeTime ?? 0).then((ok) => {
+              if (ok) return warmDream(adjacentDream(1))
+              failed = true
+              if (!cancelled) useStore.getState().setResetting(true)
+            }),
             new Promise((resolve) => setTimeout(resolve, DREAM_READY_TIMEOUT_MS)),
           ])
         : Promise.resolve()
@@ -140,7 +163,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
           }
         })
       dreamReady.then(() => {
-        if (!cancelled) play(true)
+        if (!cancelled && !failed) play(true)
       })
 
       return () => {
@@ -162,6 +185,9 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       // The main video's own load (above) handles a fresh one.
       if (loadedDream.current === null) return
       loadedDream.current = dream.id
+      // What to fall back on if this one won't load: the dream actually on
+      // the polaroid (not one swapped past while it loaded), if any.
+      const shown = shownDream()
 
       const { resume, setResume } = useStore.getState()
       let time = el.currentTime
@@ -179,7 +205,31 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
         if (swapPhase === 'loading') setSwapPhase('in')
       }
 
-      switchDream(dream, time).then(() => {
+      switchDream(dream, time).then((result) => {
+        if (result === 'superseded') return
+        // Its video wouldn't load: the polaroid never left the last dream
+        // (still playing in sync), so the swap lands back on it.
+        if (result === 'failed') {
+          const { collection, setDream, setResetting, setSwapPhase } =
+            useStore.getState()
+          const fallback = collection.find((item) => item.id === shown)
+          // Nothing's shown yet (the first dream was swapped past): there's
+          // nothing to go back to, so back to the choose screen.
+          if (!fallback) {
+            setSwapPhase('idle')
+            return setResetting(true)
+          }
+
+          loadedDream.current = fallback.id
+          history.replaceState(
+            { dream: fallback.id, t: el.currentTime } satisfies HistoryState,
+            '',
+            urlFor(fallback.id)
+          )
+          setDream(fallback)
+          return finish()
+        }
+
         finish()
         // The next one along, the way this swap went, warms behind.
         warmDream(adjacentDream(useStore.getState().swapDirection))
@@ -187,6 +237,14 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       const timeout = setTimeout(finish, DREAM_READY_TIMEOUT_MS)
       return () => clearTimeout(timeout)
     }, [dream, ref])
+
+    useEffect(() => {
+      const el = (ref as MutableRefObject<HTMLVideoElement>).current
+      const handleVolume = () => setMuted(el.muted)
+      handleVolume()
+      el.addEventListener('volumechange', handleVolume)
+      return () => el.removeEventListener('volumechange', handleVolume)
+    }, [ref])
 
     // The dream videos follow the main video's clock.
     useEffect(() => {
@@ -300,13 +358,18 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
             <span className="font-serif text-lg">Reorient mobile</span>
           </button>
         </div>
-        {/* The dream's name and prompt, just above the controls. Fades out
-            as a swap starts, and in again (keyed on the dream) with the
-            new one. Placed above the pill at either of its heights. */}
+        {/* The dream's name and prompt, just above the controls, while
+            they're hovered. Fades out as a swap starts, and in again
+            (keyed on the dream) with the new one. Placed above the pill at
+            either of its heights. */}
         <div
           aria-live="polite"
           className={`fixed z-10 left-1/2 -translate-x-1/2 bottom-[calc(2.5rem+104px+0.75rem)] xs:bottom-[calc(2.5rem+34px+0.75rem)] flex flex-col items-center text-center pointer-events-none transition-opacity duration-300 ${
-            showPlayhead && polaroidPillVisible && dream && !swapping
+            showPlayhead &&
+            polaroidPillVisible &&
+            dream &&
+            !swapping &&
+            (pillHovered || isTouch || announcing)
               ? 'opacity-100'
               : 'opacity-0'
           }`}
@@ -330,6 +393,8 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
               ? ''
               : 'pointer-events-none opacity-0'
           }`}
+          onPointerEnter={() => setPillHovered(true)}
+          onPointerLeave={() => setPillHovered(false)}
           // media-chrome renders our unslotted controls div (see below)
           // inside an internal `part="vertical-layer"` span that it makes
           // `position: absolute; inset: 0` by default — built for
@@ -427,9 +492,9 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                 via ref: it's not a React-known DOM attribute. */}
             <div
               ref={(el) => el?.setAttribute('noautohide', '')}
-              className="flex flex-col xs:flex-row w-[calc(100vw-4rem)] max-w-[400px] left-4 right-4 xs:space-x-3 items-center"
+              className="flex flex-col xs:flex-row w-full h-full xs:space-x-3 items-center"
             >
-              <div className="flex self-stretch justify-center border-b xs:border-r xs:border-b-0 border-yellow-500">
+              <div className="flex flex-1 xs:flex-none self-stretch items-center justify-evenly xs:justify-center border-b xs:border-r xs:border-b-0 border-yellow-500">
                 <Footer />
                 <div className="group flex relative">
                   <MediaMuteButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 py-2 xs:px-2 xs:py-1">
@@ -462,10 +527,10 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                       className="!w-5 !h-5 xs:!w-4 xs:!h-4 !max-w-none !min-w-0"
                     />
                   </MediaMuteButton>
-                  <Tooltip text="Toggle mute" />
+                  <Tooltip text={muted ? 'Unmute' : 'Mute'} />
                 </div>
                 <div className="group flex relative">
-                  <MediaPlayButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 pr-4 py-2 xs:px-2 xs:pr-3 xs:py-1">
+                  <MediaPlayButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 py-2 xs:px-2 xs:pr-3 xs:py-1">
                     <Play
                       slot="play"
                       className="!w-5 !h-5 xs:!w-4 xs:!h-4 !max-w-none !min-w-0"
@@ -478,10 +543,10 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                   <Tooltip text={videoPlaying ? 'Pause' : 'Play'} />
                 </div>
               </div>
-              <div className="flex w-full gap-2 items-center pl-3 xs:pl-0 pr-3 py-2 xs:py-1">
-                <MediaTimeDisplay className="font-mono text-xs" />
+              <div className="flex flex-1 w-full xs:w-auto min-w-0 gap-2 items-center pl-3.5 xs:pl-0 pr-2 xs:pr-4 py-0 xs:py-1">
+                <MediaTimeDisplay className="font-mono text-xs [--media-control-padding:4px]" />
                 <MediaTimeRange
-                  className="grow h-4
+                  className="grow min-w-0 h-4
                     [&::part(track)]:bg-slate-300/40 dark:[&::part(track)]:bg-stone-600/40 [&::part(track)]:rounded-full [&::part(track)]:h-2
                     [&::part(buffered)]:bg-slate-300/60 dark:[&::part(buffered)]:bg-stone-500/60 [&::part(buffered)]:rounded-full
                     [&::part(progress)]:bg-yellow-400 [&::part(progress)]:rounded-full

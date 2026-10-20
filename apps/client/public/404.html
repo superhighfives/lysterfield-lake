@@ -3,34 +3,57 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>404 Not Found • Lysterfield Lake</title>
     <meta name="title" content="404 Not Found • Lysterfield Lake" />
     <meta name="description" content="This page doesn't exist." />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="icon" href="/favicon.ico" />
-    <style>
-      body {
-        font-family: sans-serif;
-        padding: 2rem;
-        background-color: rgb(245 245 244);
-        text-align: center;
-      }
-      a {
-        color: darkblue;
-      }
-      img {
-        max-width: 100%;
-        display: block;
-        pointer-events: none;
-        margin: 0 auto;
-      }
-      p {
-        margin-top: 1rem;
-      }
-    </style>
+    <!-- The site's theme before first paint (same 'theme' key as
+         src/utils/theme.ts). -->
+    <script>
+      ;(function () {
+        var preference = null
+        try {
+          preference = localStorage.getItem('theme')
+        } catch (e) {}
+        var dark =
+          preference === 'dark' ||
+          (preference !== 'light' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches)
+        if (dark) document.documentElement.classList.add('dark')
+      })()
+    </script>
+    <link rel="stylesheet" href="/error.css" />
   </head>
   <body>
-    <img src="/images/loading-grey.jpg" width="800" alt="Lysterfield Lake" />
-    <p>404 Not Found • <a href="/">Back</a></p>
+    <!-- Keys the title loop's white out in dark mode, as the welcome screen
+         does (src/components/key-white-filter.tsx). -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <filter id="key-white" color-interpolation-filters="sRGB" x="0" y="0" width="1" height="1">
+        <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  -4 -4 -4 11.52 0" result="alpha" />
+        <feMorphology in="alpha" operator="erode" radius="1" result="choked" />
+        <feComposite in="SourceGraphic" in2="choked" operator="arithmetic" k1="0" k2="1" k3="1" k4="-1" />
+      </filter>
+    </svg>
+    <div class="fireflies" aria-hidden="true"></div>
+    <main class="error">
+      <video class="error__title" autoplay muted loop playsinline aria-label="Lysterfield Lake">
+        <source src="/video/loop.webm" type="video/webm" />
+        <source src="/video/loop.mov" type="video/mp4" />
+      </video>
+      <div class="error__print" aria-hidden="true">
+        <div class="error__photo"><div class="error__grain"></div></div>
+        <div class="error__code">404</div>
+      </div>
+      <div>
+        <h1 class="error__message">Nothing developed here.</h1>
+        <p class="error__detail">This page doesn't exist, or it's drifted off.</p>
+      </div>
+      <div class="error__actions">
+        <a class="error__button" href="/" target="_top">Back to <span>Lysterfield Lake</span></a>
+      </div>
+    </main>
+    <script src="/error.js"></script>
   </body>
 </html>

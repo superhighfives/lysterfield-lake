@@ -67,6 +67,10 @@ const uniforms = {
   // The polaroid developing after it lands (see main.tsx): 0 = a blank,
   // milky print, 1 = fully developed.
   uDevelop: 1,
+  // The lyrics' dream fill, developing alongside the polaroid: 0 = flat
+  // grey letters, no dream in them; then the dream's tones, then its
+  // colour, at 1. Only the lyrics mesh sets this.
+  uFillDevelop: 1,
   // The blank print's water (utils/water-sim.ts): a height field over the
   // photo, red = height, that the print refracts through and catches the
   // light on. Null when there's none.
@@ -206,6 +210,7 @@ export const VideoMaterial = shaderMaterial(
     const int SMEAR_TAPS = 10;
     const float SPLIT_AMOUNT = 0.15;
     uniform float uDevelop;
+    uniform float uFillDevelop;
     uniform float uReveal;
     uniform float uHash;
     uniform sampler2D uWater;
@@ -388,6 +393,12 @@ export const VideoMaterial = shaderMaterial(
       vec3 colorB = mix(vec3(0.95, 0.95, 0.92), vec3(0.11, 0.098, 0.09), uDark);
       vec3 color = mix(colorA, colorB, st.y);
       vec4 white = vec4(vec3(color), 1.0);
+
+      if(uFillDevelop < 1.0) {
+        float fill = dot(image.rgb, vec3(0.299, 0.587, 0.114));
+        vec3 tone = mix(vec3(0.5), vec3(fill), smoothstep(0.0, 0.55, uFillDevelop));
+        image.rgb = mix(tone, image.rgb, smoothstep(0.35, 1.0, uFillDevelop));
+      }
 
       if(uBackgroundMix != 0.0) {
         vec3 background = mix(vec3(0.0), vec3(1.0), uDark);

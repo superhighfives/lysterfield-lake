@@ -1,5 +1,8 @@
 import { create } from 'zustand'
 import { Dream } from './utils/types'
+// Circular (dream-video imports this store), and safe: neither uses the
+// other until called.
+import { isSplit } from './utils/dream-video'
 import { Vector2 } from 'three'
 import {
   ColorScheme,
@@ -36,6 +39,9 @@ export interface AppState {
    *  flips — this is the one safe to subscribe to reactively. */
   polaroidPillVisible: boolean
   ready: boolean
+  /** The 3D scene's assets have loaded and it's mounted (see
+   *  components/loading.tsx, which clears away as it comes in). */
+  sceneLoaded: boolean
   showPlayhead: boolean
   initialRotation: [number, number, number]
   globalPointer: Vector2
@@ -77,11 +83,13 @@ export interface AppState {
   setResetInitialRotation: (resetInitialRotation: boolean) => void
   setGlobalPointer: (globalPointer: Vector2) => void
   setReady: (ready: boolean) => void
+  setSceneLoaded: (sceneLoaded: boolean) => void
   setIsTooSlow: (ready: boolean) => void
   setThemePreference: (themePreference: ThemePreference) => void
   setColorScheme: (colorScheme: ColorScheme) => void
   setResume: (resume: Resume | null) => void
-  /** Starts a swap, unless one is already running or nothing's playing. */
+  /** Starts a swap, unless one is already running (bar re-targeting one
+   *  that's loading) or nothing's playing. */
   requestSwap: (direction: SwapDirection) => void
   setSwapPhase: (swapPhase: SwapPhase) => void
   setDebug: (debug: boolean) => void
@@ -103,6 +111,7 @@ export const useStore = create<AppState>()((set) => ({
   polaroidVisible: 0,
   polaroidPillVisible: false,
   ready: false,
+  sceneLoaded: false,
   showPlayhead: false,
   initialRotation: [0, 0, 0],
   globalPointer: new Vector2(0, 0),
@@ -150,15 +159,23 @@ export const useStore = create<AppState>()((set) => ({
     set(() => ({ resetInitialRotation })),
   setGlobalPointer: (globalPointer: Vector2) => set(() => ({ globalPointer })),
   setReady: (ready: boolean) => set(() => ({ ready })),
+  setSceneLoaded: (sceneLoaded: boolean) => set(() => ({ sceneLoaded })),
   setIsTooSlow: (isTooSlow: boolean) => set(() => ({ isTooSlow })),
   setSeeking: (seeking: boolean) => set(() => ({ seeking })),
   setThemePreference: (themePreference: ThemePreference) =>
     set(() => ({ themePreference })),
   setColorScheme: (colorScheme: ColorScheme) => set(() => ({ colorScheme })),
   setResume: (resume: Resume | null) => set(() => ({ resume })),
+  // While the next dream's still loading (split), a swap re-targets: the
+  // print's already blank, so `out` is over at once (views/main.tsx) and
+  // the one after loads in its place (utils/dream-video.ts's load drops
+  // the one skipped).
   requestSwap: (swapDirection: SwapDirection) =>
     set((state) =>
-      state.dream && !state.resetting && state.swapPhase === 'idle'
+      state.dream &&
+      !state.resetting &&
+      (state.swapPhase === 'idle' ||
+        (state.swapPhase === 'loading' && isSplit(state.dream)))
         ? { swapPhase: 'out', swapDirection }
         : {}
     ),

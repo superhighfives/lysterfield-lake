@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { SwapDirection, useStore } from '../store'
-import { playback } from './dream-video'
+import { isSplit, playback } from './dream-video'
 import { adjacentDream } from './swap-dream'
 
 // Dragging the player's polaroid sideways to swap dreams (see
@@ -54,13 +54,18 @@ export function nearPolaroid(x: number, y: number, margin = NEAR_MARGIN) {
   )
 }
 
+// Not while the photo fades out or develops in, but while it's a blank
+// print waiting on video — the first dream, or a swap's — a swap can skip
+// past it (split: the 7-panel layout reloads the whole video, so it
+// waits).
 export function canSwap() {
   const state = useStore.getState()
+  const split = isSplit(state.dream)
   return (
     state.showPlayhead &&
     state.polaroidPillVisible &&
-    state.swapPhase === 'idle' &&
-    !playback.waiting
+    (state.swapPhase === 'idle' || (split && state.swapPhase === 'loading')) &&
+    (split || !playback.waiting)
   )
 }
 

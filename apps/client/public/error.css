@@ -1,0 +1,302 @@
+/* The error pages (404.html, 500.html, and the app's crash screen,
+   src/components/error-screen.tsx): a polaroid that never developed — a
+   blank, milky print with its emulsion still drifting, as the player's
+   print is while a dream loads — under the painted title, among the
+   fireflies. Plain CSS, so the static pages need nothing from the app's
+   bundle. */
+
+@font-face {
+  font-family: 'Redaction 35';
+  src: url('/fonts/redaction/Redaction_35-Italic.woff2') format('woff2');
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  src: url('/fonts/space-mono/SpaceMono-Regular.ttf') format('truetype');
+  font-display: swap;
+}
+
+:root {
+  --bowl-centre: #efedea;
+  --bowl-edge: #fafaf9;
+  --ink: #1c1917;
+  --muted: #78716c;
+  --frame: #ffffff;
+  --milky: #cdd1c9;
+  --blotch: rgba(255, 252, 245, 0.75);
+  --shade: rgba(120, 128, 118, 0.35);
+  color-scheme: light;
+}
+
+:root.dark {
+  --bowl-centre: #1a1715;
+  --bowl-edge: #0a0908;
+  --ink: #f5f5f4;
+  --muted: #a8a29e;
+  --frame: #2b2826;
+  --milky: #333532;
+  --blotch: rgba(190, 196, 186, 0.22);
+  --shade: rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  min-height: 100dvh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  font-family: 'Space Mono', ui-monospace, monospace;
+  -webkit-font-smoothing: antialiased;
+  background-color: var(--bowl-edge);
+  background-image: radial-gradient(
+    ellipse 120% 90% at 50% 45%,
+    var(--bowl-centre),
+    var(--bowl-edge)
+  );
+}
+
+.error {
+  /* No z-index: a stacking context here would isolate the title's
+     multiply from the page behind it (it comes after the fireflies, so it
+     paints over them anyway). */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  padding: 2rem 1rem;
+  text-align: center;
+}
+
+/* The painted title, white keyed out as on the welcome screen. */
+.error__title {
+  width: min(260px, 60vw);
+  height: auto;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+:root.dark .error__title {
+  mix-blend-mode: normal;
+  filter: url(#key-white);
+}
+
+/* The print: tilts toward the pointer (the pages' script sets --tx/--ty),
+   and floats a little. */
+.error__print {
+  --tx: 0deg;
+  --ty: 0deg;
+  width: min(240px, 60vw);
+  padding: 14px 14px 56px;
+  background: var(--frame);
+  border-radius: 2px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 18px 40px -12px rgba(0, 0, 0, 0.35);
+  transform: perspective(800px) rotateX(var(--tx)) rotateY(var(--ty))
+    rotate(-3deg);
+  transition: transform 0.4s ease-out;
+  animation: float 7s ease-in-out infinite;
+  position: relative;
+}
+
+.error__photo {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--milky);
+}
+
+/* The emulsion: soft blotches drifting through the blank print. */
+.error__photo::before,
+.error__photo::after {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  background:
+    radial-gradient(circle at 30% 35%, var(--blotch), transparent 32%),
+    radial-gradient(circle at 70% 60%, var(--shade), transparent 30%),
+    radial-gradient(circle at 45% 80%, var(--blotch), transparent 26%);
+  filter: blur(14px);
+  animation: drift 14s ease-in-out infinite alternate;
+}
+
+.error__photo::after {
+  background:
+    radial-gradient(circle at 65% 25%, var(--shade), transparent 28%),
+    radial-gradient(circle at 25% 70%, var(--blotch), transparent 30%);
+  animation-duration: 19s;
+  animation-direction: alternate-reverse;
+}
+
+/* Grain over the emulsion. */
+.error__grain {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0.18;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.error__code {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.error__message {
+  margin: 0;
+  font-family: 'Redaction 35', Georgia, serif;
+  font-style: italic;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  line-height: 1.2;
+}
+
+.error__detail {
+  margin: 0.5rem 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.error__actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* The welcome screen's button. */
+.error__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: 0;
+  border-radius: 6px;
+  background: #f8cd0d;
+  color: #1c1917;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition:
+    transform 0.3s,
+    box-shadow 0.3s,
+    background-color 0.3s,
+    color 0.3s;
+}
+
+.error__button span {
+  font-family: 'Redaction 35', Georgia, serif;
+  font-style: italic;
+  font-size: 1.25rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.error__button:hover {
+  transform: scale(1.05);
+  background: #1c1917;
+  color: #fff;
+  box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.4);
+}
+
+:root.dark .error__button:hover {
+  background: #fff;
+  color: #1c1917;
+}
+
+.error__button--quiet {
+  background: transparent;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--muted);
+}
+
+/* Fireflies: their place and pace come from --x, --y, --d, --s. */
+.fireflies {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.fireflies i {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  background: #f8cd0d;
+  box-shadow: 0 0 10px 3px rgba(248, 205, 13, 0.55);
+  opacity: 0;
+  animation: firefly var(--d) ease-in-out infinite;
+  animation-delay: calc(var(--d) * -0.37);
+}
+
+@keyframes firefly {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  30%,
+  70% {
+    opacity: 0.85;
+  }
+  50% {
+    transform: translate(18px, -26px);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -6px;
+  }
+}
+
+@keyframes drift {
+  0% {
+    transform: translate(-8%, -4%) rotate(0deg);
+  }
+  100% {
+    transform: translate(8%, 6%) rotate(20deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .error__print,
+  .error__photo::before,
+  .error__photo::after,
+  .fireflies i {
+    animation: none;
+  }
+
+  .fireflies i {
+    opacity: 0.6;
+  }
+}

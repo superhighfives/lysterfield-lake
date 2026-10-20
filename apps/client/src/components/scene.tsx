@@ -68,6 +68,21 @@ const CHOOSING_LIGHT = {
 // in dark mode, the full-strength light made a hard white streak — it's
 // meant to be a faint sheen as the polaroid tilts.
 const PLAYER_SPOT = { light: 5, dark: 1.2 };
+// Fitting the player into short windows. Left alone, the polaroid spans
+// PLAYER_TOP to PLAYER_BOTTOM of the window's height (its lyrics running
+// on below it), centred, and on a short window the controls at the
+// bottom cover the lyrics. So the view lifts to clear them — and, if
+// lifting alone isn't enough, zooms out a little — keeping it under the
+// header (PLAYER_HEADER px). The controls take PLAYER_CONTROLS px (two
+// rows, PLAYER_CONTROLS_STACKED, below the xs breakpoint), plus a gap.
+// PLAYER_FIT_EASE: how quickly (per frame) it settles.
+const PLAYER_TOP = 0.17;
+const PLAYER_BOTTOM = 0.92;
+const PLAYER_HEADER = 64;
+const PLAYER_CONTROLS = 40 + 34 + 16;
+const PLAYER_CONTROLS_STACKED = 40 + 104 + 16;
+const PLAYER_FIT_EASE = 0.1;
+const STACKED_QUERY = "(max-width: 399px)";
 
 function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const camera = useRef<PerspectiveCameraType>(null);
@@ -92,6 +107,9 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	// leaves a stepped-down ratio that the monitor, already at the top,
 	// never raises again.
 	useEffect(() => setDprAuto(dprForFactor(1)), [setDprAuto]);
+	// Mounted once everything it needs has loaded: the loading pile clears
+	// away (components/loading.tsx).
+	useEffect(() => useStore.getState().setSceneLoaded(true), []);
 
 	// These all used to be React state set every frame from useFrame,
 	// re-rendering Scene (and everything under it, including Choose's whole
@@ -102,6 +120,10 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const dotMesh = useRef<Mesh>(null);
 	const ambient = useRef<AmbientLight>(null);
 	const dotMaterial = useRef<MeshStandardMaterial>(null);
+
+	// The player's fit (see PLAYER_TOP): how far the view's lifted (px)
+	// and how far it's zoomed out (1 = not at all), eased.
+	const fit = useRef({ lift: 0, scale: 1 });
 
 	const setInitialRotation = useStore((state) => state.setInitialRotation);
 	const resetInitialRotation = useStore((state) => state.resetInitialRotation);
@@ -114,6 +136,55 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 
 	useFrame((state) => {
 		const cameraRef = camera.current;
+
+		// Narrow windows zoom out to fit the width; short ones fit the
+		// player between the header and the controls.
+		if (cameraRef) {
+			const base = w >= 1 ? 1 : w;
+			let lift = 0;
+			let scale = 1;
+			if (dream && !resetting) {
+				const { width, height } = state.size;
+				const controls = window.matchMedia(STACKED_QUERY).matches
+					? PLAYER_CONTROLS_STACKED
+					: PLAYER_CONTROLS;
+				const room = height - PLAYER_HEADER - controls;
+				const span = (PLAYER_BOTTOM - PLAYER_TOP) * base * height;
+				scale = Math.min(1, room / span);
+				const top = height * (0.5 - (0.5 - PLAYER_TOP) * base * scale);
+				const bottom =
+					height * (0.5 + (PLAYER_BOTTOM - 0.5) * base * scale);
+				lift = Math.max(
+					0,
+					Math.min(bottom - (height - controls), top - PLAYER_HEADER),
+				);
+				if (width === 0) lift = 0;
+			}
+
+			const current = fit.current;
+			current.lift = MathUtils.lerp(current.lift, lift, PLAYER_FIT_EASE);
+			current.scale = MathUtils.lerp(current.scale, scale, PLAYER_FIT_EASE);
+			if (Math.abs(current.lift - lift) < 0.5) current.lift = lift;
+			if (Math.abs(current.scale - scale) < 0.001) current.scale = scale;
+			const zoom = base * current.scale;
+			const { width, height } = state.size;
+			const view = cameraRef.view;
+			const offset = view?.enabled ? view.offsetY : 0;
+			if (
+				cameraRef.zoom !== zoom ||
+				offset !== current.lift ||
+				(view?.enabled && view.fullHeight !== height)
+			) {
+				cameraRef.zoom = zoom;
+				if (current.lift) {
+					cameraRef.setViewOffset(width, height, 0, current.lift, width, height);
+				} else {
+					cameraRef.clearViewOffset();
+				}
+
+				cameraRef.updateProjectionMatrix();
+			}
+		}
 
 		if (isMobile || isTouch) {
 			if (dotMaterial.current)
@@ -235,7 +306,6 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 				makeDefault
 				position={[0, 0, CAMERA_Z]}
 				fov={50}
-				zoom={w >= 1 ? 1 : w}
 			/>
 			{isMobile ? (
 				<DeviceOrientationControls

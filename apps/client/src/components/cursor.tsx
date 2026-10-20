@@ -19,7 +19,8 @@ import { playback } from '../utils/dream-video'
 //   a faint ghost trailing behind — the ring is collapsed into it, so every
 //   other state grows out of the dot
 // - hover: a larger ring over anything clickable (HTML controls, and the
-//   carousel's cards, which flag it through drei's useCursor)
+//   carousel's cards, which flag it through drei's useCursor), labelled
+//   with the control's name when it has one (views/tooltip.tsx)
 // - polaroid: near the player's polaroid, a wide ring with arrows either
 //   side, offering a drag
 // - drag: the ring fills toward the point where letting go swaps, with
@@ -45,6 +46,9 @@ const GHOST_FOLLOW = 0.12
 const SPEED_PER_STRETCH = 25
 const STRETCH_MAX = 1.2
 const SPEED_EASE = 0.25
+// How far a label under the ring keeps from the window's edges (px): as
+// far as the header's buttons sit from them (routes/root.tsx, right-1).
+const LABEL_MARGIN = 4
 const ARC_RADIUS = 36
 const ARC_LENGTH = 2 * Math.PI * ARC_RADIUS
 
@@ -58,6 +62,7 @@ function Cursor() {
   const [enabled, setEnabled] = useState(finePointer)
   const [mode, setMode] = useState<Mode>('default')
   const [visible, setVisible] = useState(false)
+  const [label, setLabel] = useState('')
   const [preview, setPreview] = useState<{
     dream: Dream
     side: 'left' | 'right'
@@ -69,6 +74,7 @@ function Cursor() {
   const ring = useRef<HTMLDivElement>(null)
   const arc = useRef<SVGCircleElement>(null)
   const card = useRef<HTMLDivElement>(null)
+  const labelEl = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
     const query = window.matchMedia('(hover: hover) and (pointer: fine)')
@@ -89,6 +95,7 @@ function Cursor() {
     let hovered: Element | null = null
     let currentMode: Mode = 'default'
     let previewKey = ''
+    let currentLabel = ''
     let frame = 0
 
     const handleMove = (event: PointerEvent) => {
@@ -112,6 +119,13 @@ function Cursor() {
         dot.current.style.transform = `translate3d(${pointer.x}px, ${pointer.y}px, 0)`
       if (ring.current)
         ring.current.style.transform = `translate3d(${ringPos.x}px, ${ringPos.y}px, 0)`
+      // Centred under the ring, but nudged in from the window's edges.
+      if (labelEl.current) {
+        const half = labelEl.current.offsetWidth / 2
+        const left = ringPos.x - half - LABEL_MARGIN
+        const right = ringPos.x + half + LABEL_MARGIN - window.innerWidth
+        labelEl.current.style.marginLeft = `${left < 0 ? -left : right > 0 ? -right : 0}px`
+      }
 
       velocity.x += (pointer.x - last.x - velocity.x) * SPEED_EASE
       velocity.y += (pointer.y - last.y - velocity.y) * SPEED_EASE
@@ -141,12 +155,11 @@ function Cursor() {
       let next: Mode = 'default'
       const hint = cursorHint.active ? cursorHint : null
       if (swapDrag.active || hint?.dragging) next = 'drag'
-      else if (swapPhase !== 'idle' || playback.waiting) next = 'busy'
-      else if (
-        hint?.near ||
-        (canSwap() && nearPolaroid(pointer.x, pointer.y))
-      )
+      // Over the polaroid, a drag's on offer even while it waits on video
+      // (it skips past); elsewhere, waiting shows as busy.
+      else if (hint?.near || (canSwap() && nearPolaroid(pointer.x, pointer.y)))
         next = 'polaroid'
+      else if (swapPhase !== 'idle' || playback.waiting) next = 'busy'
       else if (
         hovered?.closest(INTERACTIVE) ||
         document.body.style.cursor === 'pointer'
@@ -155,6 +168,23 @@ function Cursor() {
       if (next !== currentMode) {
         currentMode = next
         setMode(next)
+      }
+
+      // The hovered control's name: its own, or a sibling's (the player's
+      // mute and play buttons sit beside theirs).
+      let nextLabel = currentLabel
+      if (next === 'hover') {
+        const control = hovered?.closest(INTERACTIVE)
+        nextLabel =
+          (
+            control?.querySelector('[data-cursor-label]') ??
+            control?.parentElement?.querySelector(':scope > [data-cursor-label]')
+          )?.textContent ?? ''
+      }
+
+      if (nextLabel !== currentLabel) {
+        currentLabel = nextLabel
+        setLabel(nextLabel)
       }
 
       if (next === 'drag') {
@@ -212,29 +242,38 @@ function Cursor() {
     >
       {/* Ring, trailing the pointer */}
       <div ref={ring} className="absolute left-0 top-0">
+        {/* Centred and sized on the outside, so the busy spin (a transform
+            of its own) doesn't replace the centring translate. */}
         <div
-          className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border transition-all duration-300 ease-out ${
-            mode === 'busy'
-              ? 'border-dashed border-stone-900/60 dark:border-white/60 animate-spin'
-              : mode === 'hover'
-                ? 'border-yellow-500 bg-yellow-400/20'
-                : mode === 'polaroid' || mode === 'drag'
-                  ? // A faint halo of the opposite colour outside the ring,
-                    // so it reads over the photo whatever's in it.
-                    'border-stone-900/60 dark:border-white/60 bg-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]'
-                  : 'border-transparent'
-          }`}
+          className="absolute -translate-x-1/2 -translate-y-1/2 transition-[width,height] duration-300 ease-out"
           style={{ width: size, height: size }}
-        />
-
-        {/* Waiting: a label under the spinning ring */}
-        <span
-          className={`absolute -translate-x-1/2 whitespace-nowrap font-mono text-[10px] uppercase tracking-widest text-stone-900 dark:text-white bg-white/80 dark:bg-stone-900/80 rounded-full px-2 transition-opacity duration-300 ${
-            mode === 'busy' ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{ top: RING_SIZE.busy / 2 + 10 }}
         >
-          Loading…
+          <div
+            className={`w-full h-full rounded-full border transition-[color,background-color,border-color,box-shadow] duration-300 ease-out ${
+              mode === 'busy'
+                ? 'border-dashed border-stone-900/60 dark:border-white/60 animate-spin'
+                : mode === 'hover'
+                  ? 'border-yellow-500 bg-yellow-400/20'
+                  : mode === 'polaroid' || mode === 'drag'
+                    ? // A faint halo of the opposite colour outside the ring,
+                      // so it reads over the photo whatever's in it.
+                      'border-stone-900/60 dark:border-white/60 bg-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]'
+                    : 'border-transparent'
+            }`}
+          />
+        </div>
+
+        {/* A label under the ring: waiting, or the hovered control's name */}
+        <span
+          ref={labelEl}
+          className={`absolute -translate-x-1/2 whitespace-nowrap font-mono text-[10px] uppercase tracking-widest text-stone-900 dark:text-white bg-white/80 dark:bg-stone-900/80 rounded-full px-2 transition-opacity duration-300 ${
+            mode === 'busy' || (mode === 'hover' && label)
+              ? 'opacity-100'
+              : 'opacity-0'
+          }`}
+          style={{ top: RING_SIZE[mode === 'hover' ? 'hover' : 'busy'] / 2 + 10 }}
+        >
+          {mode === 'busy' ? 'Loading…' : label}
         </span>
 
         {/* Drag progress: fills toward the point where letting go swaps */}
@@ -281,7 +320,9 @@ function Cursor() {
           <CaretRight
             weight="bold"
             size={14}
-            style={{ animation: 'cursor-nudge-right 1.4s ease-in-out infinite' }}
+            style={{
+              animation: 'cursor-nudge-right 1.4s ease-in-out infinite',
+            }}
           />
         </div>
 

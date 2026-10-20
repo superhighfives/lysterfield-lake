@@ -90,8 +90,7 @@ function ThemeToggle() {
             >
               <Icon />
             </button>
-            {/* This row sits at the very top of the page — no room above. */}
-            <Tooltip text={label} placement="below" />
+            <Tooltip text={label} />
           </div>
         )
       })}
