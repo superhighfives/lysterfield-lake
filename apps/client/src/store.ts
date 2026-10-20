@@ -1,5 +1,8 @@
 import { create } from 'zustand'
 import { Dream } from './utils/types'
+// Circular (dream-video imports this store), and safe: neither uses the
+// other until called.
+import { isSplit } from './utils/dream-video'
 import { Vector2 } from 'three'
 import {
   ColorScheme,
@@ -85,7 +88,8 @@ export interface AppState {
   setThemePreference: (themePreference: ThemePreference) => void
   setColorScheme: (colorScheme: ColorScheme) => void
   setResume: (resume: Resume | null) => void
-  /** Starts a swap, unless one is already running or nothing's playing. */
+  /** Starts a swap, unless one is already running (bar re-targeting one
+   *  that's loading) or nothing's playing. */
   requestSwap: (direction: SwapDirection) => void
   setSwapPhase: (swapPhase: SwapPhase) => void
   setDebug: (debug: boolean) => void
@@ -162,9 +166,16 @@ export const useStore = create<AppState>()((set) => ({
     set(() => ({ themePreference })),
   setColorScheme: (colorScheme: ColorScheme) => set(() => ({ colorScheme })),
   setResume: (resume: Resume | null) => set(() => ({ resume })),
+  // While the next dream's still loading (split), a swap re-targets: the
+  // print's already blank, so `out` is over at once (views/main.tsx) and
+  // the one after loads in its place (utils/dream-video.ts's load drops
+  // the one skipped).
   requestSwap: (swapDirection: SwapDirection) =>
     set((state) =>
-      state.dream && !state.resetting && state.swapPhase === 'idle'
+      state.dream &&
+      !state.resetting &&
+      (state.swapPhase === 'idle' ||
+        (state.swapPhase === 'loading' && isSplit(state.dream)))
         ? { swapPhase: 'out', swapDirection }
         : {}
     ),

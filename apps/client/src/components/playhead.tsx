@@ -33,6 +33,7 @@ import {
   followMain,
   isSplit,
   mainVideoBase,
+  shownDream,
   startDream,
   stopDreams,
   switchDream,
@@ -183,8 +184,10 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       if (!dream || !isSplit(dream) || loadedDream.current === dream.id) return
       // The main video's own load (above) handles a fresh one.
       if (loadedDream.current === null) return
-      const previous = loadedDream.current
       loadedDream.current = dream.id
+      // What to fall back on if this one won't load: the dream actually on
+      // the polaroid (not one swapped past while it loaded), if any.
+      const shown = shownDream()
 
       const { resume, setResume } = useStore.getState()
       let time = el.currentTime
@@ -207,18 +210,23 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
         // Its video wouldn't load: the polaroid never left the last dream
         // (still playing in sync), so the swap lands back on it.
         if (result === 'failed') {
-          const { collection, setDream } = useStore.getState()
-          const fallback = collection.find((item) => item.id === previous)
-          if (fallback) {
-            loadedDream.current = fallback.id
-            history.replaceState(
-              { dream: fallback.id, t: el.currentTime } satisfies HistoryState,
-              '',
-              urlFor(fallback.id)
-            )
-            setDream(fallback)
+          const { collection, setDream, setResetting, setSwapPhase } =
+            useStore.getState()
+          const fallback = collection.find((item) => item.id === shown)
+          // Nothing's shown yet (the first dream was swapped past): there's
+          // nothing to go back to, so back to the choose screen.
+          if (!fallback) {
+            setSwapPhase('idle')
+            return setResetting(true)
           }
 
+          loadedDream.current = fallback.id
+          history.replaceState(
+            { dream: fallback.id, t: el.currentTime } satisfies HistoryState,
+            '',
+            urlFor(fallback.id)
+          )
+          setDream(fallback)
           return finish()
         }
 

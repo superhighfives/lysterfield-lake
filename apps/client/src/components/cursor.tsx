@@ -155,9 +155,11 @@ function Cursor() {
       let next: Mode = 'default'
       const hint = cursorHint.active ? cursorHint : null
       if (swapDrag.active || hint?.dragging) next = 'drag'
-      else if (swapPhase !== 'idle' || playback.waiting) next = 'busy'
+      // Over the polaroid, a drag's on offer even while it waits on video
+      // (it skips past); elsewhere, waiting shows as busy.
       else if (hint?.near || (canSwap() && nearPolaroid(pointer.x, pointer.y)))
         next = 'polaroid'
+      else if (swapPhase !== 'idle' || playback.waiting) next = 'busy'
       else if (
         hovered?.closest(INTERACTIVE) ||
         document.body.style.cursor === 'pointer'

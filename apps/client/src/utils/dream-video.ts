@@ -92,6 +92,9 @@ type Slot = {
   settled: boolean
   /** Its video wouldn't load (missing, say). */
   failed: boolean
+  /** Resolves the pending `ready`: called when another dream takes the
+   *  slot before this one's ready, so nothing waits on it for good. */
+  release: (() => void) | null
   /** How far ahead (s) a seek aims: the last seek's duration. */
   lead: number
 }
@@ -131,6 +134,7 @@ function slots() {
       ready: null,
       settled: false,
       failed: false,
+      release: null,
       lead: SEEK_LEAD,
     }))
   return dreamVideo.slots
@@ -140,6 +144,8 @@ function slots() {
 export const dreamElements = () => slots().map((slot) => slot.el)
 
 function empty(slot: Slot) {
+  slot.release?.()
+  slot.release = null
   slot.el.pause()
   slot.el.removeAttribute('src')
   slot.el.load()
@@ -154,13 +160,21 @@ function empty(slot: Slot) {
 function load(slot: Slot, dream: Dream, time: number) {
   // A failed one loads afresh: whatever stopped it may have passed.
   if (slot.id === dream.id && slot.ready && !slot.failed) return slot.ready
+  // Whatever was loading here is dropped (a new src cancels its download).
+  slot.release?.()
   slot.id = dream.id
   slot.settled = false
   slot.failed = false
   const el = slot.el
   el.src = `${dreamsUrl}/${dream.id}/dream${small()}.${extension}`
   el.load()
-  slot.ready = new Promise<void>((resolve) => {
+  slot.ready = new Promise<void>((done) => {
+    const resolve = () => {
+      if (slot.release === resolve) slot.release = null
+      done()
+    }
+
+    slot.release = resolve
     let retried = false
     const watchdog = () =>
       window.setTimeout(() => {
@@ -218,8 +232,16 @@ export async function startDream(dream: Dream, time: number) {
   empty(second)
   dreamVideo.front = 0
   dreamVideo.mix = 0
-  await load(first, dream, time)
-  return !(first.id === dream.id && first.failed)
+  // Swapped away from while it loaded (see switchDream), it waits on
+  // whichever dream took its place.
+  let ready = load(first, dream, time)
+  await ready
+  while (first.ready && first.ready !== ready) {
+    ready = first.ready
+    await ready
+  }
+
+  return !first.failed
 }
 
 /** Switches to another dream mid-song: the back slot loads it at the main
@@ -229,7 +251,19 @@ export async function startDream(dream: Dream, time: number) {
  *  ('failed'); or a later switch took over while it loaded ('superseded'). */
 export async function switchDream(dream: Dream, time: number) {
   const all = slots()
-  if (all[dreamVideo.front].id === dream.id) return 'shown'
+  const front = all[dreamVideo.front]
+  if (front.id === dream.id) return 'shown'
+  // The first dream still loading (swapped away from before it showed):
+  // this one loads in its place.
+  if (front.id && !front.settled) {
+    // Not twice: the swap may have warmed it behind already.
+    const back = all[1 - dreamVideo.front]
+    if (back.id === dream.id) empty(back)
+    await load(front, dream, time)
+    if (front.id !== dream.id) return 'superseded'
+    return front.failed ? 'failed' : 'shown'
+  }
+
   const back = 1 - dreamVideo.front
   await load(all[back], dream, time)
   if (all[back].id !== dream.id) return 'superseded'
@@ -251,6 +285,13 @@ export function warmDream(dream: Dream | undefined) {
   const back = all[1 - dreamVideo.front]
   const main = dreamVideo.main
   load(back, dream, main ? main.currentTime : 0)
+}
+
+/** The dream actually on the polaroid: the front slot's, once it's
+ *  loaded and playing along (not one still loading, or one that failed). */
+export function shownDream() {
+  const front = slots()[dreamVideo.front]
+  return front.settled && !front.failed ? front.id : null
 }
 
 /** Whether the dream on show is ready: loaded, sought and playing along. */
