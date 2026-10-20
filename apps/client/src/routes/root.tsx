@@ -3,6 +3,7 @@ import { Canvas } from '@react-three/fiber'
 import { Preload } from '@react-three/drei'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import Loading from '../components/loading'
+import Tooltip from '../views/tooltip'
 import Fallback from '../components/fallback'
 import Scene from '../components/scene'
 import Playhead from '../components/playhead'
@@ -11,7 +12,7 @@ import ThemeToggle from '../components/theme-toggle'
 import KeyWhiteFilter from '../components/key-white-filter'
 import { handleDeviceOrientationPermissions, isTouchDevice, shuffle } from '../utils'
 import dreams from '../dreams.json'
-import { Play, FileText, CircleNotch } from '@phosphor-icons/react'
+import { Info, MusicNotes, CircleNotch } from '@phosphor-icons/react'
 import { useHistorySync } from '../utils/use-history-sync'
 import { useSwapInput } from '../utils/swap-gesture'
 import { startAudio } from '../utils/audio'
@@ -22,8 +23,10 @@ import DebugOverlay from '../components/debug-overlay'
 // How long buffering has to last before offering the YouTube escape hatch.
 const TOO_SLOW_DELAY = 8000
 
-const linkClassName =
-  'px-2 py-1 flex gap-2 items-center hover:bg-yellow-400 hover:text-yellow-800 rounded hover:shadow-sm'
+// The header's links: icons like the theme toggle's, named by the cursor
+// (views/tooltip.tsx).
+const linkClassName = 'p-1.5 rounded transition-colors hover:bg-yellow-400/30'
+const divider = <span aria-hidden className="w-px h-4 bg-current opacity-20" />
 
 function Root() {
   const dream = useStore((state) => state.dream)
@@ -127,15 +130,18 @@ function Root() {
       <KeyWhiteFilter />
       <Cursor />
       <DebugOverlay />
-      <div className="fixed z-10 top-1 right-1 flex items-center gap-1 font-sans text-sm">
+      {/* Three | one | one: the colour scheme, about, and the song. */}
+      <div className="fixed z-10 top-1 right-1 flex items-center gap-1.5">
         <ThemeToggle />
+        {divider}
         <a href="/about" className={linkClassName}>
-          <FileText />
-          About
+          <Info />
+          <Tooltip text="About" />
         </a>
+        {divider}
         <a href="https://wearebrightly.com" className={linkClassName}>
-          <Play />
-          Get the song
+          <MusicNotes />
+          <Tooltip text="Song" />
         </a>
       </div>
       <Suspense fallback={<Fallback />}>
