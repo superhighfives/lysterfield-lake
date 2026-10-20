@@ -26,7 +26,8 @@ export default {
         // A loading polaroid falling onto the pile (components/loading.tsx),
         // overshooting a touch as it lands.
         'card-drop': 'card-drop 0.55s cubic-bezier(0.3, 1.35, 0.5, 1) both',
-        // And falling away once the scene's in, gathering speed.
+        // And falling away once the scene's in, gathering speed — the pile
+        // keeping its shape, as one.
         'card-leave': 'card-leave 0.6s cubic-bezier(0.5, 0, 0.75, 0.2) both',
       },
       keyframes: {
@@ -50,7 +51,7 @@ export default {
           '70%': { opacity: '1' },
           '100%': {
             transform:
-              'translate(calc(var(--x) * 2.5), calc(var(--y) + 65vh)) rotate(calc(var(--r) - 24deg)) scale(0.94)',
+              'translate(var(--x), calc(var(--y) + 65vh)) rotate(calc(var(--r) - 10deg)) scale(0.94)',
             opacity: '0',
           },
         },

@@ -12,8 +12,8 @@ import dreams from '../dreams.json'
 //
 // Plain HTML over the canvas rather than the canvas's Suspense fallback,
 // so it can leave rather than vanish: once the scene's mounted
-// (`sceneLoaded`), the cards fall away, the top one first, while the
-// scene fades in beneath them (routes/root.tsx).
+// (`sceneLoaded`), the pile falls away together (the top card a touch
+// ahead), while the scene fades in beneath it (routes/root.tsx).
 
 // The assets counted (drei's progress), each card's jitter in the pile
 // (px, degrees). The fall in and out are tailwind.config.js's card-drop and
@@ -22,7 +22,7 @@ import dreams from '../dreams.json'
 const TOTAL = 20
 const JITTER: [number, number] = [34, 18]
 const TWIST = 16
-const LEAVE_STAGGER = 35
+const LEAVE_STAGGER = 2
 const LEAVE_MS = 600 + TOTAL * LEAVE_STAGGER
 
 function Loading() {
