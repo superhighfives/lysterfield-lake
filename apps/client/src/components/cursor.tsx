@@ -46,6 +46,8 @@ const GHOST_FOLLOW = 0.12
 const SPEED_PER_STRETCH = 25
 const STRETCH_MAX = 1.2
 const SPEED_EASE = 0.25
+// How far a label under the ring keeps from the window's edges (px).
+const LABEL_MARGIN = 12
 const ARC_RADIUS = 36
 const ARC_LENGTH = 2 * Math.PI * ARC_RADIUS
 
@@ -71,6 +73,7 @@ function Cursor() {
   const ring = useRef<HTMLDivElement>(null)
   const arc = useRef<SVGCircleElement>(null)
   const card = useRef<HTMLDivElement>(null)
+  const labelEl = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
     const query = window.matchMedia('(hover: hover) and (pointer: fine)')
@@ -115,6 +118,13 @@ function Cursor() {
         dot.current.style.transform = `translate3d(${pointer.x}px, ${pointer.y}px, 0)`
       if (ring.current)
         ring.current.style.transform = `translate3d(${ringPos.x}px, ${ringPos.y}px, 0)`
+      // Centred under the ring, but nudged in from the window's edges.
+      if (labelEl.current) {
+        const half = labelEl.current.offsetWidth / 2
+        const left = ringPos.x - half - LABEL_MARGIN
+        const right = ringPos.x + half + LABEL_MARGIN - window.innerWidth
+        labelEl.current.style.marginLeft = `${left < 0 ? -left : right > 0 ? -right : 0}px`
+      }
 
       velocity.x += (pointer.x - last.x - velocity.x) * SPEED_EASE
       velocity.y += (pointer.y - last.y - velocity.y) * SPEED_EASE
@@ -252,6 +262,7 @@ function Cursor() {
 
         {/* A label under the ring: waiting, or the hovered control's name */}
         <span
+          ref={labelEl}
           className={`absolute -translate-x-1/2 whitespace-nowrap font-mono text-[10px] uppercase tracking-widest text-stone-900 dark:text-white bg-white/80 dark:bg-stone-900/80 rounded-full px-2 transition-opacity duration-300 ${
             mode === 'busy' || (mode === 'hover' && label)
               ? 'opacity-100'

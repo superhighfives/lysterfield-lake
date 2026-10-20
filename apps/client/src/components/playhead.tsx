@@ -46,6 +46,8 @@ import { HistoryState, urlFor } from '../utils/use-history-sync'
 // shows its last frame, or nothing, until the dream catches up), or bring
 // a swapped polaroid back.
 const DREAM_READY_TIMEOUT_MS = 8000
+// How long a new dream's name and prompt show without hovering.
+const ANNOUNCE_MS = 3000
 
 const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
   (_props, ref) => {
@@ -59,8 +61,17 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     const isTouch = useStore((state) => state.isTouch)
     const [recalibrateMobile, setRecalibrateMobile] = useState(false)
     // The dream's name and prompt show while the pointer's over the
-    // controls (always on touch, which has no hover).
+    // controls (always on touch, which has no hover), and for a moment
+    // (ANNOUNCE_MS) whenever the dream changes.
     const [pillHovered, setPillHovered] = useState(false)
+    const [announcing, setAnnouncing] = useState(false)
+    // Counted from when the swap's done, since it's hidden until then.
+    useEffect(() => {
+      if (!dream || swapping) return
+      setAnnouncing(true)
+      const timeout = setTimeout(() => setAnnouncing(false), ANNOUNCE_MS)
+      return () => clearTimeout(timeout)
+    }, [dream, swapping])
     // For the mute button's label.
     const [muted, setMuted] = useState(false)
 
@@ -350,7 +361,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
             polaroidPillVisible &&
             dream &&
             !swapping &&
-            (pillHovered || isTouch)
+            (pillHovered || isTouch || announcing)
               ? 'opacity-100'
               : 'opacity-0'
           }`}

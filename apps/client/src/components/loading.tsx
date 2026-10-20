@@ -1,4 +1,4 @@
-import { CSSProperties, useEffect, useState } from 'react'
+import { CSSProperties, useEffect, useRef, useState } from 'react'
 import { useProgress } from '@react-three/drei'
 import { seeded } from './carousels/shared'
 import { useStore } from '../store'
@@ -17,17 +17,27 @@ import dreams from '../dreams.json'
 
 // The assets counted (drei's progress), each card's jitter in the pile
 // (px, degrees). The fall in and out are tailwind.config.js's card-drop and
-// card-leave. LEAVE_STAGGER: the delay between one card leaving and the
-// next (ms); LEAVE_MS: how long until the last has gone.
+// card-leave. DROP_STAGGER: the delay between cards that arrive together
+// (ms), so a batch drops one after another rather than in a lump;
+// LEAVE_STAGGER: the delay between one card leaving and the next, a
+// little looseness in a pile that otherwise falls as one; LEAVE_MS: how
+// long until the last has gone.
 const TOTAL = 20
 const JITTER: [number, number] = [34, 18]
 const TWIST = 16
-const LEAVE_STAGGER = 2
+const DROP_STAGGER = 70
+const LEAVE_STAGGER = 12
 const LEAVE_MS = 600 + TOTAL * LEAVE_STAGGER
 
 function Loading() {
   const { loaded } = useProgress()
   const count = Math.min(loaded, TOTAL)
+  // Each card's drop delay, fixed when it first appears (changing it
+  // mid-fall would restart the fall).
+  const dropDelays = useRef<number[]>([])
+  const shown = dropDelays.current.length
+  for (let i = shown; i < count; i++)
+    dropDelays.current.push((i - shown) * DROP_STAGGER)
   const sceneLoaded = useStore((state) => state.sceneLoaded)
   // Already loaded when this mounts (a cached scene): there's no pile to
   // clear away.
@@ -62,9 +72,11 @@ function Loading() {
                   '--y': `${(seeded(i, 2) - 0.5) * 2 * JITTER[1]}px`,
                   '--r': `${(seeded(i, 3) - 0.5) * 2 * TWIST}deg`,
                   // The top card leaves first.
-                  animationDelay: leaving
-                    ? `${(count - 1 - i) * LEAVE_STAGGER}ms`
-                    : undefined,
+                  animationDelay: `${
+                    leaving
+                      ? (count - 1 - i) * LEAVE_STAGGER
+                      : dropDelays.current[i]
+                  }ms`,
                   transform: 'translate(var(--x), var(--y)) rotate(var(--r))',
                 } as CSSProperties
               }

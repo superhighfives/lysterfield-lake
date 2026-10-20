@@ -1,6 +1,7 @@
 import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import Root from './routes/root.tsx'
+import ErrorScreen from './components/error-screen.tsx'
 import './index.css'
 
 // The /admin dream review page only exists in dev: the DEV check is
@@ -23,7 +24,9 @@ createRoot(document.getElementById('root') as HTMLElement).render(
         <Admin />
       </Suspense>
     ) : (
-      <Root />
+      <ErrorScreen>
+        <Root />
+      </ErrorScreen>
     )}
   </StrictMode>
 )
