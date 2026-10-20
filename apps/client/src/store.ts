@@ -36,6 +36,9 @@ export interface AppState {
    *  flips — this is the one safe to subscribe to reactively. */
   polaroidPillVisible: boolean
   ready: boolean
+  /** The 3D scene's assets have loaded and it's mounted (see
+   *  components/loading.tsx, which clears away as it comes in). */
+  sceneLoaded: boolean
   showPlayhead: boolean
   initialRotation: [number, number, number]
   globalPointer: Vector2
@@ -77,6 +80,7 @@ export interface AppState {
   setResetInitialRotation: (resetInitialRotation: boolean) => void
   setGlobalPointer: (globalPointer: Vector2) => void
   setReady: (ready: boolean) => void
+  setSceneLoaded: (sceneLoaded: boolean) => void
   setIsTooSlow: (ready: boolean) => void
   setThemePreference: (themePreference: ThemePreference) => void
   setColorScheme: (colorScheme: ColorScheme) => void
@@ -103,6 +107,7 @@ export const useStore = create<AppState>()((set) => ({
   polaroidVisible: 0,
   polaroidPillVisible: false,
   ready: false,
+  sceneLoaded: false,
   showPlayhead: false,
   initialRotation: [0, 0, 0],
   globalPointer: new Vector2(0, 0),
@@ -150,6 +155,7 @@ export const useStore = create<AppState>()((set) => ({
     set(() => ({ resetInitialRotation })),
   setGlobalPointer: (globalPointer: Vector2) => set(() => ({ globalPointer })),
   setReady: (ready: boolean) => set(() => ({ ready })),
+  setSceneLoaded: (sceneLoaded: boolean) => set(() => ({ sceneLoaded })),
   setIsTooSlow: (isTooSlow: boolean) => set(() => ({ isTooSlow })),
   setSeeking: (seeking: boolean) => set(() => ({ seeking })),
   setThemePreference: (themePreference: ThemePreference) =>

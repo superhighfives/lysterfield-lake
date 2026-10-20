@@ -28,6 +28,7 @@ const linkClassName =
 function Root() {
   const dream = useStore((state) => state.dream)
   const ready = useStore((state) => state.ready)
+  const sceneLoaded = useStore((state) => state.sceneLoaded)
   const setCollection = useStore((state) => state.setCollection)
   const video = useRef<HTMLVideoElement>(null)
   const videoState = useStore((state) => state.videoState)
@@ -171,12 +172,21 @@ function Root() {
               data-swap-surface
               className={`${isBuffering ? 'grayscale' : ''} fixed inset-0`}
             >
-              <Canvas shadows dpr={dpr}>
-                <Suspense fallback={<Loading />}>
-                  <Preload all />
-                  <Scene video={video} />
-                </Suspense>
-              </Canvas>
+              {/* Fades in as the loading pile falls away
+                  (components/loading.tsx). */}
+              <div
+                className={`absolute inset-0 transition-opacity duration-1000 ease-out ${
+                  sceneLoaded ? 'opacity-100' : 'opacity-0'
+                }`}
+              >
+                <Canvas shadows dpr={dpr}>
+                  <Suspense fallback={null}>
+                    <Preload all />
+                    <Scene video={video} />
+                  </Suspense>
+                </Canvas>
+              </div>
+              <Loading />
               <Playhead ref={video} />
             </div>
           </Viewport>

@@ -84,13 +84,14 @@ function DreamGlow({
   const presenceRef = useRef(0)
   // The composite video's dream panel, as the screen behind everything
   // (materials/dream-screen.ts).
-  const screen = useMemo(
-    () =>
-      split
-        ? createDreamScreen(null)
-        : createDreamScreen(texture, { panels: PANELS, panel: DREAM_PANEL }),
-    [split, texture]
-  )
+  // Its scheme from the start (see createDreamScreen); later changes
+  // below.
+  const screen = useMemo(() => {
+    const scheme = useStore.getState().colorScheme
+    return split
+      ? createDreamScreen(null, { scheme })
+      : createDreamScreen(texture, { panels: PANELS, panel: DREAM_PANEL, scheme })
+  }, [split, texture])
   const { material } = screen
   useEffect(
     () => () => {

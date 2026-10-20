@@ -116,10 +116,15 @@ function StackScreen({
   // inside this component's render.
   const still = useTexture(`/assets/${items[top].id}/hero.jpg`)
   const texture = loop ?? still
-  const screens = useMemo(
-    () => [createDreamScreen(null, { order: 0 }), createDreamScreen(null, { order: 1 })],
-    []
-  )
+  // Their scheme from the start (see createDreamScreen); later changes
+  // below.
+  const screens = useMemo(() => {
+    const scheme = useStore.getState().colorScheme
+    return [
+      createDreamScreen(null, { order: 0, scheme }),
+      createDreamScreen(null, { order: 1, scheme }),
+    ]
+  }, [])
   const front = useRef(0)
   const opacity = useRef([0, 0])
 

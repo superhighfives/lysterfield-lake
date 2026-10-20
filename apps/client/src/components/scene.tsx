@@ -107,6 +107,9 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	// leaves a stepped-down ratio that the monitor, already at the top,
 	// never raises again.
 	useEffect(() => setDprAuto(dprForFactor(1)), [setDprAuto]);
+	// Mounted once everything it needs has loaded: the loading pile clears
+	// away (components/loading.tsx).
+	useEffect(() => useStore.getState().setSceneLoaded(true), []);
 
 	// These all used to be React state set every frame from useFrame,
 	// re-rendering Scene (and everything under it, including Choose's whole
