@@ -15,7 +15,7 @@ import {
   SpeakerSimpleNone,
   SpeakerSimpleLow,
   SpeakerSimpleHigh,
-  CameraRotate,
+  Crosshair,
 } from '@phosphor-icons/react'
 import Tooltip from '../views/tooltip'
 
@@ -354,8 +354,8 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
             }`}
             onClick={() => setResetInitialRotation(true)}
           >
-            <CameraRotate className="inline" />
-            <span className="font-serif text-lg">Reorient mobile</span>
+            <Crosshair className="inline" />
+            <span className="font-serif text-lg">Recentre the view</span>
           </button>
         </div>
         {/* The dream's name and prompt, at the top under the header (and
