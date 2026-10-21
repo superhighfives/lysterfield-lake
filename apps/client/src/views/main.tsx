@@ -134,10 +134,10 @@ const EMULSION_FULL_SPEED = 30
 // (WATER_PLAY_EASE per second) with the dream.
 const TILT_FULL_SPEED = 6
 const WATER_PLAY_EASE = 4
-// With the phone's tilt as the pointer the avatar holds whole, but a
-// finger on the screen fades it as it nears, as the pointer does on
-// desktop — easing in and back (TOUCH_REVEAL_EASE per second).
-const TOUCH_REVEAL_EASE = 6
+// How much of each wave survives a step on the playing photo: lower than
+// the blank print's (water-sim.ts's DAMPING), so it's as strong but
+// settles in a second or so rather than lingering.
+const WATER_PLAY_DAMPING = 0.97
 
 function Main(
   props: ThreeElements['group'] & {
@@ -266,30 +266,8 @@ function Main(
   useEffect(() => () => water.dispose(), [water])
   const lastPointerPx = useRef(new Vector2(-1, -1))
   const lastPointerUv = useRef(new Vector2(-1, -1))
-  // A finger on the screen (touch).
-  const touching = useRef(false)
-  const touchReveal = useRef(1)
+  // How much the water's over the playing photo (see WATER_PLAY_EASE).
   const waterPlay = useRef(0)
-  const fingerRelative = useRef(new Vector2(1, 1))
-  useEffect(() => {
-    const handleDown = (event: PointerEvent) => {
-      if (event.pointerType !== 'touch') return
-      touching.current = true
-    }
-
-    const handleUp = (event: PointerEvent) => {
-      if (event.pointerType === 'touch') touching.current = false
-    }
-
-    window.addEventListener('pointerdown', handleDown)
-    window.addEventListener('pointerup', handleUp)
-    window.addEventListener('pointercancel', handleUp)
-    return () => {
-      window.removeEventListener('pointerdown', handleDown)
-      window.removeEventListener('pointerup', handleUp)
-      window.removeEventListener('pointercancel', handleUp)
-    }
-  }, [])
   const pointerUv = useRef(new Vector2())
   const avatarFollow = useRef<Group>(null)
   const avatarOffsetRef = useRef(0)
@@ -597,32 +575,16 @@ function Main(
     // too.
     if (avatarMaterial.current) avatarMaterial.current.uFade = avatarFade
 
-    // Full strength for a while after a swap, then back to the pointer.
-    // When the phone's tilt is the pointer, the avatar's held whole (a tilt
-    // hovering about the middle flickered it in and out) unless a finger's
-    // on the screen: then it fades as the finger nears, like a pointer.
+    // Full strength for a while after a swap, then back to the pointer —
+    // on a phone, the tilt's (eased, above, so it no longer flickers the
+    // avatar in and out).
     revealRef.current += delta
-    touchReveal.current = MathUtils.damp(
-      touchReveal.current,
-      touching.current ? 0 : 1,
-      TOUCH_REVEAL_EASE,
-      delta
-    )
-    if (avatarMaterial.current) {
-      const afterSwap = MathUtils.clamp(
+    if (avatarMaterial.current)
+      avatarMaterial.current.uReveal = MathUtils.clamp(
         1 - (revealRef.current - REVEAL_HOLD) / REVEAL_RELEASE,
         0,
         1
       )
-      avatarMaterial.current.uReveal = isMobile
-        ? Math.max(afterSwap, touchReveal.current)
-        : afterSwap
-      if (isMobile && touching.current)
-        avatarMaterial.current.uPointerRelative = fingerRelative.current.set(
-          state.pointer.x + 1,
-          state.pointer.y + 1
-        )
-    }
 
     // The photo's bounds on screen, for the cursor and tap detection.
     const photo = polaroidVisible.current
@@ -689,7 +651,8 @@ function Main(
           state.gl,
           from,
           uv,
-          over ? Math.min(speed / fullSpeed, 1) : 0
+          over ? Math.min(speed / fullSpeed, 1) : 0,
+          blank ? undefined : WATER_PLAY_DAMPING
         )
       } else water.clear(state.gl)
       if (over) lastPointerUv.current.copy(uv)

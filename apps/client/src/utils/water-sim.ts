@@ -48,6 +48,7 @@ const stepShader = /* glsl */ `
   uniform vec2 uTexel;
   uniform vec4 uSegment;
   uniform float uStrength;
+  uniform float uDamping;
 
   void main() {
     vec2 now = texture2D(uPrevious, vUv).rg;
@@ -56,7 +57,7 @@ const stepShader = /* glsl */ `
       texture2D(uPrevious, vUv - vec2(uTexel.x, 0.0)).r +
       texture2D(uPrevious, vUv + vec2(0.0, uTexel.y)).r +
       texture2D(uPrevious, vUv - vec2(0.0, uTexel.y)).r;
-    float next = (2.0 * now.r - now.g + ${WAVE_SPEED.toFixed(2)} * (around - 4.0 * now.r)) * ${DAMPING.toFixed(3)};
+    float next = (2.0 * now.r - now.g + ${WAVE_SPEED.toFixed(2)} * (around - 4.0 * now.r)) * uDamping;
 
     // The pointer pressing into the surface along this frame's path.
     if (uStrength > 0.0) {
@@ -89,6 +90,7 @@ export function createWaterSim() {
       uTexel: { value: new Vector2(1 / SIZE, 1 / SIZE) },
       uSegment: { value: new Vector4() },
       uStrength: { value: 0 },
+      uDamping: { value: DAMPING },
     },
     blending: NoBlending,
     depthTest: false,
@@ -106,9 +108,17 @@ export function createWaterSim() {
     },
     texel: 1 / SIZE,
     /** One step, stirred along `from` -> `to` (photo UV) at `speed` (0-1),
-     *  or left alone (speed 0). */
-    step(gl: WebGLRenderer, from: Vector2, to: Vector2, speed: number) {
+     *  or left alone (speed 0). `damping` (how much of each wave survives
+     *  a step) defaults to the blank print's long, lingering wake. */
+    step(
+      gl: WebGLRenderer,
+      from: Vector2,
+      to: Vector2,
+      speed: number,
+      damping = DAMPING
+    ) {
       const uniforms = material.uniforms
+      uniforms.uDamping.value = damping
       uniforms.uPrevious.value = read.texture
       uniforms.uSegment.value.set(from.x, from.y, to.x, to.y)
       uniforms.uStrength.value = speed * PUSH
