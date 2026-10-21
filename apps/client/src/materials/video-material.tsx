@@ -75,6 +75,9 @@ const uniforms = {
   // photo, red = height, that the print refracts through and catches the
   // light on. Null when there's none.
   uWater: null as Texture | null,
+  // How much the water ripples the developed photo (0-1): on touch, a
+  // finger stirs the playing video as it does the blank print.
+  uWaterPlay: 0,
   // A landing ripple through the photo: xy = origin in UV, z = seconds
   // since it started (negative = none).
   uRipple: new Vector3(0.5, 0.5, -1),
@@ -214,6 +217,11 @@ export const VideoMaterial = shaderMaterial(
     uniform float uReveal;
     uniform float uHash;
     uniform sampler2D uWater;
+    uniform float uWaterPlay;
+    // How far the water bends the playing photo, and how much light its
+    // crests catch.
+    const float WATER_PLAY_REFRACT = 1.4;
+    const float WATER_PLAY_LIGHT = 0.12;
     // One texel of the water's height field (utils/water-sim.ts's SIZE).
     const float WATER_TEXEL = 1.0 / 192.0;
     uniform vec3 uRipple;
@@ -322,6 +330,19 @@ export const VideoMaterial = shaderMaterial(
         st += normalize(fromOrigin + 1e-5) * sin(front * LANDING_FREQUENCY) * ring * decay * LANDING_AMOUNT;
       }
 
+      // Water over the playing photo (touch): its slope bends where the
+      // photo's read from, and its crests catch the light (below).
+      float waterLit = 0.0;
+      if(uWaterPlay > 0.0) {
+        vec2 slope = vec2(
+          texture2D(uWater, vUv + vec2(WATER_TEXEL * 3.0, 0.0)).r - texture2D(uWater, vUv - vec2(WATER_TEXEL * 3.0, 0.0)).r,
+          texture2D(uWater, vUv + vec2(0.0, WATER_TEXEL * 3.0)).r - texture2D(uWater, vUv - vec2(0.0, WATER_TEXEL * 3.0)).r
+        ) / 3.0;
+        st -= slope * WATER_PLAY_REFRACT * uWaterPlay;
+        vec3 surface = normalize(vec3(-slope * 6.0, 1.0));
+        waterLit = (dot(surface, normalize(vec3(-0.45, 0.55, 0.7))) - 0.7) * uWaterPlay;
+      }
+
       float offsetX = 0.0;
       float offsetY = 0.0;
       if(uFrameSelected == 7.0) {
@@ -377,6 +398,7 @@ export const VideoMaterial = shaderMaterial(
         }
         image.rgb = smear / float(SMEAR_TAPS);
       }
+      image.rgb = clamp(image.rgb + waterLit * WATER_PLAY_LIGHT / 0.3, 0.0, 1.0);
 
       vec4 mask = panel(uFrameMask, vec2(localX, st.y - offsetY));
 

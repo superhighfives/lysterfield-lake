@@ -127,6 +127,16 @@ const REVEAL_RELEASE = 1
 // The blank print's water (utils/water-sim.ts): pointer speed (CSS px per
 // frame) for a full-strength stroke.
 const EMULSION_FULL_SPEED = 30
+// On touch the same water runs over the playing photo, for a finger to
+// play in: a touch landing on it drops TOUCH_DROP of a ripple even
+// before it moves, and the water eases in and out (WATER_PLAY_EASE per
+// second) with the dream.
+const TOUCH_DROP = 0.6
+const WATER_PLAY_EASE = 4
+// With the phone's tilt as the pointer the avatar holds whole, but a
+// finger on the screen fades it as it nears, as the pointer does on
+// desktop — easing in and back (TOUCH_REVEAL_EASE per second).
+const TOUCH_REVEAL_EASE = 6
 
 function Main(
   props: ThreeElements['group'] & {
@@ -255,6 +265,32 @@ function Main(
   useEffect(() => () => water.dispose(), [water])
   const lastPointerPx = useRef(new Vector2(-1, -1))
   const lastPointerUv = useRef(new Vector2(-1, -1))
+  // A finger on the screen (touch), and whether it's just landed.
+  const touching = useRef(false)
+  const touchLanded = useRef(false)
+  const touchReveal = useRef(1)
+  const waterPlay = useRef(0)
+  const fingerRelative = useRef(new Vector2(1, 1))
+  useEffect(() => {
+    const handleDown = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') return
+      touching.current = true
+      touchLanded.current = true
+    }
+
+    const handleUp = (event: PointerEvent) => {
+      if (event.pointerType === 'touch') touching.current = false
+    }
+
+    window.addEventListener('pointerdown', handleDown)
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
+    return () => {
+      window.removeEventListener('pointerdown', handleDown)
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
+    }
+  }, [])
   const pointerUv = useRef(new Vector2())
   const avatarFollow = useRef<Group>(null)
   const avatarOffsetRef = useRef(0)
@@ -563,18 +599,31 @@ function Main(
     if (avatarMaterial.current) avatarMaterial.current.uFade = avatarFade
 
     // Full strength for a while after a swap, then back to the pointer.
-    // Always, when the phone's tilt is the pointer: fading the avatar as
-    // the pointer nears it is a hover, and a tilt hovering about the middle
-    // flickered it in and out.
+    // When the phone's tilt is the pointer, the avatar's held whole (a tilt
+    // hovering about the middle flickered it in and out) unless a finger's
+    // on the screen: then it fades as the finger nears, like a pointer.
     revealRef.current += delta
-    if (avatarMaterial.current)
+    touchReveal.current = MathUtils.damp(
+      touchReveal.current,
+      touching.current ? 0 : 1,
+      TOUCH_REVEAL_EASE,
+      delta
+    )
+    if (avatarMaterial.current) {
+      const afterSwap = MathUtils.clamp(
+        1 - (revealRef.current - REVEAL_HOLD) / REVEAL_RELEASE,
+        0,
+        1
+      )
       avatarMaterial.current.uReveal = isMobile
-        ? 1
-        : MathUtils.clamp(
-            1 - (revealRef.current - REVEAL_HOLD) / REVEAL_RELEASE,
-            0,
-            1
-          )
+        ? Math.max(afterSwap, touchReveal.current)
+        : afterSwap
+      if (isMobile && touching.current)
+        avatarMaterial.current.uPointerRelative = fingerRelative.current.set(
+          state.pointer.x + 1,
+          state.pointer.y + 1
+        )
+    }
 
     // The photo's bounds on screen, for the cursor and tap detection.
     const photo = polaroidVisible.current
@@ -619,15 +668,23 @@ function Main(
           : Math.hypot(px - lastPointerPx.current.x, py - lastPointerPx.current.y)
       lastPointerPx.current.set(px, py)
       const blank = (polaroidMaterial.current.uDevelop ?? 1) < 0.3
-      if (blank) {
+      // On touch it runs over the playing photo too (not mid-drag, where
+      // the polaroid's being thrown).
+      const playing = isTouch && !!dream && !resetting && !swapDrag.active
+      waterPlay.current = MathUtils.damp(
+        waterPlay.current,
+        playing && !blank ? 1 : 0,
+        WATER_PLAY_EASE,
+        delta
+      )
+      polaroidMaterial.current.uWaterPlay = blank ? 0 : waterPlay.current
+      if (blank || waterPlay.current > 0.001) {
         const from = lastPointerUv.current.x < 0 ? uv : lastPointerUv.current
-        water.step(
-          state.gl,
-          from,
-          uv,
-          over ? Math.min(speed / EMULSION_FULL_SPEED, 1) : 0
-        )
+        let push = over ? Math.min(speed / EMULSION_FULL_SPEED, 1) : 0
+        if (touchLanded.current && over) push = Math.max(push, TOUCH_DROP)
+        water.step(state.gl, from, uv, push)
       } else water.clear(state.gl)
+      touchLanded.current = false
       if (over) lastPointerUv.current.copy(uv)
       else lastPointerUv.current.set(-1, -1)
       polaroidMaterial.current.uWater = water.texture
