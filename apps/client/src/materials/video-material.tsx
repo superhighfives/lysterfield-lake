@@ -71,6 +71,9 @@ const uniforms = {
   // grey letters, no dream in them; then the dream's tones, then its
   // colour, at 1. Only the lyrics mesh sets this.
   uFillDevelop: 1,
+  // How far the image is drained of colour (0-1): the avatar's, while the
+  // next dream loads.
+  uDesaturate: 0,
   // The blank print's water (utils/water-sim.ts): a height field over the
   // photo, red = height, that the print refracts through and catches the
   // light on. Null when there's none.
@@ -214,6 +217,7 @@ export const VideoMaterial = shaderMaterial(
     const float SPLIT_AMOUNT = 0.15;
     uniform float uDevelop;
     uniform float uFillDevelop;
+    uniform float uDesaturate;
     uniform float uReveal;
     uniform float uHash;
     uniform sampler2D uWater;
@@ -475,6 +479,10 @@ export const VideoMaterial = shaderMaterial(
       }
 
       image = mix(image, white, fadeAmount);
+      if(uDesaturate > 0.0) {
+        float grey = dot(image.rgb, vec3(0.299, 0.587, 0.114));
+        image.rgb = mix(image.rgb, vec3(grey), uDesaturate);
+      }
 
 
       // Developing: a blank milky print, then the tones come up, then the

@@ -27,6 +27,7 @@ import {
   frontReady,
   isSplit,
   playback,
+  shownDream,
   snapCrossfade,
   stepCrossfade,
   warmDream,
@@ -134,6 +135,8 @@ const EMULSION_FULL_SPEED = 30
 // (WATER_PLAY_EASE per second) with the dream.
 const TILT_FULL_SPEED = 6
 const WATER_PLAY_EASE = 4
+// How quickly the avatar greys while a dream loads, and colours back.
+const DESATURATE_EASE = 5
 // How much of each wave survives a step on the playing photo: lower than
 // the blank print's (water-sim.ts's DAMPING), so it's as strong but
 // settles in a second or so rather than lingering.
@@ -268,6 +271,8 @@ function Main(
   const lastPointerUv = useRef(new Vector2(-1, -1))
   // How much the water's over the playing photo (see WATER_PLAY_EASE).
   const waterPlay = useRef(0)
+  // How grey the avatar is (see DESATURATE_EASE).
+  const desaturateRef = useRef(0)
   // A finger on the screen: on touch, the tilt only stirs the water while
   // one's down (pressing or dragging), so it isn't always moving.
   const touching = useRef(false)
@@ -422,6 +427,21 @@ function Main(
       startedRef.current = true
     const starting = !!currentDream && !startedRef.current
     playback.waiting = starting || (!!currentDream && swapPhase !== 'idle')
+    // The avatar drains to grey while the next dream's loading — a swap's
+    // wait, or after one that came back before its video arrived (the
+    // polaroid still showing the last dream) — and colours back once it's
+    // there (DESATURATE_EASE per second).
+    const loadingDream =
+      playback.waiting ||
+      (splitNow && !!currentDream && shownDream() !== currentDream.id)
+    desaturateRef.current = MathUtils.damp(
+      desaturateRef.current,
+      loadingDream ? 1 : 0,
+      DESATURATE_EASE,
+      delta
+    )
+    if (avatarMaterial.current)
+      avatarMaterial.current.uDesaturate = desaturateRef.current
     if (starting) developRef.current = 0
     // Mid-swap the photo's a blank print (uDevelop below), so the next
     // dream can just be there when it develops.
