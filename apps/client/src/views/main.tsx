@@ -268,6 +268,27 @@ function Main(
   const lastPointerUv = useRef(new Vector2(-1, -1))
   // How much the water's over the playing photo (see WATER_PLAY_EASE).
   const waterPlay = useRef(0)
+  // A finger on the screen: on touch, the tilt only stirs the water while
+  // one's down (pressing or dragging), so it isn't always moving.
+  const touching = useRef(false)
+  useEffect(() => {
+    const handleDown = (event: PointerEvent) => {
+      if (event.pointerType === 'touch') touching.current = true
+    }
+
+    const handleUp = (event: PointerEvent) => {
+      if (event.pointerType === 'touch') touching.current = false
+    }
+
+    window.addEventListener('pointerdown', handleDown)
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
+    return () => {
+      window.removeEventListener('pointerdown', handleDown)
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
+    }
+  }, [])
   const pointerUv = useRef(new Vector2())
   const avatarFollow = useRef<Group>(null)
   const avatarOffsetRef = useRef(0)
@@ -635,10 +656,9 @@ function Main(
       lastPointerPx.current.set(px, py)
       const blank = (polaroidMaterial.current.uDevelop ?? 1) < 0.3
       // It runs over the playing photo too, stirred by the mouse or a
-      // phone's tilt — not a finger, which is for swapping — and not
-      // mid-drag, while the polaroid's being thrown.
-      const playing =
-        (isMobile || !isTouch) && !!dream && !resetting && !swapDrag.active
+      // phone's tilt — on a phone only while a finger's down, pressing or
+      // dragging (see touching).
+      const playing = (isMobile || !isTouch) && !!dream && !resetting
       waterPlay.current = MathUtils.damp(
         waterPlay.current,
         playing && !blank ? 1 : 0,
@@ -653,7 +673,9 @@ function Main(
           state.gl,
           from,
           uv,
-          over ? Math.min(speed / fullSpeed, 1) : 0,
+          over && (!isMobile || touching.current)
+            ? Math.min(speed / fullSpeed, 1)
+            : 0,
           blank ? undefined : WATER_PLAY_DAMPING
         )
       } else water.clear(state.gl)

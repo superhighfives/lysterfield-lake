@@ -220,8 +220,8 @@ export const VideoMaterial = shaderMaterial(
     uniform float uWaterPlay;
     // How far the water bends the playing photo, and how much light its
     // crests catch.
-    const float WATER_PLAY_REFRACT = 1.4;
-    const float WATER_PLAY_LIGHT = 0.12;
+    const float WATER_PLAY_REFRACT = 0.7;
+    const float WATER_PLAY_LIGHT = 0.06;
     // One texel of the water's height field (utils/water-sim.ts's SIZE).
     const float WATER_TEXEL = 1.0 / 192.0;
     uniform vec3 uRipple;
