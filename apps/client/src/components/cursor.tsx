@@ -177,7 +177,10 @@ function Cursor() {
       // (it skips past); elsewhere, waiting shows as busy.
       else if (hint?.near || (canSwap() && nearPolaroid(pointer.x, pointer.y)))
         next = 'polaroid'
-      else if (swapPhase !== 'idle' || playback.waiting) next = 'busy'
+      // Not on touch: a busy ring appearing under a finger read as part of
+      // the page, not a cursor (the drag ring still shows when a swap's on
+      // offer, loading or not).
+      else if (fine && (swapPhase !== 'idle' || playback.waiting)) next = 'busy'
       else if (
         hovered?.closest(INTERACTIVE) ||
         document.body.style.cursor === 'pointer'

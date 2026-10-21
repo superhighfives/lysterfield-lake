@@ -46,6 +46,12 @@ const TWIST = 0.3
 // a lower card's photo shows through the one above.
 const LAYER = 0.025
 const TOSS_PX = 80
+// On touch a thumb moves less, so the toss is shorter, and a quick flick
+// (FLICK_VELOCITY px/ms, at least FLICK_MIN_PX, still moving as it lets
+// go) tosses whatever the distance.
+const TOSS_PX_TOUCH = 40
+const FLICK_VELOCITY = 0.4
+const FLICK_MIN_PX = 16
 // Just past the edge of the pile (a card is ~0.37 wide), not off-screen.
 const THROW = 0.62
 const TUCK_MS = 380
@@ -230,9 +236,15 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
   const [order, setOrder] = useState(() => items.map((_, i) => i))
   useEffect(() => setOrder(items.map((_, i) => i)), [items])
   const cards = useRef<(Group | null)[]>([])
-  const drag = useRef<{ startX: number; dx: number; moved: boolean } | null>(
-    null
-  )
+  const drag = useRef<{
+    startX: number
+    dx: number
+    moved: boolean
+    lastX: number
+    lastTime: number
+    velocity: number
+  } | null>(null)
+  const tossPx = () => (useStore.getState().isTouch ? TOSS_PX_TOUCH : TOSS_PX)
   // Whether the last press moved (the click that follows its release
   // isn't one, if so).
   const pressMoved = useRef(false)
@@ -272,16 +284,26 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
   useEffect(() => {
     const handleMove = (event: PointerEvent) => {
       if (!drag.current) return
-      drag.current.dx = event.clientX - drag.current.startX
-      if (Math.abs(drag.current.dx) > CLICK_PX) drag.current.moved = true
+      const current = drag.current
+      current.dx = event.clientX - current.startX
+      if (Math.abs(current.dx) > CLICK_PX) current.moved = true
+      const elapsed = event.timeStamp - current.lastTime
+      if (elapsed > 0) current.velocity = (event.clientX - current.lastX) / elapsed
+      current.lastX = event.clientX
+      current.lastTime = event.timeStamp
     }
 
-    const handleUp = () => {
+    const handleUp = (event: PointerEvent) => {
       const current = drag.current
       drag.current = null
       if (!current) return
       pressMoved.current = current.moved
-      if (Math.abs(current.dx) < TOSS_PX) return
+      const flicked =
+        event.timeStamp - current.lastTime < 100 &&
+        Math.abs(current.velocity) >= FLICK_VELOCITY &&
+        Math.abs(current.dx) >= FLICK_MIN_PX &&
+        Math.sign(current.velocity) === Math.sign(current.dx)
+      if (Math.abs(current.dx) < tossPx() && !flicked) return
       // Under the pile straight away, so the next card's ready to grab;
       // it's shown tossed out beside the pile for a moment, then tucks in.
       const card = top
@@ -315,7 +337,7 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
     // view underneath, and it's the same either way.
     cursorHint.dream = null
     if (dragging && drag.current)
-      cursorHint.progress = Math.min(1, Math.abs(drag.current.dx) / TOSS_PX)
+      cursorHint.progress = Math.min(1, Math.abs(drag.current.dx) / tossPx())
 
     order.forEach((index, depth) => {
       const card = cards.current[index]
@@ -368,7 +390,14 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
           onPointerDown={(event: ThreeEvent<PointerEvent>) => {
             if (i !== top) return
             event.stopPropagation()
-            drag.current = { startX: event.clientX, dx: 0, moved: false }
+            drag.current = {
+              startX: event.clientX,
+              dx: 0,
+              moved: false,
+              lastX: event.clientX,
+              lastTime: event.timeStamp,
+              velocity: 0,
+            }
             pressMoved.current = false
           }}
         >

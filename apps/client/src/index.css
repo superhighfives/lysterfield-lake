@@ -92,6 +92,17 @@ canvas {
   overflow: hidden;
 }
 
+/* Nothing here is for selecting: on iOS a long press otherwise selected
+   the canvas (and its surroundings) in blue and raised the callout menu,
+   mid-drag. The tap highlight goes too — the cursor's ring shows the
+   touch. */
+html {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* The custom cursor (components/cursor.tsx) replaces the native one on
    devices with a precise, hovering pointer. media-chrome's controls set
    their own cursor inside shadow DOM, so it needs its own variable. */
