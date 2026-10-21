@@ -16,8 +16,8 @@ import dreams from '../dreams.json'
 // ahead), while the scene fades in beneath it (routes/root.tsx).
 
 // The most cards the pile holds (a card per asset drei's progress counts),
-// each card's jitter in the pile (px, degrees). The fall in and out are tailwind.config.js's card-drop and
-// card-leave. DROP_STAGGER: the delay between cards that arrive together
+// each card's jitter in the pile (px, degrees). The fall in and out are
+// tailwind.config.js's card-drop and card-leave. DROP_STAGGER: the delay between cards that arrive together
 // (ms), so a batch drops one after another rather than in a lump;
 // LEAVE_STAGGER: the delay between one card leaving and the next, a
 // little looseness in a pile that otherwise falls as one; LEAVE_MS: how

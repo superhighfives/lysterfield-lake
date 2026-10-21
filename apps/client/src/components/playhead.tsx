@@ -115,7 +115,10 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
 
       connectAudio(el)
       // Back up, after the fade out going back to the choose screen (below).
-      fadeInAudio(el, AUDIO_START_FADE_MS)
+      // Not mid-swap: a swap that reloads the video (one that isn't split)
+      // fades back in itself, once the new dream's playing (commitSwap).
+      if (useStore.getState().swapPhase === 'idle')
+        fadeInAudio(el, AUDIO_START_FADE_MS)
 
       let cancelled = false
 
