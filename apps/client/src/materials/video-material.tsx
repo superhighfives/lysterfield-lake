@@ -75,8 +75,8 @@ const uniforms = {
   // photo, red = height, that the print refracts through and catches the
   // light on. Null when there's none.
   uWater: null as Texture | null,
-  // How much the water ripples the developed photo (0-1): on touch, a
-  // finger stirs the playing video as it does the blank print.
+  // How much the water ripples the developed photo (0-1): on a phone, its
+  // tilt stirs the playing video as the pointer does the blank print.
   uWaterPlay: 0,
   // A landing ripple through the photo: xy = origin in UV, z = seconds
   // since it started (negative = none).
@@ -330,7 +330,7 @@ export const VideoMaterial = shaderMaterial(
         st += normalize(fromOrigin + 1e-5) * sin(front * LANDING_FREQUENCY) * ring * decay * LANDING_AMOUNT;
       }
 
-      // Water over the playing photo (touch): its slope bends where the
+      // Water over the playing photo (a phone's tilt): its slope bends where the
       // photo's read from, and its crests catch the light (below).
       float waterLit = 0.0;
       if(uWaterPlay > 0.0) {

@@ -102,7 +102,8 @@ export function useSwapInput() {
       const target = event.target as Element
       if (!target.closest('[data-swap-surface]')) return
       if (target.closest('button, a, input, media-controller')) return
-      if (!canSwap()) return
+      // Taken even when a swap isn't on yet (the polaroid fading or
+      // developing): the drag picks up as soon as it is (see move).
       start = {
         x: event.clientX,
         y: event.clientY,
@@ -118,6 +119,15 @@ export function useSwapInput() {
       // a move with no button held means the press is long over.
       if (event.pointerType === 'mouse' && event.buttons === 0) {
         handlePointerCancel()
+        return
+      }
+
+      // Not swappable yet: the drag's start follows the finger, so it
+      // takes up from here, without a jump, the moment it is.
+      if (!swapDrag.active && !canSwap()) {
+        start.x = event.clientX
+        start.y = event.clientY
+        last = { x: event.clientX, time: event.timeStamp }
         return
       }
 

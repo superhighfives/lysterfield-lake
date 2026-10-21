@@ -35,14 +35,25 @@
         document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
       })()
     </script>
-    <!-- viewport-fit=cover: on iPhone the page fills the screen, behind
-         the status bar and Safari's toolbar, rather than stopping short of
-         them; what's pinned to the edges keeps clear with
-         env(safe-area-inset-*). -->
+    <!-- viewport-fit=cover: on iPhone the page runs on behind Safari's
+         toolbar (and the status bar, launched from the home screen),
+         rather than stopping short; what's pinned to the edges keeps
+         clear with env(safe-area-inset-*). -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
+    <!-- Added to the home screen, it runs full screen, with the status bar
+         drawn over the page (in a Safari tab, iOS keeps its status bar
+         area to itself, tinted to the page, for a page that doesn't
+         scroll). -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="Lysterfield Lake" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

@@ -127,11 +127,12 @@ const REVEAL_RELEASE = 1
 // The blank print's water (utils/water-sim.ts): pointer speed (CSS px per
 // frame) for a full-strength stroke.
 const EMULSION_FULL_SPEED = 30
-// On touch the same water runs over the playing photo, for a finger to
-// play in: a touch landing on it drops TOUCH_DROP of a ripple even
-// before it moves, and the water eases in and out (WATER_PLAY_EASE per
-// second) with the dream.
-const TOUCH_DROP = 0.6
+// With the phone's tilt as the pointer, the same water runs over the
+// playing photo, stirred by tilting (a finger's for swapping): the tilt's
+// pointer moves less than a finger, so its full strength comes at
+// TILT_FULL_SPEED px per frame. The water eases in and out
+// (WATER_PLAY_EASE per second) with the dream.
+const TILT_FULL_SPEED = 6
 const WATER_PLAY_EASE = 4
 // With the phone's tilt as the pointer the avatar holds whole, but a
 // finger on the screen fades it as it nears, as the pointer does on
@@ -265,9 +266,8 @@ function Main(
   useEffect(() => () => water.dispose(), [water])
   const lastPointerPx = useRef(new Vector2(-1, -1))
   const lastPointerUv = useRef(new Vector2(-1, -1))
-  // A finger on the screen (touch), and whether it's just landed.
+  // A finger on the screen (touch).
   const touching = useRef(false)
-  const touchLanded = useRef(false)
   const touchReveal = useRef(1)
   const waterPlay = useRef(0)
   const fingerRelative = useRef(new Vector2(1, 1))
@@ -275,7 +275,6 @@ function Main(
     const handleDown = (event: PointerEvent) => {
       if (event.pointerType !== 'touch') return
       touching.current = true
-      touchLanded.current = true
     }
 
     const handleUp = (event: PointerEvent) => {
@@ -654,8 +653,13 @@ function Main(
     // The blank print's water: stirred where the pointer moves over it,
     // run only while the print's blank (and stilled once it isn't).
     if (polaroidMaterial.current) {
-      const px = ((state.pointer.x + 1) / 2) * state.size.width
-      const py = ((1 - state.pointer.y) / 2) * state.size.height
+      // The tilt's pointer on a phone; the real one otherwise.
+      const px = isMobile
+        ? (tiltPointer.current.x / 2) * state.size.width
+        : ((state.pointer.x + 1) / 2) * state.size.width
+      const py = isMobile
+        ? (1 - tiltPointer.current.y / 2) * state.size.height
+        : ((1 - state.pointer.y) / 2) * state.size.height
       const uv = pointerUv.current.set(
         (px - polaroidRect.left) / (polaroidRect.right - polaroidRect.left),
         (polaroidRect.bottom - py) / (polaroidRect.bottom - polaroidRect.top)
@@ -668,9 +672,9 @@ function Main(
           : Math.hypot(px - lastPointerPx.current.x, py - lastPointerPx.current.y)
       lastPointerPx.current.set(px, py)
       const blank = (polaroidMaterial.current.uDevelop ?? 1) < 0.3
-      // On touch it runs over the playing photo too (not mid-drag, where
-      // the polaroid's being thrown).
-      const playing = isTouch && !!dream && !resetting && !swapDrag.active
+      // With the tilt as the pointer it runs over the playing photo too
+      // (not mid-drag, where the polaroid's being thrown).
+      const playing = isMobile && !!dream && !resetting && !swapDrag.active
       waterPlay.current = MathUtils.damp(
         waterPlay.current,
         playing && !blank ? 1 : 0,
@@ -680,11 +684,14 @@ function Main(
       polaroidMaterial.current.uWaterPlay = blank ? 0 : waterPlay.current
       if (blank || waterPlay.current > 0.001) {
         const from = lastPointerUv.current.x < 0 ? uv : lastPointerUv.current
-        let push = over ? Math.min(speed / EMULSION_FULL_SPEED, 1) : 0
-        if (touchLanded.current && over) push = Math.max(push, TOUCH_DROP)
-        water.step(state.gl, from, uv, push)
+        const fullSpeed = isMobile ? TILT_FULL_SPEED : EMULSION_FULL_SPEED
+        water.step(
+          state.gl,
+          from,
+          uv,
+          over ? Math.min(speed / fullSpeed, 1) : 0
+        )
       } else water.clear(state.gl)
-      touchLanded.current = false
       if (over) lastPointerUv.current.copy(uv)
       else lastPointerUv.current.set(-1, -1)
       polaroidMaterial.current.uWater = water.texture
