@@ -54,6 +54,12 @@ import { useIdle } from '@uidotdev/usehooks'
 // roll-off (see the vertex shader) after the head's outline smeared at
 // realistic tilt angles.
 const DEPTH_STRENGTH = 0.3
+// How quickly the tilt-driven pointer eases toward the phone's tilt (per
+// second): high enough to feel attached, low enough to smooth the
+// sensor's noise.
+const TILT_EASE = 8
+// An angle (radians) wrapped to ±π.
+const wrapAngle = (angle: number) => Math.atan2(Math.sin(angle), Math.cos(angle))
 const DEPTH_SHAPE_RADIUS = 0.12
 const DEPTH_EDGE_RADIUS = 0.04
 // Unsharp-mask amount for the portrait panel. The softness is mostly at
@@ -241,6 +247,10 @@ function Main(
   const startedRef = useRef(false)
   // Seconds since the last swap's arrival started (Infinity = none).
   const revealRef = useRef(Infinity)
+  // The phone's tilt as a pointer (0-2 each way): eased toward the tilt's
+  // own reading.
+  const tiltPointer = useRef(new Vector2(1, 1))
+  const tiltTarget = useRef(new Vector2(1, 1))
   const water = useMemo(() => createWaterSim(), [])
   useEffect(() => () => water.dispose(), [water])
   const lastPointerPx = useRef(new Vector2(-1, -1))
@@ -286,8 +296,18 @@ function Main(
     let pointerY = 0
 
     if (isMobile) {
-      pointerX = MathUtils.clamp(-tilt[1] * 2 + 1.0, 0, 2)
-      pointerY = MathUtils.clamp((tilt[0] / 2) * 2 + 1.0, 0, 2)
+      // The phone's tilt stands in for the pointer. Wrapped to ±π first (an
+      // angle passing ±180° otherwise flipped the pointer from one edge to
+      // the other), then eased (TILT_EASE per second) — the raw readings
+      // are noisy, and jittered the polaroid and everything keyed off the
+      // pointer.
+      const target = tiltTarget.current.set(
+        MathUtils.clamp(-wrapAngle(tilt[1]) * 2 + 1.0, 0, 2),
+        MathUtils.clamp(wrapAngle(tilt[0]) + 1.0, 0, 2)
+      )
+      tiltPointer.current.lerp(target, 1 - Math.exp(-TILT_EASE * delta))
+      pointerX = tiltPointer.current.x
+      pointerY = tiltPointer.current.y
     } else if (!isMobile && !isTouch) {
       pointerX = MathUtils.lerp(pointerX, state.pointer.x + 1.0, 1.0)
       pointerY = MathUtils.lerp(pointerY, state.pointer.y + 1.0, 1.0)
@@ -543,13 +563,18 @@ function Main(
     if (avatarMaterial.current) avatarMaterial.current.uFade = avatarFade
 
     // Full strength for a while after a swap, then back to the pointer.
+    // Always, when the phone's tilt is the pointer: fading the avatar as
+    // the pointer nears it is a hover, and a tilt hovering about the middle
+    // flickered it in and out.
     revealRef.current += delta
     if (avatarMaterial.current)
-      avatarMaterial.current.uReveal = MathUtils.clamp(
-        1 - (revealRef.current - REVEAL_HOLD) / REVEAL_RELEASE,
-        0,
-        1
-      )
+      avatarMaterial.current.uReveal = isMobile
+        ? 1
+        : MathUtils.clamp(
+            1 - (revealRef.current - REVEAL_HOLD) / REVEAL_RELEASE,
+            0,
+            1
+          )
 
     // The photo's bounds on screen, for the cursor and tap detection.
     const photo = polaroidVisible.current

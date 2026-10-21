@@ -7,7 +7,7 @@ import {
 	ScrollControls,
 } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
-import { RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { RefObject, useEffect, useMemo, useRef } from "react";
 import {
 	AmbientLight,
 	MathUtils,
@@ -277,17 +277,25 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 
 	const fakeCamera = new PerspectiveCameraType();
 
-	const [rotation, setRotation] = useState([0, 0, 0]);
+	// The phone's tilt, updated in place: Main reads it each frame. As
+	// React state it re-rendered the whole scene on every sensor reading
+	// (~60 a second), which made the tilt janky.
+	const rotation = useRef([0, 0, 0]);
+	const setRotation = (r: number[] | undefined) => {
+		if (!r) return;
+		rotation.current[0] = r[0];
+		rotation.current[1] = r[1];
+		rotation.current[2] = r[2];
+	};
 
 	const onOrientationChange = (e?: ThreeEvent) => {
 		if (resetInitialRotation) {
 			const r = getRotation(e, [0, 0, 0]);
 			setInitialRotation(r as [number, number, number]);
 			setResetInitialRotation(false);
-			setRotation(r as number[]);
+			setRotation(r);
 		} else {
-			const r = getRotation(e, initialRotation);
-			setRotation(r as number[]);
+			setRotation(getRotation(e, initialRotation));
 		}
 	};
 
@@ -376,7 +384,7 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 					<Main
 						video={video}
 						position={[0, -h * (1.6 + PLAYER_DROP), 0]}
-						tilt={rotation}
+						tilt={rotation.current}
 					/>
 				</Scroll>
 			</ScrollControls>
