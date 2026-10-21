@@ -127,10 +127,10 @@ const REVEAL_RELEASE = 1
 // The blank print's water (utils/water-sim.ts): pointer speed (CSS px per
 // frame) for a full-strength stroke.
 const EMULSION_FULL_SPEED = 30
-// With the phone's tilt as the pointer, the same water runs over the
-// playing photo, stirred by tilting (a finger's for swapping): the tilt's
-// pointer moves less than a finger, so its full strength comes at
-// TILT_FULL_SPEED px per frame. The water eases in and out
+// The same water runs over the playing photo, stirred by the mouse or a
+// phone's tilt (a finger's for swapping): the tilt's pointer moves less
+// than a mouse, so its full strength comes at TILT_FULL_SPEED px per
+// frame. The water eases in and out
 // (WATER_PLAY_EASE per second) with the dream.
 const TILT_FULL_SPEED = 6
 const WATER_PLAY_EASE = 4
@@ -634,9 +634,11 @@ function Main(
           : Math.hypot(px - lastPointerPx.current.x, py - lastPointerPx.current.y)
       lastPointerPx.current.set(px, py)
       const blank = (polaroidMaterial.current.uDevelop ?? 1) < 0.3
-      // With the tilt as the pointer it runs over the playing photo too
-      // (not mid-drag, where the polaroid's being thrown).
-      const playing = isMobile && !!dream && !resetting && !swapDrag.active
+      // It runs over the playing photo too, stirred by the mouse or a
+      // phone's tilt — not a finger, which is for swapping — and not
+      // mid-drag, while the polaroid's being thrown.
+      const playing =
+        (isMobile || !isTouch) && !!dream && !resetting && !swapDrag.active
       waterPlay.current = MathUtils.damp(
         waterPlay.current,
         playing && !blank ? 1 : 0,

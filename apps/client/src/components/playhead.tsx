@@ -39,7 +39,7 @@ import {
   switchDream,
   warmDream,
 } from '../utils/dream-video'
-import { adjacentDream } from '../utils/swap-dream'
+import { adjacentDream, fadeInAudio, fadeOutAudio } from '../utils/swap-dream'
 import { HistoryState, urlFor } from '../utils/use-history-sync'
 
 // If the dream video still isn't ready this long after asking — the first
@@ -47,6 +47,10 @@ import { HistoryState, urlFor } from '../utils/use-history-sync'
 // shows its last frame, or nothing, until the dream catches up), or bring
 // a swapped polaroid back.
 const DREAM_READY_TIMEOUT_MS = 8000
+// The song fades out going back to the choose screen (over about as long as
+// the scene takes to close), and back in as a dream starts.
+const AUDIO_HOME_FADE_MS = 900
+const AUDIO_START_FADE_MS = 400
 // How long a new dream's name and prompt show without hovering.
 const ANNOUNCE_MS = 3000
 
@@ -110,6 +114,8 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       }
 
       connectAudio(el)
+      // Back up, after the fade out going back to the choose screen (below).
+      fadeInAudio(el, AUDIO_START_FADE_MS)
 
       let cancelled = false
 
@@ -245,6 +251,15 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       el.addEventListener('volumechange', handleVolume)
       return () => el.removeEventListener('volumechange', handleVolume)
     }, [ref])
+
+    const resetting = useStore((state) => state.resetting)
+    useEffect(() => {
+      if (!resetting) return
+      fadeOutAudio(
+        (ref as MutableRefObject<HTMLVideoElement>).current,
+        AUDIO_HOME_FADE_MS
+      )
+    }, [resetting, ref])
 
     // The dream videos follow the main video's clock.
     useEffect(() => {

@@ -10,7 +10,7 @@ import {
 } from '@react-three/drei'
 import { animated, useSpring, config } from '@react-spring/three'
 import { useStore } from '../store'
-import Stack from '../components/carousels/stack'
+import Stack, { stackHold } from '../components/carousels/stack'
 import dreams from '../dreams.json'
 
 // Warms suspend-react's cache (the mechanism behind every useTexture call in
@@ -148,7 +148,11 @@ function Choose(props: ThreeElements['group']) {
     // scrolling is locked: scrolling back up mid-song used to drift the
     // player off-screen toward the choose screen. "Back" (or the
     // video ending) clears the dream, which unlocks it.
-    const lock = !!dream && !scrollToPlayer.current && data.offset > 0.98
+    // Held still too while a finger's on the stack's top card (see
+    // stackHold).
+    const lock =
+      (!!dream && !scrollToPlayer.current && data.offset > 0.98) ||
+      stackHold.active
     const overflow = lock ? 'hidden' : 'auto'
     if (data.el.style.overflowY !== overflow) data.el.style.overflowY = overflow
 

@@ -60,17 +60,19 @@ function fadeVolume(
   fadeFrame = requestAnimationFrame(step)
 }
 
-export function fadeOutAudio(el: HTMLVideoElement) {
-  if (fadeGain(0, FADE_OUT_MS)) return
+export function fadeOutAudio(el: HTMLVideoElement, ms = FADE_OUT_MS) {
+  if (fadeGain(0, ms)) return
   restoreVolume ??= el.volume
-  fadeVolume(el, 0, FADE_OUT_MS)
+  fadeVolume(el, 0, ms)
 }
 
 // The volume to come back to is only forgotten once the fade in is done,
 // so a swap that starts mid-fade doesn't take the half-faded level for it.
-function fadeInAudio(el: HTMLVideoElement) {
-  if (fadeGain(1, FADE_IN_MS)) return
-  fadeVolume(el, restoreVolume ?? 1, FADE_IN_MS, () => (restoreVolume = null))
+// Also called as a dream starts (components/playhead.tsx), after the fade
+// out going back to the choose screen.
+export function fadeInAudio(el: HTMLVideoElement, ms = FADE_IN_MS) {
+  if (fadeGain(1, ms)) return
+  fadeVolume(el, restoreVolume ?? 1, ms, () => (restoreVolume = null))
 }
 
 /** Called once the polaroid's photo has faded to blank: loads the next

@@ -6,7 +6,7 @@ import {
   useState,
 } from 'react'
 import { ThreeEvent, useFrame, useThree } from '@react-three/fiber'
-import { useTexture } from '@react-three/drei'
+import { useScroll, useTexture } from '@react-three/drei'
 import { CanvasTexture, Group, Texture, VideoTexture } from 'three'
 import DreamCard from '../dream-card'
 import { cursorHint } from '../../utils/cursor-hint'
@@ -46,6 +46,11 @@ const TWIST = 0.3
 // a lower card's photo shows through the one above.
 const LAYER = 0.025
 const TOSS_PX = 80
+/** A press on the top card in progress: the choose screen holds the page
+ *  still meanwhile (views/choose.tsx), or a sideways swipe drifting a
+ *  little vertical scrolled the page instead, and the browser cancelled
+ *  the drag. */
+export const stackHold = { active: false }
 // On touch a thumb moves less, so the toss is shorter, and a quick flick
 // (FLICK_VELOCITY px/ms, at least FLICK_MIN_PX, still moving as it lets
 // go) tosses whatever the distance.
@@ -253,6 +258,7 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
   const tossed = useRef(new Map<number, number>())
   const dark = useStore((state) => state.colorScheme === 'dark')
   const { size, viewport } = useThree()
+  const scroll = useScroll()
 
   const jitter = useMemo(
     () =>
@@ -293,7 +299,11 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
       current.lastTime = event.timeStamp
     }
 
+    // A cancelled press (the browser taking it for a scroll, say) ends the
+    // same as a release: without it, the card stayed stuck where it was
+    // dragged to.
     const handleUp = (event: PointerEvent) => {
+      stackHold.active = false
       const current = drag.current
       drag.current = null
       if (!current) return
@@ -314,9 +324,11 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
 
     window.addEventListener('pointermove', handleMove)
     window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
     return () => {
       window.removeEventListener('pointermove', handleMove)
       window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
     }
   }, [top])
 
@@ -390,6 +402,10 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
           onPointerDown={(event: ThreeEvent<PointerEvent>) => {
             if (i !== top) return
             event.stopPropagation()
+            stackHold.active = true
+            // Straight away, not next frame: the browser decides whether a
+            // touch is a scroll as it starts.
+            scroll.el.style.overflowY = 'hidden'
             drag.current = {
               startX: event.clientX,
               dx: 0,
