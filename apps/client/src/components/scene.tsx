@@ -173,7 +173,11 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 			if (
 				cameraRef.zoom !== zoom ||
 				offset !== current.lift ||
-				(view?.enabled && view.fullHeight !== height)
+				// Set for the window's size at the time: rotating a phone, or
+				// Safari's toolbar coming and going, changes it, and a stale
+				// offset skews and shifts the whole view.
+				(view?.enabled &&
+					(view.fullHeight !== height || view.fullWidth !== width))
 			) {
 				cameraRef.zoom = zoom;
 				if (current.lift) {

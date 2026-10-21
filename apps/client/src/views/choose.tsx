@@ -45,6 +45,12 @@ const NUDGE_EVERY = 4
 
 const CAROUSEL_REFERENCE_HEIGHT = 900
 const CAROUSEL_MIN_SCALE = 0.6
+// On a tall, narrow screen (a phone upright), the camera zooms out to fit
+// the width but the pile still filled it and ran off the side, its lower
+// cards squeezed out of sight. Below CAROUSEL_NARROW_ASPECT (width over
+// height) it's shrunk with the aspect, down to CAROUSEL_NARROW_MIN.
+const CAROUSEL_NARROW_ASPECT = 0.8
+const CAROUSEL_NARROW_MIN = 0.7
 
 function Choose(props: ThreeElements['group']) {
   const collection = useStore((state) => state.collection)
@@ -98,11 +104,14 @@ function Choose(props: ThreeElements['group']) {
   // Applied to the group around the stack, which lays its cards out in
   // its own local space.
   const canvasHeight = useThree((state) => state.size.height)
-  const carouselScale = MathUtils.clamp(
-    CAROUSEL_REFERENCE_HEIGHT / canvasHeight,
-    CAROUSEL_MIN_SCALE,
-    1
-  )
+  const canvasWidth = useThree((state) => state.size.width)
+  const carouselScale =
+    MathUtils.clamp(CAROUSEL_REFERENCE_HEIGHT / canvasHeight, CAROUSEL_MIN_SCALE, 1) *
+    MathUtils.clamp(
+      canvasWidth / canvasHeight / CAROUSEL_NARROW_ASPECT,
+      CAROUSEL_NARROW_MIN,
+      1
+    )
 
   const data = useScroll()
   // These all used to be React state, recomputed every frame via useFrame —

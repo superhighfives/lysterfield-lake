@@ -15,23 +15,27 @@ import dreams from '../dreams.json'
 // (`sceneLoaded`), the pile falls away together (the top card a touch
 // ahead), while the scene fades in beneath it (routes/root.tsx).
 
-// The assets counted (drei's progress), each card's jitter in the pile
-// (px, degrees). The fall in and out are tailwind.config.js's card-drop and
+// The most cards the pile holds (a card per asset drei's progress counts),
+// each card's jitter in the pile (px, degrees). The fall in and out are tailwind.config.js's card-drop and
 // card-leave. DROP_STAGGER: the delay between cards that arrive together
 // (ms), so a batch drops one after another rather than in a lump;
 // LEAVE_STAGGER: the delay between one card leaving and the next, a
 // little looseness in a pile that otherwise falls as one; LEAVE_MS: how
 // long until the last has gone.
-const TOTAL = 20
+const MAX_CARDS = 20
 const JITTER: [number, number] = [34, 18]
 const TWIST = 16
 const DROP_STAGGER = 70
 const LEAVE_STAGGER = 12
-const LEAVE_MS = 600 + TOTAL * LEAVE_STAGGER
+// How long after a card starts falling its photo starts developing (ms).
+const DEVELOP_AFTER = 400
+const LEAVE_MS = 600 + MAX_CARDS * LEAVE_STAGGER
 
 function Loading() {
-  const { loaded } = useProgress()
-  const count = Math.min(loaded, TOTAL)
+  // Counted against what's actually queued, so it ends on "n of n" (a
+  // fixed 20 stopped at 19).
+  const { loaded, total } = useProgress()
+  const count = Math.min(loaded, MAX_CARDS)
   // Each card's drop delay, fixed when it first appears (changing it
   // mid-fall would restart the fall).
   const dropDelays = useRef<number[]>([])
@@ -81,15 +85,22 @@ function Loading() {
                 } as CSSProperties
               }
             >
-              <div className="w-full h-full bg-[#e7e3dc] dark:bg-[#d9d4cb]">
+              {/* Greyed here rather than on the photo, whose develop
+                  animates its own filter. */}
+              <div
+                className={`w-full h-full bg-[#e7e3dc] dark:bg-[#d9d4cb] transition-[filter] duration-1000 ${
+                  newest ? '' : 'grayscale'
+                }`}
+              >
+                {/* Develops once the card's landed, whether or not the
+                    image was cached (an onLoad fade never showed then). */}
                 <img
                   src={`/assets/${dream.id}/hero.jpg`}
                   alt=""
-                  onLoad={(event) => (event.currentTarget.style.opacity = '1')}
-                  style={{ opacity: 0 }}
-                  className={`w-full h-full object-cover transition-[opacity,filter] duration-1000 ${
-                    newest ? '' : 'grayscale'
-                  }`}
+                  className="w-full h-full object-cover motion-safe:animate-develop"
+                  style={{
+                    animationDelay: `${dropDelays.current[i] + DEVELOP_AFTER}ms`,
+                  }}
                 />
               </div>
             </div>
@@ -101,7 +112,7 @@ function Loading() {
           leaving ? 'opacity-0' : ''
         }`}
       >
-        {count} of {TOTAL}
+        {loaded} of {Math.max(total, loaded)}
       </div>
     </div>
   )

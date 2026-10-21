@@ -62,8 +62,8 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     const isTouch = useStore((state) => state.isTouch)
     const [recalibrateMobile, setRecalibrateMobile] = useState(false)
     // The dream's name and prompt show while the pointer's over the
-    // controls (always on touch, which has no hover), and for a moment
-    // (ANNOUNCE_MS) whenever the dream changes.
+    // controls, and for a moment (ANNOUNCE_MS) whenever the dream changes
+    // — on touch too, where showing it throughout covered the lyrics.
     const [pillHovered, setPillHovered] = useState(false)
     const [announcing, setAnnouncing] = useState(false)
     // Counted from when the swap's done, since it's hidden until then.
@@ -369,7 +369,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
             polaroidPillVisible &&
             dream &&
             !swapping &&
-            (pillHovered || isTouch || announcing)
+            (pillHovered || announcing)
               ? 'opacity-100'
               : 'opacity-0'
           }`}

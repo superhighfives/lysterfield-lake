@@ -58,8 +58,12 @@ const INTERACTIVE =
 const finePointer = () =>
   window.matchMedia('(hover: hover) and (pointer: fine)').matches
 
+// On a touch screen there's no pointer to replace, but the ring still
+// shows while a finger's down: what a tap or drag is over, and a drag's
+// progress and the dream it'll land on. It jumps to each touch rather than
+// trailing in from the last.
 function Cursor() {
-  const [enabled, setEnabled] = useState(finePointer)
+  const [fine, setFine] = useState(finePointer)
   const [mode, setMode] = useState<Mode>('default')
   const [visible, setVisible] = useState(false)
   const [label, setLabel] = useState('')
@@ -78,14 +82,13 @@ function Cursor() {
 
   useEffect(() => {
     const query = window.matchMedia('(hover: hover) and (pointer: fine)')
-    const handleChange = () => setEnabled(query.matches)
+    const handleChange = () => setFine(query.matches)
     query.addEventListener('change', handleChange)
     return () => query.removeEventListener('change', handleChange)
   }, [])
 
   useEffect(() => {
-    document.documentElement.classList.toggle('custom-cursor', enabled)
-    if (!enabled) return
+    document.documentElement.classList.toggle('custom-cursor', fine)
 
     const pointer = { x: -100, y: -100 }
     const ringPos = { x: -100, y: -100 }
@@ -99,9 +102,24 @@ function Cursor() {
     let frame = 0
 
     const handleMove = (event: PointerEvent) => {
+      // A touch only moves while it's down; a mouse on a touch screen
+      // (or a pen hovering) doesn't count.
+      if (!fine && event.pointerType !== 'touch') return
       pointer.x = event.clientX
       pointer.y = event.clientY
       setVisible(true)
+    }
+
+    const handleDown = (event: PointerEvent) => {
+      if (fine || event.pointerType !== 'touch') return
+      pointer.x = ringPos.x = ghostPos.x = last.x = event.clientX
+      pointer.y = ringPos.y = ghostPos.y = last.y = event.clientY
+      hovered = event.target as Element
+      setVisible(true)
+    }
+
+    const handleUp = (event: PointerEvent) => {
+      if (!fine && event.pointerType === 'touch') setVisible(false)
     }
 
     const handleOver = (event: PointerEvent) => {
@@ -218,18 +236,22 @@ function Cursor() {
     frame = requestAnimationFrame(tick)
 
     window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerdown', handleDown)
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
     window.addEventListener('pointerover', handleOver)
     document.documentElement.addEventListener('pointerleave', handleLeave)
     return () => {
       cancelAnimationFrame(frame)
       window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerdown', handleDown)
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
       window.removeEventListener('pointerover', handleOver)
       document.documentElement.removeEventListener('pointerleave', handleLeave)
       document.documentElement.classList.remove('custom-cursor')
     }
-  }, [enabled])
-
-  if (!enabled) return null
+  }, [fine])
 
   const size = RING_SIZE[mode]
 

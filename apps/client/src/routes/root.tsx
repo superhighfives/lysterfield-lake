@@ -32,6 +32,7 @@ function Root() {
   const dream = useStore((state) => state.dream)
   const ready = useStore((state) => state.ready)
   const sceneLoaded = useStore((state) => state.sceneLoaded)
+  const colorScheme = useStore((state) => state.colorScheme)
   const setCollection = useStore((state) => state.setCollection)
   const video = useRef<HTMLVideoElement>(null)
   const videoState = useStore((state) => state.videoState)
@@ -201,11 +202,15 @@ function Root() {
             {/* multiply drops the loop's white background against the
                 light page, but against a dark page it'd take the letters
                 down with it — so dark mode keys the white out to
-                transparency instead (see components/key-white-filter.tsx).
-                Drawn through WebGL so the pointer ripples it like water. */}
+                transparency instead — in the water's shader (iOS Safari
+                ignores SVG filters on a canvas), or with
+                components/key-white-filter.tsx on the plain video without
+                WebGL2. Drawn through WebGL so the pointer ripples it like
+                water. */}
             <WaterVideo
               className="mix-blend-multiply dark:mix-blend-normal"
               mediaClassName="dark:[filter:url(#key-white)]"
+              keyWhite={colorScheme === 'dark'}
               size={512}
               handle={water}
               sources={[

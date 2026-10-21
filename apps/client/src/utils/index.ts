@@ -38,15 +38,19 @@ export const handleDeviceOrientationPermissions = () => {
       deviceOrientationEvent.requestPermission &&
       typeof deviceOrientationEvent.requestPermission === 'function'
     ) {
-      deviceOrientationEvent.requestPermission().then((res) => {
-        if (res === 'granted') {
-          resolve(true)
-        } else {
-          resolve(false)
-        }
-      })
+      deviceOrientationEvent
+        .requestPermission()
+        .then((res) => resolve(res === 'granted'))
+        // Refused outright (not from a tap, say): no tilt.
+        .catch(() => resolve(false))
     } else {
-      resolve(false)
+      // No permission to ask for (Android, and others): the sensor's there
+      // to use if the page can have it at all. Only over HTTPS — on plain
+      // HTTP (a phone on the dev server's network address) browsers
+      // withhold it, iOS included, and the scene falls back to its idle
+      // drift. Root also requires touch, so a desktop with the API but no
+      // sensor isn't taken for a phone.
+      resolve(!!deviceOrientationEvent && window.isSecureContext)
     }
   })
 }
