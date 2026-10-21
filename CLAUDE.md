@@ -72,10 +72,12 @@ or resize either layout without updating both those files to match.
 ## Dream panel (7) must never show a person
 
 Abstract reinterpretation only — shapes, light, and colour, never a
-recognisable person or face. `dream.ts` always appends a fixed
-`NO_PEOPLE_SUFFIX` to every take's prompt so this can't be forgotten
-per-take; don't bypass that by calling the model directly with a raw
-prompt. Both dream takes in `real-15s-60fps` (`dream-styletransfer-v2`,
+recognisable person or face. On the flux-kontext path `dream.ts` always
+appends a fixed `NO_PEOPLE_SUFFIX` to every take's prompt (`dreamFrame`)
+so this can't be forgotten per-take; Deforum takes instead rely on the
+legacy dreams' fixed negative prompt (no people, faces, bodies), which
+always applies on top of any per-take `negativePrompt`. Don't bypass
+either by calling the model directly with a raw prompt. Both dream takes in `real-15s-60fps` (`dream-styletransfer-v2`,
 `dream-styletransfer-v2-fixed`) failed review for exactly this reason — a
 per-take prompt alone wasn't a strong enough guarantee.
 
