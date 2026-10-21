@@ -44,13 +44,27 @@ export const handleDeviceOrientationPermissions = () => {
         // Refused outright (not from a tap, say): no tilt.
         .catch(() => resolve(false))
     } else {
-      // No permission to ask for (Android, and others): the sensor's there
-      // to use if the page can have it at all. Only over HTTPS — on plain
-      // HTTP (a phone on the dev server's network address) browsers
-      // withhold it, iOS included, and the scene falls back to its idle
-      // drift. Root also requires touch, so a desktop with the API but no
-      // sensor isn't taken for a phone.
-      resolve(!!deviceOrientationEvent && window.isSecureContext)
+      // No permission to ask for (Android, and others): trust the sensor
+      // only once it actually reports. A touchscreen laptop (Surface,
+      // Chromebook) has the API and touch but usually no sensor, so it
+      // sends nothing or a single all-null reading. On plain HTTP (a phone
+      // on the dev server's network address) browsers withhold it, iOS
+      // included. Either way the scene falls back to its idle drift.
+      if (!deviceOrientationEvent || !window.isSecureContext) {
+        resolve(false)
+        return
+      }
+
+      const settle = (granted: boolean) => {
+        window.clearTimeout(timeout)
+        window.removeEventListener('deviceorientation', onReading)
+        resolve(granted)
+      }
+
+      const onReading = (event: DeviceOrientationEvent) =>
+        settle(event.beta !== null && event.gamma !== null)
+      const timeout = window.setTimeout(() => settle(false), 500)
+      window.addEventListener('deviceorientation', onReading)
     }
   })
 }
