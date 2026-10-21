@@ -135,6 +135,8 @@ const EMULSION_FULL_SPEED = 30
 // (WATER_PLAY_EASE per second) with the dream.
 const TILT_FULL_SPEED = 6
 const WATER_PLAY_EASE = 4
+// How quickly, on a phone, the avatar fades for a finger and comes back.
+const TOUCH_REVEAL_EASE = 6
 // How quickly the avatar greys while a dream loads, and colours back.
 const DESATURATE_EASE = 5
 // How much of each wave survives a step on the playing photo: lower than
@@ -271,10 +273,15 @@ function Main(
   const lastPointerUv = useRef(new Vector2(-1, -1))
   // How much the water's over the playing photo (see WATER_PLAY_EASE).
   const waterPlay = useRef(0)
+  // The avatar's hold against a finger (see TOUCH_REVEAL_EASE), and the
+  // finger as a pointer (0-2 each way).
+  const touchReveal = useRef(1)
+  const fingerRelative = useRef(new Vector2(1, 1))
   // How grey the avatar is (see DESATURATE_EASE).
   const desaturateRef = useRef(0)
-  // A finger on the screen: on touch, the tilt only stirs the water while
-  // one's down (pressing or dragging), so it isn't always moving.
+  // A finger on the screen: on a phone, the tilt only stirs the water
+  // while one's down (pressing or dragging), so it isn't always moving,
+  // and the avatar fades only for it, not the tilt.
   const touching = useRef(false)
   useEffect(() => {
     const handleDown = (event: PointerEvent) => {
@@ -616,16 +623,32 @@ function Main(
     // too.
     if (avatarMaterial.current) avatarMaterial.current.uFade = avatarFade
 
-    // Full strength for a while after a swap, then back to the pointer —
-    // on a phone, the tilt's (eased, above, so it no longer flickers the
-    // avatar in and out).
+    // Full strength for a while after a swap, then back to the pointer.
+    // With the phone's tilt as the pointer it holds whole whatever the
+    // tilt, and fades only while a finger's on the screen, as the finger
+    // nears it (TOUCH_REVEAL_EASE per second, in and back).
     revealRef.current += delta
-    if (avatarMaterial.current)
-      avatarMaterial.current.uReveal = MathUtils.clamp(
+    touchReveal.current = MathUtils.damp(
+      touchReveal.current,
+      touching.current ? 0 : 1,
+      TOUCH_REVEAL_EASE,
+      delta
+    )
+    if (avatarMaterial.current) {
+      const afterSwap = MathUtils.clamp(
         1 - (revealRef.current - REVEAL_HOLD) / REVEAL_RELEASE,
         0,
         1
       )
+      avatarMaterial.current.uReveal = isMobile
+        ? Math.max(afterSwap, touchReveal.current)
+        : afterSwap
+      if (isMobile && touching.current)
+        avatarMaterial.current.uPointerRelative = fingerRelative.current.set(
+          state.pointer.x + 1,
+          state.pointer.y + 1
+        )
+    }
 
     // The photo's bounds on screen, for the cursor and tap detection.
     const photo = polaroidVisible.current
