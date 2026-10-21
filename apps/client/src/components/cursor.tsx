@@ -47,7 +47,7 @@ const SPEED_PER_STRETCH = 25
 const STRETCH_MAX = 1.2
 const SPEED_EASE = 0.25
 // How far a label under the ring keeps from the window's edges (px): as
-// far as the header's buttons sit from them (routes/root.tsx, right-1).
+// far as the header's buttons sit from them (routes/root.tsx).
 const LABEL_MARGIN = 4
 const ARC_RADIUS = 36
 const ARC_LENGTH = 2 * Math.PI * ARC_RADIUS

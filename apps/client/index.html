@@ -35,7 +35,14 @@
         document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
       })()
     </script>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: on iPhone the page fills the screen, behind
+         the status bar and Safari's toolbar, rather than stopping short of
+         them; what's pinned to the edges keeps clear with
+         env(safe-area-inset-*). -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

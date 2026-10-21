@@ -73,16 +73,17 @@ const PLAYER_SPOT = { light: 5, dark: 1.2 };
 // on below it), centred, and on a short window the controls at the
 // bottom cover the lyrics. So the view lifts to clear them — and, if
 // lifting alone isn't enough, zooms out a little — keeping it under the
-// header (PLAYER_HEADER px). The controls take PLAYER_CONTROLS px (two
-// rows, PLAYER_CONTROLS_STACKED, below the xs breakpoint), plus a gap.
-// PLAYER_FIT_EASE: how quickly (per frame) it settles.
+// header (PLAYER_HEADER px). The controls are measured where they are
+// (components/playhead.tsx, [data-playhead]: lower on touch, two rows when
+// narrow), plus PLAYER_CONTROLS_GAP; PLAYER_CONTROLS is the fallback
+// before they're on the page. PLAYER_FIT_EASE: how quickly (per frame) it
+// settles.
 const PLAYER_TOP = 0.17;
 const PLAYER_BOTTOM = 0.92;
 const PLAYER_HEADER = 64;
 const PLAYER_CONTROLS = 40 + 34 + 16;
-const PLAYER_CONTROLS_STACKED = 40 + 104 + 16;
+const PLAYER_CONTROLS_GAP = 16;
 const PLAYER_FIT_EASE = 0.1;
-const STACKED_QUERY = "(max-width: 399px)";
 
 function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const camera = useRef<PerspectiveCameraType>(null);
@@ -145,8 +146,9 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 			let scale = 1;
 			if (dream && !resetting) {
 				const { width, height } = state.size;
-				const controls = window.matchMedia(STACKED_QUERY).matches
-					? PLAYER_CONTROLS_STACKED
+				const pill = document.querySelector("[data-playhead]");
+				const controls = pill
+					? height - pill.getBoundingClientRect().top + PLAYER_CONTROLS_GAP
 					: PLAYER_CONTROLS;
 				const room = height - PLAYER_HEADER - controls;
 				const span = (PLAYER_BOTTOM - PLAYER_TOP) * base * height;

@@ -358,13 +358,13 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
             <span className="font-serif text-lg">Reorient mobile</span>
           </button>
         </div>
-        {/* The dream's name and prompt, just above the controls, while
-            they're hovered. Fades out as a swap starts, and in again
-            (keyed on the dream) with the new one. Placed above the pill at
-            either of its heights. */}
+        {/* The dream's name and prompt, at the top under the header (and
+            clear of a phone's status bar), while the controls are hovered
+            or for a moment when the dream changes. Fades out as a swap
+            starts, and in again (keyed on the dream) with the new one. */}
         <div
           aria-live="polite"
-          className={`fixed z-10 left-1/2 -translate-x-1/2 bottom-[calc(2.5rem+104px+0.75rem)] xs:bottom-[calc(2.5rem+34px+0.75rem)] flex flex-col items-center text-center pointer-events-none transition-opacity duration-300 ${
+          className={`fixed z-10 left-1/2 -translate-x-1/2 top-[calc(env(safe-area-inset-top)+3rem)] w-[calc(100vw-2rem)] flex flex-col items-center text-center pointer-events-none transition-opacity duration-300 ${
             showPlayhead &&
             polaroidPillVisible &&
             dream &&
@@ -388,7 +388,12 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
           ) : null}
         </div>
         <div
-          className={`fixed z-10 bottom-10 left-1/2 -translate-x-1/2 w-[calc(100vw-4rem)] max-w-[400px] h-[104px] xs:h-[34px] bg-white text-stone-900 dark:bg-stone-900 dark:text-stone-100 border border-yellow-400 rounded-lg xs:rounded-full shadow-xl transition-opacity xs:[--media-control-padding:4px] ${
+          data-playhead
+          className={`fixed z-10 ${
+            isTouch
+              ? 'bottom-[max(0.75rem,env(safe-area-inset-bottom))]'
+              : 'bottom-10'
+          } left-1/2 -translate-x-1/2 w-[calc(100vw-4rem)] max-w-[400px] h-[104px] xs:h-[34px] bg-white text-stone-900 dark:bg-stone-900 dark:text-stone-100 border border-yellow-400 rounded-lg xs:rounded-full shadow-xl transition-opacity xs:[--media-control-padding:4px] ${
             showPlayhead && polaroidPillVisible
               ? ''
               : 'pointer-events-none opacity-0'

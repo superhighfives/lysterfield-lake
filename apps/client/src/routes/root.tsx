@@ -4,6 +4,7 @@ import { Preload } from '@react-three/drei'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import Loading from '../components/loading'
 import Tooltip from '../views/tooltip'
+import { youtubeLink } from '../utils/youtube'
 import Fallback from '../components/fallback'
 import Scene from '../components/scene'
 import Playhead from '../components/playhead'
@@ -33,6 +34,7 @@ function Root() {
   const ready = useStore((state) => state.ready)
   const sceneLoaded = useStore((state) => state.sceneLoaded)
   const colorScheme = useStore((state) => state.colorScheme)
+  const touchDevice = useStore((state) => state.isMobile || state.isTouch)
   const setCollection = useStore((state) => state.setCollection)
   const video = useRef<HTMLVideoElement>(null)
   const videoState = useStore((state) => state.videoState)
@@ -132,7 +134,7 @@ function Root() {
       <Cursor />
       <DebugOverlay />
       {/* Three | one | one: the colour scheme, about, and the song. */}
-      <div className="fixed z-10 top-1 right-1 flex items-center gap-1.5">
+      <div className="fixed z-10 top-[max(0.25rem,env(safe-area-inset-top))] right-[max(0.25rem,env(safe-area-inset-right))] flex items-center gap-1.5">
         <ThemeToggle />
         {divider}
         <a href="/about" className={linkClassName}>
@@ -163,7 +165,7 @@ function Root() {
               </div>
 
               <a
-                href={dream?.link}
+                href={youtubeLink(touchDevice)}
                 className={`bg-yellow-400 shadow-xl px-4 py-1 rounded-full flex items-center text-stone-700 gap-2 text-xs hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-opacity  ${
                   isTooSlow && !seeking
                     ? 'opacity-100'
