@@ -10,7 +10,7 @@ import {
 } from '@react-three/drei'
 import { animated, useSpring, config } from '@react-spring/three'
 import { useStore } from '../store'
-import Stack from '../components/carousels/stack'
+import Stack, { stackHold } from '../components/carousels/stack'
 import dreams from '../dreams.json'
 
 // Warms suspend-react's cache (the mechanism behind every useTexture call in
@@ -45,6 +45,12 @@ const NUDGE_EVERY = 4
 
 const CAROUSEL_REFERENCE_HEIGHT = 900
 const CAROUSEL_MIN_SCALE = 0.6
+// On a tall, narrow screen (a phone upright), the camera zooms out to fit
+// the width but the pile still filled it and ran off the side, its lower
+// cards squeezed out of sight. Below CAROUSEL_NARROW_ASPECT (width over
+// height) it's shrunk with the aspect, down to CAROUSEL_NARROW_MIN.
+const CAROUSEL_NARROW_ASPECT = 0.8
+const CAROUSEL_NARROW_MIN = 0.7
 
 function Choose(props: ThreeElements['group']) {
   const collection = useStore((state) => state.collection)
@@ -79,6 +85,8 @@ function Choose(props: ThreeElements['group']) {
   // height, since on a cold load the dream is set as the scene mounts.
   const scrollToPlayer = useRef(false)
   const nudgeFrame = useRef(0)
+  // Whether the page has reached the player for the dream that's playing.
+  const atPlayer = useRef(false)
   useEffect(() => {
     if (dream) scrollToPlayer.current = true
   }, [dream])
@@ -98,11 +106,14 @@ function Choose(props: ThreeElements['group']) {
   // Applied to the group around the stack, which lays its cards out in
   // its own local space.
   const canvasHeight = useThree((state) => state.size.height)
-  const carouselScale = MathUtils.clamp(
-    CAROUSEL_REFERENCE_HEIGHT / canvasHeight,
-    CAROUSEL_MIN_SCALE,
-    1
-  )
+  const canvasWidth = useThree((state) => state.size.width)
+  const carouselScale =
+    MathUtils.clamp(CAROUSEL_REFERENCE_HEIGHT / canvasHeight, CAROUSEL_MIN_SCALE, 1) *
+    MathUtils.clamp(
+      canvasWidth / canvasHeight / CAROUSEL_NARROW_ASPECT,
+      CAROUSEL_NARROW_MIN,
+      1
+    )
 
   const data = useScroll()
   // These all used to be React state, recomputed every frame via useFrame —
@@ -135,9 +146,13 @@ function Choose(props: ThreeElements['group']) {
   useFrame(() => {
     // Once a dream is playing and the page has arrived at the player,
     // scrolling is locked: scrolling back up mid-song used to drift the
-    // player off-screen toward the choose screen. "Home" (or the
+    // player off-screen toward the choose screen. "Back" (or the
     // video ending) clears the dream, which unlocks it.
-    const lock = !!dream && !scrollToPlayer.current && data.offset > 0.98
+    // Held still too while a finger's on the stack's top card (see
+    // stackHold).
+    const lock =
+      (!!dream && !scrollToPlayer.current && data.offset > 0.98) ||
+      stackHold.active
     const overflow = lock ? 'hidden' : 'auto'
     if (data.el.style.overflowY !== overflow) data.el.style.overflowY = overflow
 
@@ -151,10 +166,23 @@ function Choose(props: ThreeElements['group']) {
     // screen. So while a dream's set and the scene hasn't arrived, nudge
     // the real scroll position (up a couple of pixels, then back to the
     // bottom) every few frames until it does.
+    if (!dream) atPlayer.current = false
     if (dream) {
       const max = data.el.scrollHeight - data.el.clientHeight
       const arrived = data.offset > 0.99
       if (arrived) scrollToPlayer.current = false
+      // Once there, it stays there: a scroll that got in before the lock,
+      // or Safari's toolbar resizing the page, could leave the player
+      // partway off-screen with nothing to bring it back. (Not on the way
+      // home, which scrolls up on purpose.)
+      if (arrived) atPlayer.current = true
+      if (
+        atPlayer.current &&
+        !useStore.getState().resetting &&
+        max > 0 &&
+        data.el.scrollTop < max - 1
+      )
+        data.el.scrollTop = max
       if (!arrived && max > 0 && (scrollToPlayer.current || data.el.scrollTop >= max - 1)) {
         nudgeFrame.current = (nudgeFrame.current + 1) % NUDGE_EVERY
         if (nudgeFrame.current === 0)

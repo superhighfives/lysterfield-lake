@@ -56,6 +56,8 @@ const CROSSFADE_SECONDS = 0.4
 // again, once: a seek can wedge (seeking, its network idle) when it's
 // interrupted before the video has any frames.
 const STUCK_SEEK_MS = 4000
+// How long before a dream video that errored is tried once more.
+const ERROR_RETRY_MS = 600
 
 function createDreamElement() {
   const el = document.createElement('video')
@@ -206,17 +208,31 @@ function load(slot: Slot, dream: Dream, time: number) {
     // A dream that won't load (missing, say) mustn't leave the player
     // waiting on it for good: it settles as failed, and whoever asked for
     // it decides what to show instead.
-    el.addEventListener(
-      'error',
-      () => {
-        if (slot.id !== dream.id) return
-        console.warn(`Dream video for ${dream.id} failed to load`, el.error)
-        slot.failed = true
-        slot.settled = true
-        resolve()
-      },
-      { once: true }
-    )
+    // A decode error can be passing (a phone's decoders all in use for a
+    // moment), so the first gets one more go after ERROR_RETRY_MS; a
+    // second is final.
+    let erred = false
+    const handleError = () => {
+      if (slot.id !== dream.id) return
+      if (!erred) {
+        erred = true
+        console.warn(`Dream video for ${dream.id} failed; trying again`, el.error)
+        window.setTimeout(() => {
+          if (slot.id !== dream.id) return
+          el.addEventListener('error', handleError, { once: true })
+          el.addEventListener('loadedmetadata', settle, { once: true })
+          el.load()
+        }, ERROR_RETRY_MS)
+        return
+      }
+
+      console.warn(`Dream video for ${dream.id} failed to load`, el.error)
+      slot.failed = true
+      slot.settled = true
+      resolve()
+    }
+
+    el.addEventListener('error', handleError, { once: true })
 
     if (el.readyState >= HTMLMediaElement.HAVE_METADATA) settle()
     else el.addEventListener('loadedmetadata', settle, { once: true })

@@ -15,7 +15,7 @@ import {
   SpeakerSimpleNone,
   SpeakerSimpleLow,
   SpeakerSimpleHigh,
-  CameraRotate,
+  Crosshair,
 } from '@phosphor-icons/react'
 import Tooltip from '../views/tooltip'
 
@@ -39,7 +39,7 @@ import {
   switchDream,
   warmDream,
 } from '../utils/dream-video'
-import { adjacentDream } from '../utils/swap-dream'
+import { adjacentDream, fadeInAudio, fadeOutAudio } from '../utils/swap-dream'
 import { HistoryState, urlFor } from '../utils/use-history-sync'
 
 // If the dream video still isn't ready this long after asking — the first
@@ -47,6 +47,10 @@ import { HistoryState, urlFor } from '../utils/use-history-sync'
 // shows its last frame, or nothing, until the dream catches up), or bring
 // a swapped polaroid back.
 const DREAM_READY_TIMEOUT_MS = 8000
+// The song fades out going back to the choose screen (over about as long as
+// the scene takes to close), and back in as a dream starts.
+const AUDIO_HOME_FADE_MS = 900
+const AUDIO_START_FADE_MS = 400
 // How long a new dream's name and prompt show without hovering.
 const ANNOUNCE_MS = 3000
 
@@ -62,8 +66,8 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     const isTouch = useStore((state) => state.isTouch)
     const [recalibrateMobile, setRecalibrateMobile] = useState(false)
     // The dream's name and prompt show while the pointer's over the
-    // controls (always on touch, which has no hover), and for a moment
-    // (ANNOUNCE_MS) whenever the dream changes.
+    // controls, and for a moment (ANNOUNCE_MS) whenever the dream changes
+    // — on touch too, where showing it throughout covered the lyrics.
     const [pillHovered, setPillHovered] = useState(false)
     const [announcing, setAnnouncing] = useState(false)
     // Counted from when the swap's done, since it's hidden until then.
@@ -110,6 +114,11 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       }
 
       connectAudio(el)
+      // Back up, after the fade out going back to the choose screen (below).
+      // Not mid-swap: a swap that reloads the video (one that isn't split)
+      // fades back in itself, once the new dream's playing (commitSwap).
+      if (useStore.getState().swapPhase === 'idle')
+        fadeInAudio(el, AUDIO_START_FADE_MS)
 
       let cancelled = false
 
@@ -246,6 +255,15 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       return () => el.removeEventListener('volumechange', handleVolume)
     }, [ref])
 
+    const resetting = useStore((state) => state.resetting)
+    useEffect(() => {
+      if (!resetting) return
+      fadeOutAudio(
+        (ref as MutableRefObject<HTMLVideoElement>).current,
+        AUDIO_HOME_FADE_MS
+      )
+    }, [resetting, ref])
+
     // The dream videos follow the main video's clock.
     useEffect(() => {
       const el = (ref as MutableRefObject<HTMLVideoElement>).current
@@ -354,22 +372,28 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
             }`}
             onClick={() => setResetInitialRotation(true)}
           >
-            <CameraRotate className="inline" />
-            <span className="font-serif text-lg">Reorient mobile</span>
+            <Crosshair className="inline" />
+            <span className="font-serif text-lg">Recentre the view</span>
           </button>
         </div>
-        {/* The dream's name and prompt, just above the controls, while
-            they're hovered. Fades out as a swap starts, and in again
-            (keyed on the dream) with the new one. Placed above the pill at
-            either of its heights. */}
+        {/* The dream's name and prompt, while the controls are hovered or
+            for a moment when the dream changes: just above the controls
+            (at either of their heights), or on touch at the top, under the
+            header and clear of a phone's status bar, where it isn't over
+            the lyrics. Fades out as a swap starts, and in again (keyed on
+            the dream) with the new one. */}
         <div
           aria-live="polite"
-          className={`fixed z-10 left-1/2 -translate-x-1/2 bottom-[calc(2.5rem+104px+0.75rem)] xs:bottom-[calc(2.5rem+34px+0.75rem)] flex flex-col items-center text-center pointer-events-none transition-opacity duration-300 ${
+          className={`fixed z-10 left-1/2 -translate-x-1/2 ${
+            isTouch
+              ? 'top-[calc(env(safe-area-inset-top)+3rem)]'
+              : 'bottom-[calc(2.5rem+104px+0.75rem)] xs:bottom-[calc(2.5rem+34px+0.75rem)]'
+          } w-[calc(100vw-2rem)] flex flex-col items-center text-center pointer-events-none transition-opacity duration-300 ${
             showPlayhead &&
             polaroidPillVisible &&
             dream &&
             !swapping &&
-            (pillHovered || isTouch || announcing)
+            (pillHovered || announcing)
               ? 'opacity-100'
               : 'opacity-0'
           }`}
@@ -388,7 +412,12 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
           ) : null}
         </div>
         <div
-          className={`fixed z-10 bottom-10 left-1/2 -translate-x-1/2 w-[calc(100vw-4rem)] max-w-[400px] h-[104px] xs:h-[34px] bg-white text-stone-900 dark:bg-stone-900 dark:text-stone-100 border border-yellow-400 rounded-lg xs:rounded-full shadow-xl transition-opacity xs:[--media-control-padding:4px] ${
+          data-playhead
+          className={`fixed z-10 ${
+            isTouch
+              ? 'bottom-[max(0.75rem,env(safe-area-inset-bottom))]'
+              : 'bottom-10'
+          } left-1/2 -translate-x-1/2 w-[calc(100vw-4rem)] max-w-[400px] h-[104px] xs:h-[34px] bg-white text-stone-900 dark:bg-stone-900 dark:text-stone-100 border border-yellow-400 rounded-lg xs:rounded-full shadow-xl transition-opacity xs:[--media-control-padding:4px] ${
             showPlayhead && polaroidPillVisible
               ? ''
               : 'pointer-events-none opacity-0'

@@ -29,6 +29,8 @@ export const polaroidRect = {
 export const swapDrag = {
   active: false,
   dx: 0,
+  /** Where (CSS px) the drag began. */
+  startX: 0,
 }
 
 // How close (CSS pixels) the pointer has to be for the cursor to offer a
@@ -40,6 +42,10 @@ const TAP_DISTANCE = 6
 // polaroid springs back. A quick enough flick swaps from a shorter drag.
 const COMMIT_MIN_PX = 90
 const COMMIT_SHARE_OF_WIDTH = 0.3
+// Started near an edge, there may not be that far to go toward it: then
+// it's EDGE_SHARE of the room that's left that way (at least EDGE_MIN_PX).
+const EDGE_SHARE = 0.7
+const EDGE_MIN_PX = 24
 const FLICK_VELOCITY = 0.6 // px/ms
 const FLICK_MIN_PX = 30
 
@@ -71,7 +77,11 @@ export function canSwap() {
 
 export function commitDistance() {
   const width = polaroidRect.right - polaroidRect.left
-  return Math.max(COMMIT_MIN_PX, width * COMMIT_SHARE_OF_WIDTH)
+  const distance = Math.max(COMMIT_MIN_PX, width * COMMIT_SHARE_OF_WIDTH)
+  if (!swapDrag.active || swapDrag.dx === 0) return distance
+  const room =
+    swapDrag.dx < 0 ? swapDrag.startX : window.innerWidth - swapDrag.startX
+  return Math.min(distance, Math.max(EDGE_MIN_PX, room * EDGE_SHARE))
 }
 
 /** Dragging left tosses this one left and brings in the next. */
@@ -102,7 +112,8 @@ export function useSwapInput() {
       const target = event.target as Element
       if (!target.closest('[data-swap-surface]')) return
       if (target.closest('button, a, input, media-controller')) return
-      if (!canSwap()) return
+      // Taken even when a swap isn't on yet (the polaroid fading or
+      // developing): the drag picks up as soon as it is (see move).
       start = {
         x: event.clientX,
         y: event.clientY,
@@ -121,6 +132,15 @@ export function useSwapInput() {
         return
       }
 
+      // Not swappable yet: the drag's start follows the finger, so it
+      // takes up from here, without a jump, the moment it is.
+      if (!swapDrag.active && !canSwap()) {
+        start.x = event.clientX
+        start.y = event.clientY
+        last = { x: event.clientX, time: event.timeStamp }
+        return
+      }
+
       const dx = event.clientX - start.x
       const dy = event.clientY - start.y
       // Only a mostly-sideways move becomes a drag, so a vertical swipe
@@ -128,6 +148,7 @@ export function useSwapInput() {
       if (!swapDrag.active) {
         if (Math.abs(dx) < TAP_DISTANCE || Math.abs(dx) < Math.abs(dy)) return
         swapDrag.active = true
+        swapDrag.startX = start.x
       }
 
       swapDrag.dx = dx
@@ -150,6 +171,9 @@ export function useSwapInput() {
         return
       }
 
+      // Measured before the drag's over (it allows for the room to the
+      // edge only while one's on).
+      const needed = commitDistance()
       swapDrag.active = false
       const dx = swapDrag.dx
       // A stale velocity (the pointer held still before letting go)
@@ -160,7 +184,7 @@ export function useSwapInput() {
         Math.abs(velocity) >= FLICK_VELOCITY &&
         Math.abs(dx) >= FLICK_MIN_PX &&
         Math.sign(velocity) === Math.sign(dx)
-      if ((Math.abs(dx) >= commitDistance() || flicked) && canSwap()) {
+      if ((Math.abs(dx) >= needed || flicked) && canSwap()) {
         useStore.getState().requestSwap(directionOf(dx))
       }
     }

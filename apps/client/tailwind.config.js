@@ -26,6 +26,9 @@ export default {
         // A loading polaroid falling onto the pile (components/loading.tsx),
         // overshooting a touch as it lands.
         'card-drop': 'card-drop 0.55s cubic-bezier(0.3, 1.35, 0.5, 1) both',
+        // A loading polaroid's photo developing: milky and pale, then the
+        // tones, then the colour.
+        develop: 'develop 1.6s ease-out both',
         // And falling away once the scene's in, gathering speed — the pile
         // keeping its shape, as one.
         'card-leave': 'card-leave 0.6s cubic-bezier(0.5, 0, 0.75, 0.2) both',
@@ -42,6 +45,17 @@ export default {
             transform: 'translate(var(--x), var(--y)) rotate(var(--r))',
             opacity: '1',
           },
+        },
+        develop: {
+          '0%': {
+            opacity: '0',
+            filter: 'brightness(1.7) contrast(0.5) saturate(0) blur(2px)',
+          },
+          '45%': {
+            opacity: '1',
+            filter: 'brightness(1.25) contrast(0.8) saturate(0.2) blur(0.5px)',
+          },
+          '100%': { opacity: '1', filter: 'none' },
         },
         'card-leave': {
           '0%': {

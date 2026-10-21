@@ -6,7 +6,7 @@ import {
   useState,
 } from 'react'
 import { ThreeEvent, useFrame, useThree } from '@react-three/fiber'
-import { useTexture } from '@react-three/drei'
+import { useScroll, useTexture } from '@react-three/drei'
 import { CanvasTexture, Group, Texture, VideoTexture } from 'three'
 import DreamCard from '../dream-card'
 import { cursorHint } from '../../utils/cursor-hint'
@@ -46,6 +46,17 @@ const TWIST = 0.3
 // a lower card's photo shows through the one above.
 const LAYER = 0.025
 const TOSS_PX = 80
+/** A press on the top card in progress: the choose screen holds the page
+ *  still meanwhile (views/choose.tsx), or a sideways swipe drifting a
+ *  little vertical scrolled the page instead, and the browser cancelled
+ *  the drag. */
+export const stackHold = { active: false }
+// On touch a thumb moves less, so the toss is shorter, and a quick flick
+// (FLICK_VELOCITY px/ms, at least FLICK_MIN_PX, still moving as it lets
+// go) tosses whatever the distance.
+const TOSS_PX_TOUCH = 40
+const FLICK_VELOCITY = 0.4
+const FLICK_MIN_PX = 16
 // Just past the edge of the pile (a card is ~0.37 wide), not off-screen.
 const THROW = 0.62
 const TUCK_MS = 380
@@ -230,9 +241,15 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
   const [order, setOrder] = useState(() => items.map((_, i) => i))
   useEffect(() => setOrder(items.map((_, i) => i)), [items])
   const cards = useRef<(Group | null)[]>([])
-  const drag = useRef<{ startX: number; dx: number; moved: boolean } | null>(
-    null
-  )
+  const drag = useRef<{
+    startX: number
+    dx: number
+    moved: boolean
+    lastX: number
+    lastTime: number
+    velocity: number
+  } | null>(null)
+  const tossPx = () => (useStore.getState().isTouch ? TOSS_PX_TOUCH : TOSS_PX)
   // Whether the last press moved (the click that follows its release
   // isn't one, if so).
   const pressMoved = useRef(false)
@@ -241,6 +258,7 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
   const tossed = useRef(new Map<number, number>())
   const dark = useStore((state) => state.colorScheme === 'dark')
   const { size, viewport } = useThree()
+  const scroll = useScroll()
 
   const jitter = useMemo(
     () =>
@@ -272,16 +290,30 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
   useEffect(() => {
     const handleMove = (event: PointerEvent) => {
       if (!drag.current) return
-      drag.current.dx = event.clientX - drag.current.startX
-      if (Math.abs(drag.current.dx) > CLICK_PX) drag.current.moved = true
+      const current = drag.current
+      current.dx = event.clientX - current.startX
+      if (Math.abs(current.dx) > CLICK_PX) current.moved = true
+      const elapsed = event.timeStamp - current.lastTime
+      if (elapsed > 0) current.velocity = (event.clientX - current.lastX) / elapsed
+      current.lastX = event.clientX
+      current.lastTime = event.timeStamp
     }
 
-    const handleUp = () => {
+    // A cancelled press (the browser taking it for a scroll, say) ends the
+    // same as a release: without it, the card stayed stuck where it was
+    // dragged to.
+    const handleUp = (event: PointerEvent) => {
+      stackHold.active = false
       const current = drag.current
       drag.current = null
       if (!current) return
       pressMoved.current = current.moved
-      if (Math.abs(current.dx) < TOSS_PX) return
+      const flicked =
+        event.timeStamp - current.lastTime < 100 &&
+        Math.abs(current.velocity) >= FLICK_VELOCITY &&
+        Math.abs(current.dx) >= FLICK_MIN_PX &&
+        Math.sign(current.velocity) === Math.sign(current.dx)
+      if (Math.abs(current.dx) < tossPx() && !flicked) return
       // Under the pile straight away, so the next card's ready to grab;
       // it's shown tossed out beside the pile for a moment, then tucks in.
       const card = top
@@ -292,16 +324,22 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
 
     window.addEventListener('pointermove', handleMove)
     window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
     return () => {
       window.removeEventListener('pointermove', handleMove)
       window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
     }
   }, [top])
 
   useFrame(() => {
     const pxToWorld = viewport.width / size.width / PILE_SCALE
     const dragging = !!drag.current?.moved
-    screenActive.current = topHovered || dragging
+    // On a touch screen there's no hover to bring it up, so the top card's
+    // dream is always behind the pile while the choose screen's in view
+    // (`presence` fades it with the screen).
+    screenActive.current =
+      topHovered || dragging || useStore.getState().isTouch
     // The stack stays mounted under the player; the hint's only its own
     // while the choose screen's showing.
     cursorHint.active = !useStore.getState().dream
@@ -311,7 +349,7 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
     // view underneath, and it's the same either way.
     cursorHint.dream = null
     if (dragging && drag.current)
-      cursorHint.progress = Math.min(1, Math.abs(drag.current.dx) / TOSS_PX)
+      cursorHint.progress = Math.min(1, Math.abs(drag.current.dx) / tossPx())
 
     order.forEach((index, depth) => {
       const card = cards.current[index]
@@ -364,7 +402,18 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
           onPointerDown={(event: ThreeEvent<PointerEvent>) => {
             if (i !== top) return
             event.stopPropagation()
-            drag.current = { startX: event.clientX, dx: 0, moved: false }
+            stackHold.active = true
+            // Straight away, not next frame: the browser decides whether a
+            // touch is a scroll as it starts.
+            scroll.el.style.overflowY = 'hidden'
+            drag.current = {
+              startX: event.clientX,
+              dx: 0,
+              moved: false,
+              lastX: event.clientX,
+              lastTime: event.timeStamp,
+              velocity: 0,
+            }
             pressMoved.current = false
           }}
         >

@@ -1,12 +1,13 @@
 import {
-  SkipBack,
   YoutubeLogo,
-  CameraRotate,
+  Crosshair,
+  ArrowLeft,
   CaretLeft,
   CaretRight,
 } from '@phosphor-icons/react'
 import { useStore } from '../store'
 import Tooltip from './tooltip'
+import { youtubeLink } from '../utils/youtube'
 
 function Footer() {
   const setResetting = useStore((state) => state.setResetting)
@@ -15,6 +16,11 @@ function Footer() {
   )
   const dream = useStore((state) => state.dream)
   const isMobile = useStore((state) => state.isMobile)
+  const isTouch = useStore((state) => state.isTouch)
+  // On touch, swiping the polaroid swaps dreams and the room's tight, so
+  // the arrows and the YouTube link go (it's still offered while
+  // buffering, in routes/root.tsx).
+  const compact = isMobile || isTouch
   const requestSwap = useStore((state) => state.requestSwap)
 
   return (
@@ -23,9 +29,17 @@ function Footer() {
         onClick={() => setResetting(true)}
         className="xs:rounded-l-full group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 py-2 xs:pl-4 xs:pr-2 xs:py-1"
       >
-        <SkipBack className="w-5 h-5 xs:w-4 xs:h-4" />
-        <Tooltip text="Home" />
+        {/* A plain < on touch; on desktop an arrow, since Previous (a <)
+            sits beside it there. */}
+        {compact ? (
+          <CaretLeft className="w-5 h-5 xs:w-4 xs:h-4" />
+        ) : (
+          <ArrowLeft className="w-5 h-5 xs:w-4 xs:h-4" />
+        )}
+        <Tooltip text="Back" />
       </button>
+      {compact ? null : (
+        <>
       <button
         onClick={() => requestSwap(-1)}
         className="group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 py-2 xs:px-2 xs:py-1"
@@ -40,19 +54,21 @@ function Footer() {
         <CaretRight className="w-5 h-5 xs:w-4 xs:h-4" />
         <Tooltip text="Next" />
       </button>
+        </>
+      )}
       {isMobile ? (
         <button
           onClick={() => setResetInitialRotation(true)}
           className="group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 py-2 xs:px-2 xs:py-1"
         >
-          <CameraRotate className="w-5 h-5 xs:w-4 xs:h-4" />
-          <Tooltip text="Reorient" />
+          <Crosshair className="w-5 h-5 xs:w-4 xs:h-4" />
+          <Tooltip text="Recentre" />
         </button>
       ) : null}
-      {dream ? (
+      {dream && !compact ? (
         <a
           className="group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 py-2 xs:px-2 xs:py-1"
-          href={dream.link}
+          href={youtubeLink(false)}
         >
           <YoutubeLogo className="w-5 h-5 xs:w-4 xs:h-4" />
           <Tooltip text="YouTube" />

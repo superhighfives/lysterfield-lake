@@ -47,7 +47,7 @@ const SPEED_PER_STRETCH = 25
 const STRETCH_MAX = 1.2
 const SPEED_EASE = 0.25
 // How far a label under the ring keeps from the window's edges (px): as
-// far as the header's buttons sit from them (routes/root.tsx, right-1).
+// far as the header's buttons sit from them (routes/root.tsx).
 const LABEL_MARGIN = 4
 const ARC_RADIUS = 36
 const ARC_LENGTH = 2 * Math.PI * ARC_RADIUS
@@ -58,8 +58,12 @@ const INTERACTIVE =
 const finePointer = () =>
   window.matchMedia('(hover: hover) and (pointer: fine)').matches
 
+// On a touch screen there's no pointer to replace, but the ring still
+// shows while a finger's down: what a tap or drag is over, and a drag's
+// progress and the dream it'll land on. It jumps to each touch rather than
+// trailing in from the last.
 function Cursor() {
-  const [enabled, setEnabled] = useState(finePointer)
+  const [fine, setFine] = useState(finePointer)
   const [mode, setMode] = useState<Mode>('default')
   const [visible, setVisible] = useState(false)
   const [label, setLabel] = useState('')
@@ -78,14 +82,13 @@ function Cursor() {
 
   useEffect(() => {
     const query = window.matchMedia('(hover: hover) and (pointer: fine)')
-    const handleChange = () => setEnabled(query.matches)
+    const handleChange = () => setFine(query.matches)
     query.addEventListener('change', handleChange)
     return () => query.removeEventListener('change', handleChange)
   }, [])
 
   useEffect(() => {
-    document.documentElement.classList.toggle('custom-cursor', enabled)
-    if (!enabled) return
+    document.documentElement.classList.toggle('custom-cursor', fine)
 
     const pointer = { x: -100, y: -100 }
     const ringPos = { x: -100, y: -100 }
@@ -99,9 +102,24 @@ function Cursor() {
     let frame = 0
 
     const handleMove = (event: PointerEvent) => {
+      // A touch only moves while it's down; a mouse on a touch screen
+      // (or a pen hovering) doesn't count.
+      if (!fine && event.pointerType !== 'touch') return
       pointer.x = event.clientX
       pointer.y = event.clientY
       setVisible(true)
+    }
+
+    const handleDown = (event: PointerEvent) => {
+      if (fine || event.pointerType !== 'touch') return
+      pointer.x = ringPos.x = ghostPos.x = last.x = event.clientX
+      pointer.y = ringPos.y = ghostPos.y = last.y = event.clientY
+      hovered = event.target as Element
+      setVisible(true)
+    }
+
+    const handleUp = (event: PointerEvent) => {
+      if (!fine && event.pointerType === 'touch') setVisible(false)
     }
 
     const handleOver = (event: PointerEvent) => {
@@ -159,7 +177,10 @@ function Cursor() {
       // (it skips past); elsewhere, waiting shows as busy.
       else if (hint?.near || (canSwap() && nearPolaroid(pointer.x, pointer.y)))
         next = 'polaroid'
-      else if (swapPhase !== 'idle' || playback.waiting) next = 'busy'
+      // Not on touch: a busy ring appearing under a finger read as part of
+      // the page, not a cursor (the drag ring still shows when a swap's on
+      // offer, loading or not).
+      else if (fine && (swapPhase !== 'idle' || playback.waiting)) next = 'busy'
       else if (
         hovered?.closest(INTERACTIVE) ||
         document.body.style.cursor === 'pointer'
@@ -218,20 +239,30 @@ function Cursor() {
     frame = requestAnimationFrame(tick)
 
     window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerdown', handleDown)
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
     window.addEventListener('pointerover', handleOver)
     document.documentElement.addEventListener('pointerleave', handleLeave)
     return () => {
       cancelAnimationFrame(frame)
       window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerdown', handleDown)
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
       window.removeEventListener('pointerover', handleOver)
       document.documentElement.removeEventListener('pointerleave', handleLeave)
       document.documentElement.classList.remove('custom-cursor')
     }
-  }, [enabled])
-
-  if (!enabled) return null
+  }, [fine])
 
   const size = RING_SIZE[mode]
+  // On touch, the ring's labels and the drag's preview go above it, clear
+  // of the finger; under it otherwise.
+  const touch = !fine
+  const labelTop = touch
+    ? -size / 2 - 28
+    : RING_SIZE[mode === 'hover' ? 'hover' : 'busy'] / 2 + 10
 
   return (
     <div
@@ -271,10 +302,11 @@ function Cursor() {
               ? 'opacity-100'
               : 'opacity-0'
           }`}
-          style={{ top: RING_SIZE[mode === 'hover' ? 'hover' : 'busy'] / 2 + 10 }}
+          style={{ top: labelTop }}
         >
           {mode === 'busy' ? 'Loading…' : label}
         </span>
+
 
         {/* Drag progress: fills toward the point where letting go swaps */}
         <svg
@@ -313,7 +345,7 @@ function Cursor() {
           />
           <span
             className="absolute left-1/2 -translate-x-1/2 font-mono text-[10px] uppercase tracking-widest bg-white/80 dark:bg-stone-900/80 rounded-full px-2"
-            style={{ top: size / 2 + 12 }}
+            style={{ top: touch ? -size / 2 - 24 : size / 2 + 12 }}
           >
             drag
           </span>
@@ -331,9 +363,15 @@ function Cursor() {
         {mode === 'drag' && preview ? (
           <div
             ref={card}
-            className={`group absolute top-0 -translate-y-1/2 flex flex-col items-center gap-1 transition-[opacity] ${
-              preview.side === 'right' ? 'left-12' : 'right-12'
+            className={`group absolute flex flex-col items-center gap-1 transition-[opacity] ${
+              touch
+                ? preview.side === 'right'
+                  ? 'left-2'
+                  : 'right-2'
+                : `top-0 -translate-y-1/2 ${preview.side === 'right' ? 'left-12' : 'right-12'}`
             }`}
+            // Touch: above the ring, clear of the finger.
+            style={touch ? { bottom: size / 2 + 12 } : undefined}
           >
             <div
               className="bg-white dark:bg-stone-800 p-1 pb-3 shadow-lg transition-transform duration-200 group-data-[ready=true]:ring-2 group-data-[ready=true]:ring-yellow-400"

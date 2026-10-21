@@ -51,6 +51,15 @@ out vec4 color;
 uniform sampler2D uVideo;
 // xy = position (UV), z = age (s), w = strength
 uniform vec4 uDrops[${MAX_DROPS}];
+// 1 = key the video's white background out to transparency (dark mode).
+// The same as components/key-white-filter.tsx's SVG filter, done here
+// because iOS Safari doesn't apply SVG filters to a canvas: coverage from
+// inverted brightness, choked by a texel, and the white un-mixed from
+// anti-aliased edges.
+uniform float uKeyWhite;
+float coverage(vec3 c) {
+  return clamp(4.0 * (2.88 - (c.r + c.g + c.b)), 0.0, 1.0);
+}
 void main() {
   vec2 offset = vec2(0.0);
   float shade = 0.0;
@@ -68,7 +77,24 @@ void main() {
     offset += normalize(away + 1e-5) * wave * ${AMOUNT.toFixed(4)};
     shade += wave;
   }
-  color = texture(uVideo, vUv + offset);
+  vec2 uv = vUv + offset;
+  color = texture(uVideo, uv);
+  if (uKeyWhite > 0.5) {
+    vec2 texel = 1.0 / vec2(textureSize(uVideo, 0));
+    float alpha = min(
+      coverage(color.rgb),
+      min(
+        min(coverage(texture(uVideo, uv + vec2(texel.x, 0.0)).rgb),
+            coverage(texture(uVideo, uv - vec2(texel.x, 0.0)).rgb)),
+        min(coverage(texture(uVideo, uv + vec2(0.0, texel.y)).rgb),
+            coverage(texture(uVideo, uv - vec2(0.0, texel.y)).rgb))
+      )
+    );
+    // The letter's premultiplied colour is pixel + coverage - 1; the canvas
+    // isn't premultiplied, so divided back out.
+    vec3 letter = clamp(color.rgb + alpha - 1.0, 0.0, 1.0);
+    color = vec4(alpha > 0.0 ? letter / alpha : vec3(0.0), alpha);
+  }
   // Light and shadow on the water, out to just short of the square's
   // edge so it never shows as a box.
   float edge = smoothstep(0.5, 0.32, length(vUv - 0.5));
@@ -94,20 +120,26 @@ const reducedMotion = () =>
 function WaterVideo({
   className,
   mediaClassName,
+  keyWhite = false,
   size = 512,
   sources,
   handle,
 }: {
   /** On the wrapper: the blend with the page. */
   className?: string
-  /** On the canvas (and the fallback video): filters, like dark mode's key. */
+  /** On the fallback video (no WebGL2): filters, like dark mode's key. */
   mediaClassName?: string
+  /** Key the video's white background out (dark mode), in the shader. */
+  keyWhite?: boolean
   size?: number
   sources: { src: string; type: string }[]
   handle?: MutableRefObject<WaterHandle | null>
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const video = useRef<HTMLVideoElement>(null)
+  // Read each frame, so a scheme change doesn't rebuild the GL setup.
+  const keyWhiteRef = useRef(keyWhite)
+  keyWhiteRef.current = keyWhite
   const [diving, setDiving] = useState(false)
 
   useEffect(() => {
@@ -158,6 +190,7 @@ function WaterVideo({
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
     const dropsLocation = gl.getUniformLocation(program, 'uDrops')
+    const keyLocation = gl.getUniformLocation(program, 'uKeyWhite')
     const dropData = new Float32Array(MAX_DROPS * 4)
 
     const drops: Drop[] = []
@@ -223,6 +256,7 @@ function WaterVideo({
         )
       })
       gl.uniform4fv(dropsLocation, dropData)
+      gl.uniform1f(keyLocation, keyWhiteRef.current ? 1 : 0)
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     }
 
@@ -251,10 +285,15 @@ function WaterVideo({
         className={`transition-[filter] ease-in ${diving ? 'blur-md' : ''}`}
         style={{ transitionDuration: `${DIVE_MS}ms` }}
       >
+        {/* At most the screen's width (less a margin), staying square. */}
         <canvas
           ref={canvas}
-          className={mediaClassName}
-          style={{ width: size, height: size }}
+          style={{
+            width: size,
+            maxWidth: 'calc(100vw - 2rem)',
+            aspectRatio: '1',
+            height: 'auto',
+          }}
         />
       </div>
       {/* The source: transparent and out of the layout, unless WebGL2
@@ -268,6 +307,8 @@ function WaterVideo({
           top: 0,
           opacity: 0,
           pointerEvents: 'none',
+          maxWidth: 'calc(100vw - 2rem)',
+          height: 'auto',
         }}
         width={size}
         height={size}

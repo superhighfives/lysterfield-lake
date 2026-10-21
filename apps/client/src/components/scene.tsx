@@ -7,7 +7,7 @@ import {
 	ScrollControls,
 } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
-import { RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { RefObject, useEffect, useMemo, useRef } from "react";
 import {
 	AmbientLight,
 	MathUtils,
@@ -73,16 +73,17 @@ const PLAYER_SPOT = { light: 5, dark: 1.2 };
 // on below it), centred, and on a short window the controls at the
 // bottom cover the lyrics. So the view lifts to clear them — and, if
 // lifting alone isn't enough, zooms out a little — keeping it under the
-// header (PLAYER_HEADER px). The controls take PLAYER_CONTROLS px (two
-// rows, PLAYER_CONTROLS_STACKED, below the xs breakpoint), plus a gap.
-// PLAYER_FIT_EASE: how quickly (per frame) it settles.
+// header (PLAYER_HEADER px). The controls are measured where they are
+// (components/playhead.tsx, [data-playhead]: lower on touch, two rows when
+// narrow), plus PLAYER_CONTROLS_GAP; PLAYER_CONTROLS is the fallback
+// before they're on the page. PLAYER_FIT_EASE: how quickly (per frame) it
+// settles.
 const PLAYER_TOP = 0.17;
 const PLAYER_BOTTOM = 0.92;
 const PLAYER_HEADER = 64;
 const PLAYER_CONTROLS = 40 + 34 + 16;
-const PLAYER_CONTROLS_STACKED = 40 + 104 + 16;
+const PLAYER_CONTROLS_GAP = 16;
 const PLAYER_FIT_EASE = 0.1;
-const STACKED_QUERY = "(max-width: 399px)";
 
 function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const camera = useRef<PerspectiveCameraType>(null);
@@ -145,8 +146,9 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 			let scale = 1;
 			if (dream && !resetting) {
 				const { width, height } = state.size;
-				const controls = window.matchMedia(STACKED_QUERY).matches
-					? PLAYER_CONTROLS_STACKED
+				const pill = document.querySelector("[data-playhead]");
+				const controls = pill
+					? height - pill.getBoundingClientRect().top + PLAYER_CONTROLS_GAP
 					: PLAYER_CONTROLS;
 				const room = height - PLAYER_HEADER - controls;
 				const span = (PLAYER_BOTTOM - PLAYER_TOP) * base * height;
@@ -173,7 +175,11 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 			if (
 				cameraRef.zoom !== zoom ||
 				offset !== current.lift ||
-				(view?.enabled && view.fullHeight !== height)
+				// Set for the window's size at the time: rotating a phone, or
+				// Safari's toolbar coming and going, changes it, and a stale
+				// offset skews and shifts the whole view.
+				(view?.enabled &&
+					(view.fullHeight !== height || view.fullWidth !== width))
 			) {
 				cameraRef.zoom = zoom;
 				if (current.lift) {
@@ -273,17 +279,25 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 
 	const fakeCamera = new PerspectiveCameraType();
 
-	const [rotation, setRotation] = useState([0, 0, 0]);
+	// The phone's tilt, updated in place: Main reads it each frame. As
+	// React state it re-rendered the whole scene on every sensor reading
+	// (~60 a second), which made the tilt janky.
+	const rotation = useRef([0, 0, 0]);
+	const setRotation = (r: number[] | undefined) => {
+		if (!r) return;
+		rotation.current[0] = r[0];
+		rotation.current[1] = r[1];
+		rotation.current[2] = r[2];
+	};
 
 	const onOrientationChange = (e?: ThreeEvent) => {
 		if (resetInitialRotation) {
 			const r = getRotation(e, [0, 0, 0]);
 			setInitialRotation(r as [number, number, number]);
 			setResetInitialRotation(false);
-			setRotation(r as number[]);
+			setRotation(r);
 		} else {
-			const r = getRotation(e, initialRotation);
-			setRotation(r as number[]);
+			setRotation(getRotation(e, initialRotation));
 		}
 	};
 
@@ -372,7 +386,7 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 					<Main
 						video={video}
 						position={[0, -h * (1.6 + PLAYER_DROP), 0]}
-						tilt={rotation}
+						tilt={rotation.current}
 					/>
 				</Scroll>
 			</ScrollControls>

@@ -27,6 +27,7 @@ import {
   frontReady,
   isSplit,
   playback,
+  shownDream,
   snapCrossfade,
   stepCrossfade,
   warmDream,
@@ -54,6 +55,12 @@ import { useIdle } from '@uidotdev/usehooks'
 // roll-off (see the vertex shader) after the head's outline smeared at
 // realistic tilt angles.
 const DEPTH_STRENGTH = 0.3
+// How quickly the tilt-driven pointer eases toward the phone's tilt (per
+// second): high enough to feel attached, low enough to smooth the
+// sensor's noise.
+const TILT_EASE = 8
+// An angle (radians) wrapped to ±π.
+const wrapAngle = (angle: number) => Math.atan2(Math.sin(angle), Math.cos(angle))
 const DEPTH_SHAPE_RADIUS = 0.12
 const DEPTH_EDGE_RADIUS = 0.04
 // Unsharp-mask amount for the portrait panel. The softness is mostly at
@@ -121,6 +128,21 @@ const REVEAL_RELEASE = 1
 // The blank print's water (utils/water-sim.ts): pointer speed (CSS px per
 // frame) for a full-strength stroke.
 const EMULSION_FULL_SPEED = 30
+// The same water runs over the playing photo, stirred by the mouse or a
+// phone's tilt (a finger's for swapping): the tilt's pointer moves less
+// than a mouse, so its full strength comes at TILT_FULL_SPEED px per
+// frame. The water eases in and out
+// (WATER_PLAY_EASE per second) with the dream.
+const TILT_FULL_SPEED = 6
+const WATER_PLAY_EASE = 4
+// How quickly, on a phone, the avatar fades for a finger and comes back.
+const TOUCH_REVEAL_EASE = 6
+// How quickly the avatar greys while a dream loads, and colours back.
+const DESATURATE_EASE = 5
+// How much of each wave survives a step on the playing photo: lower than
+// the blank print's (water-sim.ts's DAMPING), so it's as strong but
+// settles in a second or so rather than lingering.
+const WATER_PLAY_DAMPING = 0.97
 
 function Main(
   props: ThreeElements['group'] & {
@@ -241,10 +263,44 @@ function Main(
   const startedRef = useRef(false)
   // Seconds since the last swap's arrival started (Infinity = none).
   const revealRef = useRef(Infinity)
+  // The phone's tilt as a pointer (0-2 each way): eased toward the tilt's
+  // own reading.
+  const tiltPointer = useRef(new Vector2(1, 1))
+  const tiltTarget = useRef(new Vector2(1, 1))
   const water = useMemo(() => createWaterSim(), [])
   useEffect(() => () => water.dispose(), [water])
   const lastPointerPx = useRef(new Vector2(-1, -1))
   const lastPointerUv = useRef(new Vector2(-1, -1))
+  // How much the water's over the playing photo (see WATER_PLAY_EASE).
+  const waterPlay = useRef(0)
+  // The avatar's hold against a finger (see TOUCH_REVEAL_EASE), and the
+  // finger as a pointer (0-2 each way).
+  const touchReveal = useRef(1)
+  const fingerRelative = useRef(new Vector2(1, 1))
+  // How grey the avatar is (see DESATURATE_EASE).
+  const desaturateRef = useRef(0)
+  // A finger on the screen: on a phone, the tilt only stirs the water
+  // while one's down (pressing or dragging), so it isn't always moving,
+  // and the avatar fades only for it, not the tilt.
+  const touching = useRef(false)
+  useEffect(() => {
+    const handleDown = (event: PointerEvent) => {
+      if (event.pointerType === 'touch') touching.current = true
+    }
+
+    const handleUp = (event: PointerEvent) => {
+      if (event.pointerType === 'touch') touching.current = false
+    }
+
+    window.addEventListener('pointerdown', handleDown)
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
+    return () => {
+      window.removeEventListener('pointerdown', handleDown)
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
+    }
+  }, [])
   const pointerUv = useRef(new Vector2())
   const avatarFollow = useRef<Group>(null)
   const avatarOffsetRef = useRef(0)
@@ -286,8 +342,18 @@ function Main(
     let pointerY = 0
 
     if (isMobile) {
-      pointerX = MathUtils.clamp(-tilt[1] * 2 + 1.0, 0, 2)
-      pointerY = MathUtils.clamp((tilt[0] / 2) * 2 + 1.0, 0, 2)
+      // The phone's tilt stands in for the pointer. Wrapped to ±π first (an
+      // angle passing ±180° otherwise flipped the pointer from one edge to
+      // the other), then eased (TILT_EASE per second) — the raw readings
+      // are noisy, and jittered the polaroid and everything keyed off the
+      // pointer.
+      const target = tiltTarget.current.set(
+        MathUtils.clamp(-wrapAngle(tilt[1]) * 2 + 1.0, 0, 2),
+        MathUtils.clamp(wrapAngle(tilt[0]) + 1.0, 0, 2)
+      )
+      tiltPointer.current.lerp(target, 1 - Math.exp(-TILT_EASE * delta))
+      pointerX = tiltPointer.current.x
+      pointerY = tiltPointer.current.y
     } else if (!isMobile && !isTouch) {
       pointerX = MathUtils.lerp(pointerX, state.pointer.x + 1.0, 1.0)
       pointerY = MathUtils.lerp(pointerY, state.pointer.y + 1.0, 1.0)
@@ -368,6 +434,21 @@ function Main(
       startedRef.current = true
     const starting = !!currentDream && !startedRef.current
     playback.waiting = starting || (!!currentDream && swapPhase !== 'idle')
+    // The avatar drains to grey while the next dream's loading — a swap's
+    // wait, or after one that came back before its video arrived (the
+    // polaroid still showing the last dream) — and colours back once it's
+    // there (DESATURATE_EASE per second).
+    const loadingDream =
+      playback.waiting ||
+      (splitNow && !!currentDream && shownDream() !== currentDream.id)
+    desaturateRef.current = MathUtils.damp(
+      desaturateRef.current,
+      loadingDream ? 1 : 0,
+      DESATURATE_EASE,
+      delta
+    )
+    if (avatarMaterial.current)
+      avatarMaterial.current.uDesaturate = desaturateRef.current
     if (starting) developRef.current = 0
     // Mid-swap the photo's a blank print (uDevelop below), so the next
     // dream can just be there when it develops.
@@ -543,13 +624,31 @@ function Main(
     if (avatarMaterial.current) avatarMaterial.current.uFade = avatarFade
 
     // Full strength for a while after a swap, then back to the pointer.
+    // With the phone's tilt as the pointer it holds whole whatever the
+    // tilt, and fades only while a finger's on the screen, as the finger
+    // nears it (TOUCH_REVEAL_EASE per second, in and back).
     revealRef.current += delta
-    if (avatarMaterial.current)
-      avatarMaterial.current.uReveal = MathUtils.clamp(
+    touchReveal.current = MathUtils.damp(
+      touchReveal.current,
+      touching.current ? 0 : 1,
+      TOUCH_REVEAL_EASE,
+      delta
+    )
+    if (avatarMaterial.current) {
+      const afterSwap = MathUtils.clamp(
         1 - (revealRef.current - REVEAL_HOLD) / REVEAL_RELEASE,
         0,
         1
       )
+      avatarMaterial.current.uReveal = isMobile
+        ? Math.max(afterSwap, touchReveal.current)
+        : afterSwap
+      if (isMobile && touching.current)
+        avatarMaterial.current.uPointerRelative = fingerRelative.current.set(
+          state.pointer.x + 1,
+          state.pointer.y + 1
+        )
+    }
 
     // The photo's bounds on screen, for the cursor and tap detection.
     const photo = polaroidVisible.current
@@ -580,8 +679,13 @@ function Main(
     // The blank print's water: stirred where the pointer moves over it,
     // run only while the print's blank (and stilled once it isn't).
     if (polaroidMaterial.current) {
-      const px = ((state.pointer.x + 1) / 2) * state.size.width
-      const py = ((1 - state.pointer.y) / 2) * state.size.height
+      // The tilt's pointer on a phone; the real one otherwise.
+      const px = isMobile
+        ? (tiltPointer.current.x / 2) * state.size.width
+        : ((state.pointer.x + 1) / 2) * state.size.width
+      const py = isMobile
+        ? (1 - tiltPointer.current.y / 2) * state.size.height
+        : ((1 - state.pointer.y) / 2) * state.size.height
       const uv = pointerUv.current.set(
         (px - polaroidRect.left) / (polaroidRect.right - polaroidRect.left),
         (polaroidRect.bottom - py) / (polaroidRect.bottom - polaroidRect.top)
@@ -594,13 +698,28 @@ function Main(
           : Math.hypot(px - lastPointerPx.current.x, py - lastPointerPx.current.y)
       lastPointerPx.current.set(px, py)
       const blank = (polaroidMaterial.current.uDevelop ?? 1) < 0.3
-      if (blank) {
+      // It runs over the playing photo too, stirred by the mouse or a
+      // phone's tilt — on a phone only while a finger's down, pressing or
+      // dragging (see touching).
+      const playing = (isMobile || !isTouch) && !!dream && !resetting
+      waterPlay.current = MathUtils.damp(
+        waterPlay.current,
+        playing && !blank ? 1 : 0,
+        WATER_PLAY_EASE,
+        delta
+      )
+      polaroidMaterial.current.uWaterPlay = blank ? 0 : waterPlay.current
+      if (blank || waterPlay.current > 0.001) {
         const from = lastPointerUv.current.x < 0 ? uv : lastPointerUv.current
+        const fullSpeed = isMobile ? TILT_FULL_SPEED : EMULSION_FULL_SPEED
         water.step(
           state.gl,
           from,
           uv,
-          over ? Math.min(speed / EMULSION_FULL_SPEED, 1) : 0
+          over && (!isMobile || touching.current)
+            ? Math.min(speed / fullSpeed, 1)
+            : 0,
+          blank ? undefined : WATER_PLAY_DAMPING
         )
       } else water.clear(state.gl)
       if (over) lastPointerUv.current.copy(uv)
