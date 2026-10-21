@@ -85,6 +85,8 @@ function Choose(props: ThreeElements['group']) {
   // height, since on a cold load the dream is set as the scene mounts.
   const scrollToPlayer = useRef(false)
   const nudgeFrame = useRef(0)
+  // Whether the page has reached the player for the dream that's playing.
+  const atPlayer = useRef(false)
   useEffect(() => {
     if (dream) scrollToPlayer.current = true
   }, [dream])
@@ -160,10 +162,23 @@ function Choose(props: ThreeElements['group']) {
     // screen. So while a dream's set and the scene hasn't arrived, nudge
     // the real scroll position (up a couple of pixels, then back to the
     // bottom) every few frames until it does.
+    if (!dream) atPlayer.current = false
     if (dream) {
       const max = data.el.scrollHeight - data.el.clientHeight
       const arrived = data.offset > 0.99
       if (arrived) scrollToPlayer.current = false
+      // Once there, it stays there: a scroll that got in before the lock,
+      // or Safari's toolbar resizing the page, could leave the player
+      // partway off-screen with nothing to bring it back. (Not on the way
+      // home, which scrolls up on purpose.)
+      if (arrived) atPlayer.current = true
+      if (
+        atPlayer.current &&
+        !useStore.getState().resetting &&
+        max > 0 &&
+        data.el.scrollTop < max - 1
+      )
+        data.el.scrollTop = max
       if (!arrived && max > 0 && (scrollToPlayer.current || data.el.scrollTop >= max - 1)) {
         nudgeFrame.current = (nudgeFrame.current + 1) % NUDGE_EVERY
         if (nudgeFrame.current === 0)

@@ -301,7 +301,11 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
   useFrame(() => {
     const pxToWorld = viewport.width / size.width / PILE_SCALE
     const dragging = !!drag.current?.moved
-    screenActive.current = topHovered || dragging
+    // On a touch screen there's no hover to bring it up, so the top card's
+    // dream is always behind the pile while the choose screen's in view
+    // (`presence` fades it with the screen).
+    screenActive.current =
+      topHovered || dragging || useStore.getState().isTouch
     // The stack stays mounted under the player; the hint's only its own
     // while the choose screen's showing.
     cursorHint.active = !useStore.getState().dream

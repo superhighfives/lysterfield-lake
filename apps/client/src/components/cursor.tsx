@@ -51,6 +51,12 @@ const SPEED_EASE = 0.25
 const LABEL_MARGIN = 4
 const ARC_RADIUS = 36
 const ARC_LENGTH = 2 * Math.PI * ARC_RADIUS
+// On touch the ring's a half ring arching over the fingertip, far enough
+// out to clear it, so it isn't hidden under the finger; its labels and the
+// drag's preview sit above it.
+const TOUCH_RADIUS = 56
+const TOUCH_ARC = `M ${-TOUCH_RADIUS} 0 A ${TOUCH_RADIUS} ${TOUCH_RADIUS} 0 0 1 ${TOUCH_RADIUS} 0`
+const TOUCH_ARC_LENGTH = Math.PI * TOUCH_RADIUS
 
 const INTERACTIVE =
   'a, button, input, label, [role="radio"], media-time-range, media-play-button, media-mute-button'
@@ -77,6 +83,7 @@ function Cursor() {
   const ghost = useRef<HTMLDivElement>(null)
   const ring = useRef<HTMLDivElement>(null)
   const arc = useRef<SVGCircleElement>(null)
+  const touchArc = useRef<SVGPathElement>(null)
   const card = useRef<HTMLDivElement>(null)
   const labelEl = useRef<HTMLSpanElement>(null)
 
@@ -223,6 +230,8 @@ function Cursor() {
 
         if (arc.current)
           arc.current.style.strokeDashoffset = `${ARC_LENGTH * (1 - progress)}`
+        if (touchArc.current)
+          touchArc.current.style.strokeDashoffset = `${TOUCH_ARC_LENGTH * (1 - progress)}`
         if (card.current) {
           card.current.style.opacity = `${0.4 + progress * 0.6}`
           card.current.style.setProperty('--progress', `${progress}`)
@@ -254,6 +263,11 @@ function Cursor() {
   }, [fine])
 
   const size = RING_SIZE[mode]
+  const touch = !fine
+  // Over the half ring on touch, under the ring otherwise.
+  const labelTop = touch
+    ? -TOUCH_RADIUS - 28
+    : RING_SIZE[mode === 'hover' ? 'hover' : 'busy'] / 2 + 10
 
   return (
     <div
@@ -267,7 +281,9 @@ function Cursor() {
         {/* Centred and sized on the outside, so the busy spin (a transform
             of its own) doesn't replace the centring translate. */}
         <div
-          className="absolute -translate-x-1/2 -translate-y-1/2 transition-[width,height] duration-300 ease-out"
+          className={`absolute -translate-x-1/2 -translate-y-1/2 transition-[width,height] duration-300 ease-out ${
+            touch ? 'hidden' : ''
+          }`}
           style={{ width: size, height: size }}
         >
           <div
@@ -293,15 +309,63 @@ function Cursor() {
               ? 'opacity-100'
               : 'opacity-0'
           }`}
-          style={{ top: RING_SIZE[mode === 'hover' ? 'hover' : 'busy'] / 2 + 10 }}
+          style={{ top: labelTop }}
         >
           {mode === 'busy' ? 'Loading…' : label}
         </span>
 
+        {/* Touch: the half ring, its track (dashed while busy) and the
+            drag's progress along it */}
+        {touch ? (
+          <svg
+            className={`absolute transition-opacity duration-200 ${
+              mode === 'default' ? 'opacity-0' : 'opacity-100'
+            }`}
+            // Boxed round the arc (a zero-size SVG didn't paint its
+            // overflow), with the fingertip at the origin.
+            width={TOUCH_RADIUS * 2 + 8}
+            height={TOUCH_RADIUS + 8}
+            viewBox={`${-TOUCH_RADIUS - 4} ${-TOUCH_RADIUS - 4} ${TOUCH_RADIUS * 2 + 8} ${TOUCH_RADIUS + 8}`}
+            style={{ left: -TOUCH_RADIUS - 4, top: -TOUCH_RADIUS - 4 }}
+          >
+            <path
+              d={TOUCH_ARC}
+              fill="none"
+              strokeWidth={5}
+              strokeLinecap="round"
+              className="stroke-white/50 dark:stroke-black/50"
+            />
+            <path
+              d={TOUCH_ARC}
+              fill="none"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeDasharray={mode === 'busy' ? '4 7' : undefined}
+              className={
+                mode === 'hover'
+                  ? 'stroke-yellow-500'
+                  : 'stroke-stone-900/70 dark:stroke-white/70'
+              }
+            />
+            <path
+              ref={touchArc}
+              d={TOUCH_ARC}
+              fill="none"
+              strokeWidth={4}
+              strokeLinecap="round"
+              className={`stroke-yellow-400 transition-opacity ${
+                mode === 'drag' ? 'opacity-100' : 'opacity-0'
+              }`}
+              strokeDasharray={TOUCH_ARC_LENGTH}
+              strokeDashoffset={TOUCH_ARC_LENGTH}
+            />
+          </svg>
+        ) : null}
+
         {/* Drag progress: fills toward the point where letting go swaps */}
         <svg
           className={`absolute -translate-x-1/2 -translate-y-1/2 -rotate-90 transition-opacity duration-200 ${
-            mode === 'drag' ? 'opacity-100' : 'opacity-0'
+            mode === 'drag' && !touch ? 'opacity-100' : 'opacity-0'
           }`}
           width={ARC_RADIUS * 2 + 4}
           height={ARC_RADIUS * 2 + 4}
@@ -326,7 +390,15 @@ function Cursor() {
           className={`absolute -translate-y-1/2 flex items-center justify-between text-stone-900 dark:text-white drop-shadow-[0_0_2px_rgba(255,255,255,0.9)] dark:drop-shadow-[0_0_2px_rgba(0,0,0,0.9)] transition-all duration-300 ${
             mode === 'polaroid' ? 'opacity-100' : 'opacity-0'
           }`}
-          style={{ width: size + 36, left: -(size + 36) / 2 }}
+          style={
+            touch
+              ? {
+                  width: TOUCH_RADIUS * 2 + 36,
+                  left: -TOUCH_RADIUS - 18,
+                  top: -8,
+                }
+              : { width: size + 36, left: -(size + 36) / 2 }
+          }
         >
           <CaretLeft
             weight="bold"
@@ -335,7 +407,7 @@ function Cursor() {
           />
           <span
             className="absolute left-1/2 -translate-x-1/2 font-mono text-[10px] uppercase tracking-widest bg-white/80 dark:bg-stone-900/80 rounded-full px-2"
-            style={{ top: size / 2 + 12 }}
+            style={{ top: touch ? -TOUCH_RADIUS - 20 : size / 2 + 12 }}
           >
             drag
           </span>
@@ -353,9 +425,15 @@ function Cursor() {
         {mode === 'drag' && preview ? (
           <div
             ref={card}
-            className={`group absolute top-0 -translate-y-1/2 flex flex-col items-center gap-1 transition-[opacity] ${
-              preview.side === 'right' ? 'left-12' : 'right-12'
+            className={`group absolute flex flex-col items-center gap-1 transition-[opacity] ${
+              touch
+                ? preview.side === 'right'
+                  ? 'left-2'
+                  : 'right-2'
+                : `top-0 -translate-y-1/2 ${preview.side === 'right' ? 'left-12' : 'right-12'}`
             }`}
+            // Touch: above the half ring and its label, clear of the finger.
+            style={touch ? { bottom: TOUCH_RADIUS + 44 } : undefined}
           >
             <div
               className="bg-white dark:bg-stone-800 p-1 pb-3 shadow-lg transition-transform duration-200 group-data-[ready=true]:ring-2 group-data-[ready=true]:ring-yellow-400"
@@ -384,7 +462,7 @@ function Cursor() {
       <div
         ref={ghost}
         className={`absolute left-0 top-0 transition-[visibility] ${
-          mode === 'default' ? 'visible' : 'invisible'
+          mode === 'default' && !touch ? 'visible' : 'invisible'
         }`}
       >
         <div className="absolute -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-stone-900 dark:bg-white blur-[0.5px]" />
@@ -392,7 +470,8 @@ function Cursor() {
 
       {/* Dot, exactly under the pointer, with a soft glow in the site's
           yellow */}
-      <div ref={dot} className="absolute left-0 top-0">
+      {/* Not on touch, where the finger's over it. */}
+      <div ref={dot} className={`absolute left-0 top-0 ${touch ? 'hidden' : ''}`}>
         <div
           ref={dotShape}
           className="absolute w-2 h-2 rounded-full bg-stone-900 dark:bg-white"
