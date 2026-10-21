@@ -3,7 +3,7 @@ import ThemeToggle from '../components/theme-toggle.tsx'
 import { api } from './admin-api.ts'
 
 // Dev-only page for recording a 5-second webcam clip and making a pipeline job from it, for the polaroid
-// prototype (plans/backlog/user-polaroid-loops.md). The dev server saves the clip and runs `init` on it,
+// prototype (plans/backlog/release-polaroids.md). The dev server saves the clip and runs `init` on it,
 // with the square picked here (drag to move it, scroll or the slider to zoom), so what's inside the frame is what
 // the job gets.
 

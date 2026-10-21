@@ -97,7 +97,7 @@ export interface DepthOptions {
   /**
    * Scale each frame to the subject's own depth, rather than a fixed band (see `gammaRescaleAndMask`).
    * For stretches where the subject is far from the camera and the fixed band leaves the panel black,
-   * like full-video's walk-away (plans/in-progress/depth-walk-away-gaps.md).
+   * like full-video's walk-away (plans/done/depth-walk-away-gaps.md).
    */
   fitToSubject?: boolean
 }

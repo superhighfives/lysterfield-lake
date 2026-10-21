@@ -2,7 +2,7 @@
 title: "Dreams: make, check, repair and publish panel 7 takes"
 status: In Progress
 created: 2026-10-12
-updated: 2026-10-18
+updated: 2026-10-21
 ---
 
 # Dreams: make, check, repair and publish panel 7 takes
@@ -220,25 +220,25 @@ cheap:
 
 ### 7. Publish
 
-From phase 4f, for a new take and for the ten legacy dreams alike:
+The split client now ships as its own app, lysterfield-lake-next.pages.dev
+(PR #42), which deploys itself when `main` changes
+(`.github/workflows/deploy-next.yml`, PR #45). It plays only the split files,
+from its own bucket, `lysterfield-lake-next-dreams`, at
+next-dreams.lysterfieldlake.com (PR #43). The ten legacy dreams are there,
+under their readable ids. The live site keeps its own bucket and datestamp
+folders until the domain moves over.
 
-1. `bun run src/cli.ts compose --job .jobs/full-video --take <id>` (local,
-   ~25 minutes a dream). Publishes videos to `apps/client/dreams/<id>/` and
-   stills to `apps/client/public/assets/<id>/`.
-2. Review: panel 7 against the old video at exact frame numbers, and one
-   full watch for stray frames in matte, depth or outline.
-3. Upload the readable-id folders to the `lysterfield-lake-dreams` R2
-   bucket **without deleting** (`rclone copy`, not `deploy-dreams`'s
-   `rclone sync`). The live client still loads the datestamp folders, so
-   deleting them first would break it until the new client is up.
-   **Needs the user's go-ahead.**
-4. Deploy the client.
-5. `bun run --cwd apps/client deploy-dreams` to delete the datestamp
-   folders. No old-id lookup is needed: `?dream=<id>` links were never
-   deployed (user, 2026-10-18).
+For a new take (the steps in detail: `ready/next-dream.md`):
 
-The ten legacy dreams still need this: R2 holds them under datestamp ids,
-and `lush-and-light`'s one composite predates the stray-frame fixes.
+1. `compose --job .jobs/full-video --take <take> --id <client-id>` (local,
+   25-38 minutes): the stills and loop into
+   `apps/client/public/assets/<id>/`, a `dreams.json` entry to fill in.
+2. `compose-split --takes <client-id>`: the take's `dream{,-small}.{webm,mov}`.
+   The shared `main*` is already made and doesn't change.
+3. Review: one full watch of panel 7.
+4. Upload the split files to the next bucket with `wrangler r2 object put`,
+   without deleting anything. **Needs the user's go-ahead.**
+5. A PR with the assets and `dreams.json`. Merging deploys it.
 
 ### Our own GPU (2026-10-14)
 
@@ -371,7 +371,7 @@ Fewer leaks:
 Make and publish:
 
 - [ ] Try the whole loop on one new take for `full-video` (a real clip, a
-      real full song, check, repair)
+      real full song, check, repair): `ready/next-dream.md`
 - [x] Compose all ten legacy dreams (re-compose `lush-and-light`): done
       2026-10-16, 24 to 38 minutes each, about 5½ hours in all, one at a
       time. Videos in `apps/client/dreams/<id>/` (gitignored, for R2);
@@ -387,12 +387,12 @@ Make and publish:
       depth frames on the HDD are black at the same moments, so the
       published videos always had it. Fixing it would mean re-running
       ZoeDepth on those frames with a per-frame range, then composing all
-      ten again
+      ten again. Fixed after all, 2026-10-18: `done/depth-walk-away-gaps.md`
 - [x] Review: the user watched the walk-away (1:52-2:16) in the new
       composite, 2026-10-18
-- [ ] Publish in the order under 7. Publish (copy to R2, deploy the client,
-      then delete the datestamp folders), once the client plays the split
-      videos (`plans/ready/split-dream-video-client.md`)
+- [x] Publish the ten to the next app: split files in the
+      `lysterfield-lake-next-dreams` bucket, the app on Pages (2026-10-19).
+      The live site's bucket is left as it is until the domain moves over
 - [ ] Optional: review `repairGlitchedFrames`'s 80 flagged matte frames on
       this job (see phase 4e's Other fixes)
 

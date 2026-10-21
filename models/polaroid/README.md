@@ -2,7 +2,7 @@
 
 Every per-frame model behind a visitor's polaroid (panels 2, 4, 5 and 6) in one Cog image, so a whole loop is
 one prediction with one boot instead of five models' worth of boots, uploads and per-call overhead. See
-`plans/backlog/user-polaroid-loops.md`. Panel 3 (background) stays on Bria, an official model billed by the
+`plans/backlog/release-polaroids.md`. Panel 3 (background) stays on Bria, an official model billed by the
 second with no boot.
 
 | Panel | Model | Was |

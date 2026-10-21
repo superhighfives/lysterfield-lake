@@ -10,7 +10,7 @@ import { useStore } from '../store.ts'
 import { active, api, jobFile, type Task } from './admin-api.ts'
 import { Tasks } from './admin-tasks.tsx'
 
-// Dev-only: a visitor's polaroid from recording to finished loop (plans/in-progress/polaroid-admin-flow.md).
+// Dev-only: a visitor's polaroid from recording to finished loop (plans/done/polaroid-admin-flow.md).
 // /admin/polaroid lists the polaroid jobs; ?job=<name> shows one job's stages, each paid one behind a
 // confirm with its cost, the queue's tasks for it, and, once made, the 3D polaroid: the job's looping
 // 5-panel atlas on the player's polaroid model, the person cut out by the matte and pushed forward by the

@@ -1,7 +1,7 @@
 import { useStore } from '../store'
 import type { Dream } from './types'
 
-// The split video (plans/in-progress/split-dream-video-client.md): one shared
+// The split video (plans/done/split-dream-video-client.md): one shared
 // main video — panels 1-6 and the song, the same for every dream — and a
 // small, silent video of the dream itself (panel 7). The main video is
 // Playhead's <video>; it plays, keeps the audio and drives everything. The

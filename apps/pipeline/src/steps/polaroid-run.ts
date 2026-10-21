@@ -8,7 +8,7 @@ import { polaroidPanels } from './polaroid-panels.ts'
 
 /**
  * What a loop costs on the `lysterfield-polaroid` deployment (L40S, $0.000975/s), measured on `park-party`
- * (plans/backlog/user-polaroid-loops.md): ~10.4s of GPU a frame, and ~170s of boot per range from cold,
+ * (plans/backlog/release-polaroids.md): ~10.4s of GPU a frame, and ~170s of boot per range from cold,
  * which a private model bills too. An estimate for the confirm button, not a bill.
  */
 const L40S_PER_SECOND = 0.000975

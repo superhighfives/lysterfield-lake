@@ -1,8 +1,8 @@
 ---
 title: Work out the pointer effects for mobile and touch
-status: Backlog
+status: Done
 created: 2026-10-16
-updated: 2026-10-16
+updated: 2026-10-21
 ---
 
 # Work out the pointer effects for mobile and touch
@@ -54,11 +54,33 @@ To work out, rather than settled:
 
 ## Tasks
 
-- [ ] Try the current branch on an iPhone and an Android phone, and note
-      what each effect does now
-- [ ] Decide what the wake responds to on touch
-- [ ] Design touch drag feedback
-- [ ] Check frame rate on a mid-range phone with the wake pass on
+- [x] Try it on an iPhone (the artist, 2026-10-20), and fix what came up
+- [x] The wake: off once a dream plays, on every device (PR #41)
+- [x] Touch drag feedback
+- [ ] Android, and frame rate on a mid-range phone (not done)
+
+## What shipped (PR #44, 2026-10-21)
+
+- **Cursor on touch:** the same ring as on desktop, shown while a finger's
+  down, with its labels and the drag's preview above the finger. No busy
+  ring on touch.
+- **Tilt:** wrapped (an angle passing 180° flipped the pointer edge to
+  edge), eased, held in a ref rather than React state, and only counted
+  once the sensor reports. Motion is used on Android too, over HTTPS.
+- **Avatar:** on a phone it holds whole against the tilt and fades only for
+  a finger, as it nears.
+- **Water:** the blank print's ripple runs over the playing photo too,
+  stirred by the mouse, or by the tilt while a thumb's down; subtle, and it
+  settles in about a second.
+- **Swiping:** a drag started before a swap's possible picks up once it is,
+  and one started near an edge needs only most of the room left that way.
+  The chooser's toss is shorter on touch, a flick tosses, and the page holds
+  still while a finger's on the top card.
+- **Layout:** the title at the top on touch, the controls lower and without
+  Previous, Next or YouTube, full screen behind Safari's toolbar, a smaller
+  chooser pile, and no long-press selection.
+- **Welcome title:** keyed out in its shader in dark mode (iOS ignores the
+  SVG filter on a canvas) and no wider than the screen.
 
 ## Open questions
 
