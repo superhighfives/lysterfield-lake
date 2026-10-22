@@ -21,9 +21,10 @@ per-step Replicate outputs) are generated, not source. They're already
 gitignored in `apps/client`; keep the same rule for anything `apps/pipeline`
 writes.
 
-`apps/pipeline/.jobs` and `apps/pipeline/.env` are shared across git worktrees:
-`.githooks/post-checkout` symlinks a new worktree's copies to the main
-checkout's on `git worktree add`.
+`apps/pipeline/.jobs`, `apps/pipeline/.env` and
+`apps/pipeline/resources/colours` (/admin's colour and style images) are
+shared across git worktrees: `.githooks/post-checkout` symlinks a new
+worktree's copies to the main checkout's on `git worktree add`.
 It needs `git config core.hooksPath .githooks` set once per clone. For a
 worktree that already exists, run `.githooks/post-checkout` from inside it.
 
