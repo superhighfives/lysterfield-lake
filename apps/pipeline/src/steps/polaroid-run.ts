@@ -2,13 +2,14 @@ import { mkdir, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { exists, listFrames, videoPath, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
+import { polaroidServerUrl, runOnGpuServer } from '../gpu-server.ts'
 import { readFileAsInput, runModelToFileResumable } from '../replicate.ts'
 import { planChunks } from './background-video.ts'
 import { polaroidPanels } from './polaroid-panels.ts'
 
 /**
  * What a loop costs on the `lysterfield-polaroid` deployment (L40S, $0.000975/s), measured on `park-party`
- * (plans/backlog/release-polaroids.md): ~10.4s of GPU a frame, and ~170s of boot per range from cold,
+ * (plans/in-progress/polaroids.md): ~10.4s of GPU a frame, and ~170s of boot per range from cold,
  * which a private model bills too. An estimate for the confirm button, not a bill.
  */
 const L40S_PER_SECOND = 0.000975
@@ -40,9 +41,12 @@ export interface PolaroidRunResult {
 }
 
 /**
- * Panels 2, 4, 5 and 6 of a polaroid job from the polaroid model (models/polaroid) on its Replicate
- * deployment: the clip split into frame ranges run at once, the first also doing the matte for the whole
- * clip, each unpacked and post-processed by `polaroidPanels` as it lands.
+ * Panels 2, 4, 5 and 6 of a polaroid job from the polaroid model (models/polaroid), each range unpacked and
+ * post-processed by `polaroidPanels` as it lands, the first also doing the matte for the whole clip:
+ *
+ * - On the 4090 PC when `POLAROID_URL` is set: the whole clip in one prediction, free, one frame at a time
+ *   (`portrait_batch` 1: Deforum holds 8GB of the GPU). About 8.3s a frame (models/polaroid/README.md).
+ * - Otherwise on the Replicate deployment, the clip split into frame ranges run at once.
  *
  * Skip-if-exists per range (its frames are already in the job), and each range's prediction id is saved
  * as it starts, so running this again picks up predictions still going instead of paying twice. A failed
@@ -51,7 +55,9 @@ export interface PolaroidRunResult {
 export async function polaroidRun(job: Job, opts: PolaroidRunOptions): Promise<PolaroidRunResult> {
   const frames = await listFrames(path.join(job.dir, '0-source/frames'))
   if (frames.length === 0) throw new Error('No source frames: run init first')
-  const count = Math.max(1, Math.min(opts.ranges ?? 4, frames.length))
+  const pc = polaroidServerUrl()
+  // One GPU on the PC, so splitting the clip gains nothing there.
+  const count = pc ? 1 : Math.max(1, Math.min(opts.ranges ?? 4, frames.length))
   const size = Math.ceil(frames.length / count)
   const matteDone = await exists(await videoPath(job, '4-matte/raw', 'mp4'))
 
@@ -71,7 +77,7 @@ export async function polaroidRun(job: Job, opts: PolaroidRunOptions): Promise<P
   }
 
   const todo = ranges.filter((r) => !r.done)
-  const cost = todo.reduce((sum, r) => sum + (r.frames * SECONDS_PER_FRAME + BOOT_SECONDS) * L40S_PER_SECOND, 0)
+  const cost = pc ? 0 : todo.reduce((sum, r) => sum + (r.frames * SECONDS_PER_FRAME + BOOT_SECONDS) * L40S_PER_SECOND, 0)
   const briaSeconds = planChunks(frames.length, job.fps, job.cuts ?? []).reduce((sum, c) => sum + (c.end - c.start + 1) / job.fps, 0)
   const result: PolaroidRunResult = {
     ranges,
@@ -80,7 +86,7 @@ export async function polaroidRun(job: Job, opts: PolaroidRunOptions): Promise<P
     backgroundCost: `$${(briaSeconds * BRIA_PER_SECOND).toFixed(2)}`,
     failed: [],
   }
-  console.log(`polaroid-run: ${todo.length} of ${ranges.length} ranges to run, about ${result.estimatedCost}`)
+  console.log(`polaroid-run: ${todo.length} of ${ranges.length} ranges to run, ${pc ? 'free on the 4090' : `about ${result.estimatedCost}`}`)
   if (opts.planOnly || todo.length === 0) return result
 
   const runsDir = path.join(job.dir, 'polaroid', 'runs')
@@ -90,20 +96,17 @@ export async function polaroidRun(job: Job, opts: PolaroidRunOptions): Promise<P
     todo.map(async (r) => {
       const tar = path.join(runsDir, `range-${r.start}.tar`)
       if (!(await exists(tar))) {
-        await runModelToFileResumable(
-          MODELS.polaroidDeployment,
-          {
-            video: await readFileAsInput(video),
-            fps: job.fps,
-            start_frame: r.start,
-            max_frames: r.frames,
-            panels: r.start === 1 ? 'matte,portrait,depth,outline' : 'portrait,depth,outline',
-            portrait_inv_steps: opts.inversionSteps ?? 20,
-            portrait_batch: 4,
-          },
-          tar,
-          path.join(runsDir, `range-${r.start}.json`)
-        )
+        const input = {
+          video: await readFileAsInput(video),
+          fps: job.fps,
+          start_frame: r.start,
+          max_frames: r.frames,
+          panels: r.start === 1 ? 'matte,portrait,depth,outline' : 'portrait,depth,outline',
+          portrait_inv_steps: opts.inversionSteps ?? 20,
+          portrait_batch: pc ? 1 : 4,
+        }
+        if (pc) await runOnGpuServer(pc, input, tar)
+        else await runModelToFileResumable(MODELS.polaroidDeployment, input, tar, path.join(runsDir, `range-${r.start}.json`))
       }
       return { start: r.start, tar }
     })

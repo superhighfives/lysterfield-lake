@@ -5,7 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeClientAssets, writeSplitClientAssets } from './client-manifest.ts'
 import { compose, composePreview, composeSplit } from './compose.ts'
-import { gpuServerUrl } from './gpu-server.ts'
+import { gpuServerUrl, polaroidServerUrl } from './gpu-server.ts'
 import { loadJob, videoPath, type Job } from './job.ts'
 import { retryFailedPredictions } from './replicate.ts'
 import { backgroundPlate } from './steps/background-plate.ts'
@@ -82,11 +82,17 @@ function outputFlag(defaultRelativePath: string): string {
 }
 
 const concurrency = Number(flags.concurrency ?? 4)
-// --on replicate: run on Replicate even when our own GPU server is set up (DEFORUM_URL; gpu-server.ts).
-if (flags.on === 'replicate') delete process.env.DEFORUM_URL
-else if (flags.on && flags.on !== 'pc') throw new Error('--on must be pc or replicate')
-// --on pc asks for the free GPU: never fall back to billing Replicate because DEFORUM_URL is missing.
-else if (flags.on === 'pc' && !gpuServerUrl()) throw new Error('--on pc needs DEFORUM_URL set in apps/pipeline/.env')
+// --on replicate: run on Replicate even when our own GPU server is set up (DEFORUM_URL, or POLAROID_URL
+// for polaroids; gpu-server.ts).
+if (flags.on === 'replicate') {
+  delete process.env.DEFORUM_URL
+  delete process.env.POLAROID_URL
+} else if (flags.on && flags.on !== 'pc') throw new Error('--on must be pc or replicate')
+// --on pc asks for the free GPU: never fall back to billing Replicate because its address is missing.
+else if (flags.on === 'pc' && step === 'polaroid-run' && !polaroidServerUrl())
+  throw new Error('--on pc needs POLAROID_URL set in apps/pipeline/.env')
+else if (flags.on === 'pc' && step !== 'polaroid-run' && !gpuServerUrl())
+  throw new Error('--on pc needs DEFORUM_URL set in apps/pipeline/.env')
 // --retry true: a person asked to run a failed or cancelled Replicate prediction again. Never set by default.
 if (flags.retry === 'true') retryFailedPredictions()
 
@@ -210,8 +216,10 @@ switch (step) {
   }
 
   case 'polaroid-run': {
-    // Panels 2, 4, 5 and 6 of a polaroid job on the lysterfield-polaroid Replicate deployment, split into
-    // frame ranges run at once. --plan true: what would run, and its cost, without running anything.
+    // Panels 2, 4, 5 and 6 of a polaroid job: on the 4090 when POLAROID_URL is set (the whole clip in one
+    // prediction, free), else on the lysterfield-polaroid Replicate deployment, split into frame ranges run
+    // at once. --on replicate sends it there anyway. --plan true: what would run, and its cost, without
+    // running anything.
     const job = await loadJob(requireFlag('job'))
     const result = await polaroidRun(job, {
       ranges: flags.ranges ? Number(flags.ranges) : undefined,
@@ -232,7 +240,7 @@ switch (step) {
   }
 
   case 'polaroid': {
-    // The polaroid's looping 5-panel atlas (plans/backlog/release-polaroids.md). ffmpeg only.
+    // The polaroid's looping 5-panel atlas (plans/in-progress/polaroids.md). ffmpeg only.
     const job = await loadJob(requireFlag('job'))
     const result = await polaroid(job, {
       trim: flags.trim ? Number(flags.trim) : undefined,

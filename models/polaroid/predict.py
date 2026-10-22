@@ -1,5 +1,5 @@
 """
-A polaroid's per-frame panels in one prediction (plans/backlog/release-polaroids.md). Each panel's raw output
+A polaroid's per-frame panels in one prediction (plans/in-progress/polaroids.md). Each panel's raw output
 matches what the pipeline got from that panel's own Replicate model; the pipeline still does its own
 post-processing (matte repairs, depth's gamma and masking, outline's masking), so it keeps one place for that.
 

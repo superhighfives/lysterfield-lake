@@ -19,7 +19,7 @@ const PIPELINE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const JOBS_DIR = path.join(PIPELINE_DIR, '.jobs')
 const COLOURS_DIR = path.join(PIPELINE_DIR, 'resources', 'colours')
 const MAX_COLOUR_UPLOAD = 20 * 1024 * 1024
-/** Webcam clips from /admin/record (plans/backlog/release-polaroids.md), kept apart from the jobs made from them. */
+/** Webcam clips from /admin/record (plans/in-progress/polaroids.md), kept apart from the jobs made from them. */
 const RECORDINGS_DIR = path.join(JOBS_DIR, '_recordings')
 const MAX_RECORDING_UPLOAD = 150 * 1024 * 1024
 const DEFORUM_PRESETS = path.resolve(PIPELINE_DIR, '..', '..', 'models', 'deforum', 'settings', 'presets.json')
@@ -110,9 +110,10 @@ function deletePolaroid(job: string) {
 /**
  * A polaroid job's stages (plans/done/polaroid-admin-flow.md), each read from the files on disk: panels 2, 4, 5
  * and 6 from the polaroid model, panel 3 from Bria, then the atlas and the flattened loop. `withCost` adds
- * what the paid stages would cost to run now, from `polaroid-run --plan` (which knows what's already done).
+ * what the paid stages would cost to run now, from `polaroid-run --plan` (which knows what's already done), with
+ * the panels priced where `on` says they'll run.
  */
-function polaroidDetail(job: string, withCost: boolean) {
+function polaroidDetail(job: string, withCost: boolean, on?: string) {
   const dir = jobDir(job)
   const config = readJson(path.join(dir, 'job.json')) as { fps: number; review?: PolaroidReview }
   const frames = countFrames(path.join(dir, '0-source/frames'))
@@ -125,7 +126,7 @@ function polaroidDetail(job: string, withCost: boolean) {
   }
   let cost: { panels: string; background: string } | undefined
   if (withCost) {
-    const plan = execFileSync('bun', ['run', 'src/cli.ts', 'polaroid-run', '--job', `.jobs/${job}`, '--plan', 'true'], { cwd: PIPELINE_DIR, env: pipelineEnv(), encoding: 'utf8' })
+    const plan = execFileSync('bun', ['run', 'src/cli.ts', 'polaroid-run', '--job', `.jobs/${job}`, '--plan', 'true', ...runOn({ on })], { cwd: PIPELINE_DIR, env: pipelineEnv(), encoding: 'utf8' })
     const estimate = (key: string) => plan.match(new RegExp(`"${key}": "(\\$[\\d.]+)"`))?.[1] ?? '?'
     cost = { panels: stages.panels.done ? '$0.00' : estimate('estimatedCost'), background: stages.background.done ? '$0.00' : estimate('backgroundCost') }
   }
@@ -268,14 +269,17 @@ function jobDetail(job: string) {
   return { name: job, config: readJson(path.join(dir, 'job.json')), takes, songs, directions }
 }
 
-/** Where a Deforum job runs: our own GPU (the 4090 PC, DEFORUM_URL in the pipeline's .env) or Replicate. Unsaid, the pipeline decides. */
+/**
+ * Where a GPU job runs: our own GPU (the 4090 PC, DEFORUM_URL or POLAROID_URL in the pipeline's .env) or Replicate.
+ * Unsaid, the pipeline decides.
+ */
 function runOn(body: Record<string, unknown>): string[] {
   return body.on === 'pc' || body.on === 'replicate' ? ['--on', body.on] : []
 }
 
-/** Our own GPU server, if one is set up: its address and whether it's up (Cog's health check). */
-async function gpuStatus() {
-  const url = pipelineEnv().DEFORUM_URL?.replace(/\/+$/, '')
+/** One of our own GPU servers, if it's set up: whether it's up (Cog's health check). Deforum's, or the polaroid model's. */
+async function gpuStatus(variable: 'DEFORUM_URL' | 'POLAROID_URL') {
+  const url = pipelineEnv()[variable]?.replace(/\/+$/, '')
   if (!url) return { configured: false }
   try {
     const response = await fetch(`${url}/health-check`, { signal: AbortSignal.timeout(4000) })
@@ -350,13 +354,14 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
         ...(body.status ? ['--status', String(body.status)] : []),
         ...(body.notes !== undefined ? ['--notes', String(body.notes)] : []),
       ]
-    // A polaroid's stages (plans/done/polaroid-admin-flow.md). The paid two run on Replicate, never the PC.
+    // A polaroid's stages (plans/done/polaroid-admin-flow.md). Panels 2, 4, 5 and 6 run where the page says: the
+    // 4090 (POLAROID_URL, free) or Replicate. The background is Bria, always on Replicate.
     case 'polaroid-panels':
     case 'polaroid-background':
     case 'polaroid-atlas':
       // Nothing is made, and nothing spent, until a person has approved it.
       if (reviewOf(job) !== 'approved') throw new Error(`Approve it to make before running anything (it's ${reviewOf(job)})`)
-      return body.action === 'polaroid-panels' ? ['polaroid-run', ...base] : body.action === 'polaroid-background' ? ['background-video', ...base] : ['polaroid', ...base]
+      return body.action === 'polaroid-panels' ? ['polaroid-run', ...base, ...runOn(body)] : body.action === 'polaroid-background' ? ['background-video', ...base] : ['polaroid', ...base]
     default:
       throw new Error(`Unknown action "${String(body.action)}"`)
   }
@@ -472,7 +477,7 @@ export default function adminPlugin(): Plugin {
               colours: existsSync(COLOURS_DIR) ? readdirSync(COLOURS_DIR).filter((f) => /\.(png|jpe?g)$/i.test(f)).sort() : [],
             })
           }
-          if (parts[1] === 'gpu' && req.method === 'GET') return send(res, 200, await gpuStatus())
+          if (parts[1] === 'gpu' && req.method === 'GET') return send(res, 200, await gpuStatus(url.searchParams.get('for') === 'polaroid' ? 'POLAROID_URL' : 'DEFORUM_URL'))
           if (parts[1] === 'colours' && req.method === 'POST') {
             // A new colour reference: { name, data } with data as base64.
             const body = await readBody(req)
@@ -491,7 +496,7 @@ export default function adminPlugin(): Plugin {
             const created = (j: string) => statSync(path.join(JOBS_DIR, j, 'job.json')).birthtimeMs
             return send(res, 200, listJobs('polaroid').sort((a, b) => created(b) - created(a)).map((j) => polaroidDetail(j, false)))
           }
-          if (parts[1] === 'polaroids' && parts[2] && !parts[3] && req.method === 'GET') return send(res, 200, polaroidDetail(parts[2], true))
+          if (parts[1] === 'polaroids' && parts[2] && !parts[3] && req.method === 'GET') return send(res, 200, polaroidDetail(parts[2], true, url.searchParams.get('on') ?? undefined))
           if (parts[1] === 'polaroids' && parts[2] && parts[3] === 'review' && req.method === 'POST') return send(res, 200, setPolaroidReview(parts[2], String((await readBody(req)).decision)))
           if (parts[1] === 'polaroids' && parts[2] && parts[3] === 'delete' && req.method === 'POST') {
             deletePolaroid(parts[2])

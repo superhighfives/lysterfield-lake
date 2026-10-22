@@ -1,57 +1,63 @@
 ---
-title: Release the polaroids as their own site, made in batches on the 4090
-status: Backlog
+title: "Polaroids: an endless gallery in the app, submissions made on the 4090"
+status: In progress
 created: 2026-10-10
 updated: 2026-10-21
 ---
 
-# Release the polaroids as their own site, made in batches on the 4090
+# Polaroids: an endless gallery in the app, submissions made on the 4090
 
 ## Goal
 
-Release the generative polaroids separately from the music video: a site
-where anyone can record or upload a 5-second clip and later get back a
-looping 3D polaroid of themselves, and a gallery of the approved ones.
-Submissions are queued online. The artist approves them, and the 4090 makes
-the approved ones in batches, so making them costs next to nothing and
-nobody has to pay per loop or keep a hosted GPU warm.
+Visitors to the next app can find an "Add your own" link under the
+chooser's stack, open an endless, explorable grid of everyone's looping
+polaroids, and submit a 5-second clip of their own. Submissions wait in a
+queue. When the artist feels like it, they switch "run the queue" on and the
+4090 works through it, publishing each polaroid as it's made.
 
-Today the whole thing works end to end, but only in the dev-only `/admin`
+Everything sits behind an env flag, on in the next app only, until it's
+ready. Today the whole loop works, but only in the dev-only `/admin`
 (`/admin/record` → `/admin/polaroid`, `done/polaroid-admin-flow.md`), one
 clip at a time, on Replicate.
 
 ## Decisions
 
-From the artist (2026-10-21), replacing the 2026-10-16 "fully hosted" plan:
+From the artist, 2026-10-21:
 
-- **Its own release,** not part of the music video site.
-- **Made on the 4090, in batches.** Submissions wait in a queue. The artist
-  runs a batch on the PC when it suits them, and the polaroids appear as
-  they finish. Turnaround is a batch, not minutes.
-- **The artist approves every clip before it's made.** That was already
-  how `/admin` works (submitted → approved → shown, or rejected). It also
-  stands in for an automatic input gate: a person has looked before any
-  GPU time or Bria call is spent.
+- **In the app, not a separate site:** a link under the chooser's stack to
+  `/polaroids`, behind `VITE_APP_POLAROIDS`.
+- **An explorable, endless grid** of the looping polaroids, where people
+  can also submit.
+- **Made on the 4090, from a queue,** run when the artist chooses: a "run
+  the queue" switch, on or off.
+- **Cloudflare Workers, not Pages,** for the app and its API (Cloudflare's
+  recommendation for new projects): one Worker serves the built site and
+  the polaroid API, with D1 and R2 bound to it.
+- **Approve before making.** A submission waits for the artist to approve
+  it before the 4090 touches it, so a person has seen every clip first.
+- **Panel 3 stays Bria** (~$0.25 a polaroid, on Replicate), whose inputs
+  go through `lysterfield-bria-temp` with the `R2_*` key already in
+  `apps/pipeline/.env` (checked: write, public read and delete all work).
+- **The 4090 by default, Replicate when the artist chooses.** Panels 2, 4,
+  5 and 6 can always run on Replicate instead (`--on replicate`, the
+  switch in `/admin/polaroid`), to share out work. Bria is Replicate
+  either way.
+- **Email when it's ready, sent with Cloudflare** (its Email Service from the
+  Worker), with the private link.
+- **The gallery's music is a loop from the song.**
 
-Still holding from 2026-10-16:
+Still holding from earlier:
 
-- **Panels 2-6 only** (portrait, background, matte, depth, outline). No
-  dream, so no Deforum, person check or `NO_PEOPLE_SUFFIX`: the visitor's
-  likeness is the point.
-- **A 3D object in the client,** rendered from a per-submission 5-panel
-  atlas (`materials/polaroid-loop-material.tsx`). A flattened MP4 and still
-  for sharing (the `polaroid` step already writes `loop.mp4`).
-- **Gallery:** a pannable grid of looping polaroids with a music loop.
-- **Moderation:** nothing joins the gallery until the artist approves
-  showing it. The owner sees theirs at a private link as soon as it's made.
+- **Panels 2-6 only.** No dream, so no Deforum, person check or
+  `NO_PEOPLE_SUFFIX`: the visitor's likeness is the point.
+- **A 3D object,** rendered from a per-submission 5-panel atlas
+  (`materials/polaroid-loop-material.tsx`), plus `loop.mp4` and a still for
+  sharing.
+- **Nothing joins the gallery until the artist approves it.** The owner sees
+  theirs at a private link once it's made.
 - **Retention:** the source clip and intermediate frames are deleted once a
-  polaroid is made or rejected; the atlas stays until its owner or the
+  polaroid is made or rejected. The atlas stays until its owner or the
   artist deletes it.
-
-No longer needed with a free GPU and a human approving each clip: the daily
-spend cap and kill switch, the per-account limits, the automatic input-gate
-models, and the Replicate cold-start question. Accounts (Clerk) become
-optional; see Open questions.
 
 ## Context
 
@@ -64,7 +70,7 @@ optional; see Open questions.
   4090: **122 frames in 1,015s (8.3s a frame) plus 24s setup, free**. On
   Replicate (`lysterfield-polaroid` deployment, L40S) the same clip is about
   9 minutes cold and ~$2.
-- `polaroid-run` (Replicate only today), `background-video` (Bria, panel 3,
+- `polaroid-run` (the 4090 or Replicate, below), `background-video` (Bria, panel 3,
   ~$0.25, needs `R2_*`), `polaroid` (the 5-panel atlas and `loop.mp4`).
 - Moderation in `job.json`'s `review`, and the admin refuses paid stages
   unless approved. Delete works on polaroid jobs only.
@@ -81,43 +87,122 @@ optional; see Open questions.
 - `polaroid-run` gains its PC path: one prediction against the container's
   Cog HTTP API, one frame at a time (`portrait_batch` 1, since Deforum holds
   8GB of the 4090), as `gpu-server.ts` does for Deforum.
-- **CLAUDE.md says polaroid generation runs on Replicate only, never on
-  the PC.** That rule reflects the 2026-10-18 decision; this plan reverses
-  it for batches, so update CLAUDE.md when the PC path lands (Replicate
-  stays as a fallback).
 - Panel 3 is still Bria on Replicate (~$0.25 a polaroid). For it to be
   free too, panel 3 needs a local equivalent; see Open questions.
+- The next app is a Pages project (direct upload, deployed by
+  `.github/workflows/deploy-next.yml`). It has no custom domain yet.
 
 ## Approach
 
-1. **A separate app,** `apps/polaroids` in this repo: its own Vite/React
-   site and Pages project, on its own domain. The polaroid card, its
-   material and the tub viewer move into a shared workspace package
-   (`packages/polaroid`) that both it and `/admin` use, rather than being
-   copied.
-2. **Submit** (public): record 5s with the camera or upload a clip, crop it
-   square in the browser (the `/admin/record` UI, made public), agree to
-   the terms, and leave an email for "it's ready". Turnstile against bots.
-   A Pages Function (or Worker) checks it, issues a signed upload URL to a
-   private R2 bucket, and records the submission in D1 as `submitted`. The
-   visitor gets a private link, `/p/<id>`, that says "waiting" until it's
-   made.
-3. **Approve** (the artist): a hosted admin page behind Cloudflare Access,
-   listing submissions with their clips: approve to make, reject, and
-   later approve to show. Same states as today's `review`, now in D1.
-4. **Batch** (the PC, or the Mac driving it): a new pipeline command,
-   `polaroid-batch`, that pulls every approved, unmade submission from the
-   API, downloads its clip, and for each one runs `init --crop`,
-   `polaroid-run` against `POLAROID_URL`, panel 3, and `polaroid`. It
-   uploads the atlas, `loop.mp4` and a still to a public R2 bucket, marks
-   the submission `made` in D1, deletes the clip, and emails the owner.
-   Skip-if-exists at every step, and no automatic retries (CLAUDE.md): a
-   failed one is marked `failed` with its log, to retry from the admin.
-5. **The polaroid page and gallery:** `/p/<id>` plays the atlas on the 3D
-   card, with download and share (an OG image from the still). The gallery
-   is a grid of `shown` polaroids: stills or tiny loops by default, full
-   video only for the few near the centre, so a phone isn't decoding
-   dozens at once.
+### 1. Polaroids on the 4090
+
+The polaroid model (`models/polaroid`) runs on the PC as a standing service,
+like Deforum's: a container on its own port, reachable over Tailscale, with
+the WSL `libcuda.so` mount (`models/polaroid/README.md`), started at boot.
+Its address goes in `apps/pipeline/.env` as `POLAROID_URL`, never in code.
+
+`polaroid-run` gets a PC path: one prediction against the container's Cog
+HTTP API, one frame at a time (`portrait_batch` 1: Deforum holds 8GB of the
+4090), in the way `gpu-server.ts` drives Deforum. Replicate stays a choice,
+not just a fallback (`--on replicate`, and a switch in `/admin/polaroid`
+that remembers its setting, defaulting to the 4090). In `/admin`, polaroid
+stages on the PC join the `pc` lane, so they take turns with dream runs
+rather than competing for the GPU.
+
+Done: `models/polaroid/start-polaroid.sh` runs the `polaroid` container on
+port 5001 (`--restart unless-stopped`), reachable from the Mac over
+Tailscale with no firewall change.
+
+### 2. The next app becomes a Worker (done)
+
+`lysterfield-lake-next` is a Worker with static assets
+(`apps/client/wrangler.jsonc`, code in `apps/client/worker/`), at
+lysterfield-lake-next.superhighfives.workers.dev: the built site from
+`dist`, 404s from `404.html` and `_redirects` as on Pages, and only `/api/*`
+reaching the Worker. `deploy-next.yml` runs `wrangler deploy`. The Pages
+project is left as it was, no longer updated. Bound to the Worker:
+
+- **D1, `lysterfield-polaroids`** (`apps/client/migrations/`): one row per
+  submission: id, status, the crop, an optional email (cleared once it's
+  sent; kept for a resend from the admin if sending fails, and cleared
+  anyway 30 days after it's made), the clip's type and size, a failure log, and timestamps.
+- **R2, `lysterfield-polaroids-inbox`** (private): the visitors' clips, each
+  deleted once its polaroid is made.
+- **R2, `lysterfield-polaroids`** (public, polaroids.lysterfieldlake.com,
+  the dreams bucket's CORS): `<id>/atlas.mp4`, `loop.mp4`, and optionally
+  `.webm`s and `still.jpg`.
+- **Email** (`send_email`) and a daily cron that clears submissions whose
+  clip never arrived.
+
+Statuses: `uploading` (the row, waiting for its clip) → `submitted` →
+`approved` (queued to make) → `making` → `made` → `shown`, or `rejected` /
+`failed`. Each decision only applies from the statuses that allow it
+(`worker/polaroids.ts`, `DECISIONS`).
+
+Routes:
+
+- `POST /api/polaroids` `{ crop, email?, turnstile }`: Turnstile, then the
+  row; returns the private id and where to `PUT` the clip
+  (`/api/polaroids/<id>/clip`, once, up to 60MB). The inbox refuses more
+  than 300 waiting submissions.
+- `GET /api/polaroids?before=&limit=`: the shown ones, newest first, a page
+  at a time, for the gallery.
+- `GET /api/polaroids/<id>`: one polaroid's status, for its private link.
+- `/api/admin/polaroids[/<id>[/clip|review|files/<name>|done|failed|email]]` and
+  `POST /api/admin/queue/claim`: moderation and the queue, for the Mac.
+
+**Changed from the plan:**
+
+- **The clip goes up through the Worker, not a signed URL.** A 5-second
+  clip is a few MB, well inside a Worker's request limit, and the Worker
+  can then check its type and size and accept it only once, with no R2 API
+  keys to keep as secrets.
+- **The admin routes take a bearer token, not Cloudflare Access.** Only the
+  Mac calls them, from the pipeline, so one secret (`ADMIN_TOKEN` on the
+  Worker, `POLAROIDS_ADMIN_TOKEN` and `POLAROIDS_API` in
+  `apps/pipeline/.env`), compared in constant time, does the job with less
+  to set up. Access can still go in front later.
+
+`apps/client/scripts/polaroids-smoke.sh` walks a submission through its
+whole life against `wrangler dev`, refusals included.
+
+**Still to switch on:** submissions refuse everything until the Worker has
+a `TURNSTILE_SECRET` (step 4 makes the widget), and email needs
+lysterfieldlake.com onboarded to Email Service
+(`wrangler email sending enable`, which adds DNS records): until then a
+"ready" email fails quietly and the polaroid is made anyway.
+
+### 3. The queue in `/admin/polaroid`
+
+An inbox listing the D1 queue: approve or reject each submitted clip
+(playing it), and a "run the queue" switch. While it's on, the Mac claims
+the next approved submission and, through the existing task queue:
+
+1. downloads the clip and runs `init --crop`,
+2. runs panels 2, 4, 5 and 6 on the 4090 (`polaroid-run`, about 17 minutes
+   for a 5s clip),
+3. runs panel 3 (Bria, `background-video`, ~$0.25),
+4. runs `polaroid` for the atlas and loop,
+5. uploads the outputs to the public bucket, marks it `made`, deletes the
+   clip, emails the owner their private link, and claims the next.
+
+Switching it off finishes the one in progress, then stops. Skip-if-exists
+at every step, and no automatic retries (CLAUDE.md): a failure marks the
+submission `failed` with its log, to retry from the inbox. Show, reject and
+delete live there too.
+
+### 4. The gallery, the link and submitting
+
+- **The link:** under the chooser's stack, a quiet "Add your own", only
+  when `VITE_APP_POLAROIDS` is set.
+- **`/polaroids`:** an endless grid you drag or scroll around, wrapping in
+  every direction, of polaroid cards (the player's polaroid, with the
+  tub viewer from `/admin/polaroid`). Stills by default; only the few
+  nearest the centre play their loops, so a phone isn't decoding dozens of
+  videos. A loop from the song plays underneath.
+- **"Add yours":** the `/admin/record` recorder, made public: camera or
+  upload, square crop, 5 seconds, consent. Then a private link, `/p/<id>`,
+  that says where it is in the queue until it's made.
 
 ## Measurements
 
@@ -243,34 +328,28 @@ deleted straight after along with the bucket.
       crossfade 6 frames)
 - [x] The R3F polaroid (`/admin/polaroid`)
 - [x] One model for panels 2, 4, 5 and 6, built and measured on the 4090
-- [ ] The polaroid container as a standing service on the PC
-      (`POLAROID_URL`), and `polaroid-run`'s PC path; then update CLAUDE.md
-- [ ] Run `background-video` against a real bucket (the R2 API token for
-      `lysterfield-bria-temp` doesn't exist yet), or replace panel 3 with a
-      local step
-- [ ] Settle the open questions below, then split into ready plans:
-      shared polaroid package and the new app; submit and approve (D1, R2,
-      Access); `polaroid-batch`; polaroid page and gallery
-- [ ] Gallery performance spike: N looping polaroids on a phone
+- [x] 1. The polaroid container as a standing service on the PC
+      (`POLAROID_URL`), `polaroid-run`'s PC path, the `pc` lane and a
+      4090/Replicate switch in `/admin/polaroid`; CLAUDE.md updated.
+      Checked on a copy of `park-party-2`: 120 frames in 1,051s, free,
+      matching the Replicate run's panels by eye
+- [x] 2. The next app as a Worker with static assets; D1, the two buckets,
+      the routes (a bearer token for the admin, not Access)
+- [ ] Onboard lysterfieldlake.com to Email Service (user's go-ahead: DNS)
+- [ ] The CI token needs Workers Scripts, D1 and R2: Edit (was Pages)
+- [ ] 3. The inbox and "run the queue" in `/admin/polaroid`
+- [ ] 4. The gallery, the link under the stack, and submitting, behind
+      `VITE_APP_POLAROIDS`
+- [ ] Gallery performance on a phone: how many playing loops it holds
 - [ ] Check the matte and portrait across a range of skin tones and
-      lighting before strangers' clips go through (the leak detector is out
-      of the picture now: Bria replaced flux-fill)
+      lighting before strangers' clips go through
 
 ## Open questions
 
-- **Name and domain:** a subdomain (`polaroids.lysterfieldlake.com`) or
-  its own?
-- **Accounts or just email?** With a person approving each clip and no
-  spend to protect, an email plus a private link may be enough. Clerk
-  accounts would add a "my polaroids" page and self-serve deletion.
-- **How often to batch,** and what a visitor is told about the wait.
-- **Panel 3 on the PC too?** Bria is ~$0.25 each on Replicate. Free
-  alternatives: a local video-inpainting model in the polaroid container
-  (ProPainter, say), or one still background plate held for the loop.
-- **Where the batch runs from:** `polaroid-batch` on the Mac, driving the
-  PC over Tailscale like the dream lane does, or on the PC itself (then it
-  needs the pipeline and ffmpeg there).
-- **Legal and privacy:** terms and consent wording, minors, where the data
-  lives, and what "delete" removes (atlas, still, OG image, caches).
-- **Gallery music:** a stem or loop from the song, or something new?
-- **Link from the music video?** A credit or a link back, or kept apart.
+- **Legal and privacy:** terms and consent wording, minors, and what
+  "delete" removes (atlas, still, caches).
+- **Which stretch of the song** loops under the gallery.
+- **Cloudflare's email sending:** the Worker binding from Email Routing
+  only sends to verified addresses; sending to any visitor needs
+  Cloudflare's newer Email Service. Check it's available on the account
+  before building on it.

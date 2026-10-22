@@ -93,11 +93,10 @@ above doesn't apply to it, and changing one doesn't change the other.
 - Moderation lives in `job.json`'s `review`: `submitted` → `approved` (to make) → `shown` (to show), or
   `rejected`. The admin refuses to run any polaroid stage unless it's `approved`, so a visitor's clip
   costs nothing until a person has looked at it. Delete only works on polaroid jobs, never a song's.
-- Panels 2, 4, 5 and 6 come from one model, `models/polaroid`, on the `lysterfield-polaroid` Replicate
-  deployment (`polaroid-run`, about $1.90 a loop). For now polaroid generation runs on Replicate only,
-  not the 4090 PC. `plans/backlog/release-polaroids.md` changes that: the public release makes approved
-  submissions in batches on the PC (`POLAROID_URL`), with Replicate as the fallback. Update this when the
-  PC path lands.
+- Panels 2, 4, 5 and 6 come from one model, `models/polaroid`, run on the 4090 PC by default (free, about
+  17 minutes a loop; the `polaroid` container, `POLAROID_URL`, `models/polaroid/README.md`) or on the
+  `lysterfield-polaroid` Replicate deployment (`--on replicate`, about $1.90 a loop) when the artist
+  chooses: `/admin/polaroid` has the same 4090/Replicate switch as the dreams page. Keep both paths.
 - Panel 3 is Bria (`background-video`, about $0.25), whose inputs go through the public R2 bucket
   `lysterfield-bria-temp` (objects expire after a day). It needs `R2_*` in `apps/pipeline/.env`.
 - `models/polaroid` builds on the PC (`~/lysterfield-models`), not the Mac: the image is ~33GB and a

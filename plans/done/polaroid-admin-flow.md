@@ -14,7 +14,7 @@ paid step behind a button that shows its cost. Get the prototype work off its br
 the polaroid, the dreams and the player stop living in separate worktrees.
 
 Still dev-only `/admin`, as the dreams tooling is. The public, hosted version (accounts, gallery, budget)
-stays in `backlog/release-polaroids.md`.
+stays in `in-progress/polaroids.md`.
 
 ## Context
 
@@ -34,7 +34,7 @@ stays in `backlog/release-polaroids.md`.
   `polaroid/atlas.mp4`).
 - `/admin/polaroid`: the atlas on the player's polaroid model, with the person as a depth-displaced
   cut-out in front of the background (`materials/polaroid-loop-material.tsx`). Drag to turn.
-- Measurements and decisions: `backlog/release-polaroids.md`.
+- Measurements and decisions: `in-progress/polaroids.md`.
 
 **What `main` has since gained** that this builds on or must fit with:
 
@@ -56,7 +56,7 @@ stays in `backlog/release-polaroids.md`.
 ### 1. Consolidate onto `main` first
 
 1. Rebase `polaroid-prototype` onto `main`. Expect conflicts only in `vite-plugin-admin.ts`, `main.tsx`,
-   `.eslintrc.json` and `backlog/release-polaroids.md`.
+   `.eslintrc.json` and `in-progress/polaroids.md`.
 2. Land it as two PRs, so the risky one is small:
    - **Pipeline and models:** `init --crop`, `models/diffusionclip/run.py`, `models/polaroid`, `polaroid`
      and `polaroid-panels`. Nothing calls these by default, so it changes no existing run.
@@ -135,11 +135,11 @@ address as `POLAROID_URL` in `apps/pipeline/.env` (never in code). Both containe
 ## Tasks
 
 - [x] Rebase `polaroid-prototype` onto `main` and land it (#37, as one PR, after `polaroid-swap` #36)
-- [x] Replicate deployment test (L40S, 4-way split): 9 minutes cold, about $2 (`backlog/release-polaroids.md`)
+- [x] Replicate deployment test (L40S, 4-way split): 9 minutes cold, about $2 (`in-progress/polaroids.md`)
 - [x] `polaroid-run` on the Replicate deployment, with cost printed first and resumable predictions
       (Replicate only for now, by decision 2026-10-18; the PC runner below is deferred)
 - [x] `kind: "polaroid"` in `job.json`, from `/admin/record`
-- [ ] First real run of `background-video` on a polaroid job: moved to `backlog/release-polaroids.md`
+- [ ] First real run of `background-video` on a polaroid job: moved to `in-progress/polaroids.md`
 - [x] Admin actions, lanes (polaroid generation pinned to Replicate) and the polaroid job detail API
 - [x] `/admin/polaroid` list, job view with stages, costs and tasks; record → polaroid hand-off
 - [x] Flattened loop (`polaroid/loop.mp4`, from the `polaroid` step, cut from the atlas) and its download link
@@ -155,7 +155,7 @@ address as `POLAROID_URL` in `apps/pipeline/.env` (never in code). Both containe
 - [x] CLAUDE.md: polaroid jobs, their atlas layout, Replicate only, the R2 bucket, building on the PC
 - [x] Switch `models.ts`'s portrait to the optimised DiffusionCLIP version `fd60b4d9…`
 - [ ] The polaroid container as a standing service on the PC (`POLAROID_URL`): moved to
-      `backlog/release-polaroids.md`, where the PC makes polaroids in batches
+      `in-progress/polaroids.md`, where the PC makes polaroids in batches
 
 ## Choices made (say if any are wrong)
 
