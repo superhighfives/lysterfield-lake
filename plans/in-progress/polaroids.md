@@ -166,11 +166,6 @@ Routes:
 `apps/client/scripts/polaroids-smoke.sh` walks a submission through its
 whole life against `wrangler dev`, refusals included.
 
-**Behind a flag until release:** the public routes answer 404 until
-`POLAROIDS_PUBLIC` is `"true"` (`wrangler.jsonc`); the admin routes work
-regardless. The app's own switch, for step 4, is `VITE_APP_POLAROIDS`
-(`.env.next`, `false`).
-
 **Still to switch on:** submissions refuse everything until the Worker has
 a `TURNSTILE_SECRET` (step 4 makes the widget), and email needs
 lysterfieldlake.com onboarded to Email Service

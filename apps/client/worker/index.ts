@@ -71,8 +71,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   const parts = url.pathname.split('/').filter(Boolean).slice(1) // after "api"
   const method = request.method
 
-  // Not released yet: the public routes are off until POLAROIDS_PUBLIC is "true" (wrangler.jsonc).
-  if (parts[0] === 'polaroids' && env.POLAROIDS_PUBLIC === 'true') {
+  if (parts[0] === 'polaroids') {
     const id = parts[1]
     if (!id && method === 'GET') {
       const before = Number(url.searchParams.get('before')) || null
