@@ -31,11 +31,14 @@ import {
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } })
 
 async function readJson(request: Request): Promise<Record<string, unknown>> {
+  let body: unknown
   try {
-    return (await request.json()) as Record<string, unknown>
+    body = await request.json()
   } catch {
     throw new HttpError(400, 'Send JSON')
   }
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) throw new HttpError(400, 'Send a JSON object')
+  return body as Record<string, unknown>
 }
 
 /** Turnstile's answer for this visitor. Without a secret configured nothing gets in. */
@@ -46,8 +49,10 @@ async function checkTurnstile(env: Env, token: unknown, ip: string | null) {
   form.append('secret', env.TURNSTILE_SECRET)
   form.append('response', token)
   if (ip) form.append('remoteip', ip)
-  const result = (await (await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: form })).json()) as { success: boolean }
-  if (!result.success) throw new HttpError(403, "The human check didn't pass: try again")
+  const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: form })
+  const result: unknown = res.ok ? await res.json().catch(() => null) : null
+  if (typeof result !== 'object' || result === null || !('success' in result)) throw new HttpError(503, "The human check isn't answering: try again in a minute")
+  if (result.success !== true) throw new HttpError(403, "The human check didn't pass: try again")
 }
 
 /** The Mac's key, compared in constant time. */

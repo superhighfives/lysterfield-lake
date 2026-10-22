@@ -186,7 +186,8 @@ export async function done(env: Env, id: string) {
   if (missing.length > 0) throw new HttpError(409, `Upload ${missing.join(' and ')} first`)
 
   const now = Date.now()
-  await env.DB.prepare("UPDATE polaroids SET status = 'made', made_at = ?, updated_at = ?, error = NULL WHERE id = ? AND status = 'making'").bind(now, now, id).run()
+  const { meta } = await env.DB.prepare("UPDATE polaroids SET status = 'made', made_at = ?, updated_at = ?, error = NULL WHERE id = ? AND status = 'making'").bind(now, now, id).run()
+  if (meta.changes === 0) throw new HttpError(409, 'It changed while it was finishing: look again')
   await env.INBOX.delete(id)
   const emailed = row.email ? await sendReady(env, row.email, id) : false
   if (row.email) await env.DB.prepare('UPDATE polaroids SET email = NULL WHERE id = ?').bind(id).run()
