@@ -24,7 +24,9 @@ import {
   putFile,
   receiveClip,
   remove,
+  resend,
   sweepAbandoned,
+  sweepEmails,
   type Status,
 } from './polaroids.ts'
 
@@ -116,6 +118,10 @@ async function route(request: Request, env: Env): Promise<Response> {
       const result = await done(env, id)
       return json({ ...adminView(result.row), emailed: result.emailed })
     }
+    if (what === 'polaroids' && id && action === 'email' && method === 'POST') {
+      const result = await resend(env, id)
+      return json({ ...adminView(result.row), emailed: result.emailed })
+    }
     if (what === 'polaroids' && id && action === 'failed' && method === 'POST') return json(adminView(await fail(env.DB, id, String((await readJson(request)).error ?? 'failed'))))
     if (what === 'queue' && id === 'claim' && method === 'POST') {
       const row = await claim(env.DB)
@@ -139,5 +145,7 @@ export default {
   async scheduled(_controller, env) {
     const swept = await sweepAbandoned(env)
     if (swept > 0) console.log(`swept ${swept} abandoned submissions`)
+    const cleared = await sweepEmails(env.DB)
+    if (cleared > 0) console.log(`cleared ${cleared} unsent email addresses`)
   },
 } satisfies ExportedHandler<Env>

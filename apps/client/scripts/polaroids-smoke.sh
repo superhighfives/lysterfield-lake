@@ -41,6 +41,7 @@ expect "atlas" '"name":"atlas.mp4"' -XPUT "${A[@]}" $B/admin/polaroids/$id/files
 expect "loop" '"name":"loop.mp4"' -XPUT "${A[@]}" $B/admin/polaroids/$id/files/loop.mp4 --data-binary @"$fake"
 expect "done, the email cleared" '"hasEmail":false' -XPOST "${A[@]}" $B/admin/polaroids/$id/done
 expect "the clip is deleted" 'clip is gone' "${A[@]}" $B/admin/polaroids/$id/clip
+expect "no resend once it's sent" 'No email to send' -XPOST "${A[@]}" $B/admin/polaroids/$id/email
 expect "show" '"status":"shown"' -XPOST "${A[@]}" $B/admin/polaroids/$id/review -d '{"decision":"show"}'
 expect "in the gallery" "\"id\":\"$id\"" $B/polaroids
 expect "delete" '"deleted":true' -XDELETE "${A[@]}" $B/admin/polaroids/$id

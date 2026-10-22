@@ -177,7 +177,9 @@ export async function putFile(env: Env, id: string, name: string, request: Reque
 
 /**
  * Made: its files are up. The visitor's clip is deleted (nothing keeps it once the polaroid exists), and if
- * they left an email they're told it's ready, after which the address is cleared too.
+ * they left an email they're told it's ready. The address is cleared once that's sent; if it fails (Email
+ * Service down, or the domain not onboarded yet) it's kept for a resend from the admin (`resend`), and
+ * cleared anyway after EMAIL_KEEP_DAYS (`sweepEmails`).
  */
 export async function done(env: Env, id: string) {
   const row = await get(env.DB, id)
@@ -190,9 +192,21 @@ export async function done(env: Env, id: string) {
   if (meta.changes === 0) throw new HttpError(409, 'It changed while it was finishing: look again')
   await env.INBOX.delete(id)
   const emailed = row.email ? await sendReady(env, row.email, id) : false
-  if (row.email) await env.DB.prepare('UPDATE polaroids SET email = NULL WHERE id = ?').bind(id).run()
+  if (emailed) await clearEmail(env.DB, id)
   return { row: await get(env.DB, id), emailed }
 }
+
+/** The "ready" email again, for one whose first send failed: still only once it's made. */
+export async function resend(env: Env, id: string) {
+  const row = await get(env.DB, id)
+  if (row.status !== 'made' && row.status !== 'shown') throw new HttpError(409, `It's ${row.status}: the email goes once it's made`)
+  if (!row.email) throw new HttpError(409, 'No email to send: none was left, or it was already sent')
+  const emailed = await sendReady(env, row.email, id)
+  if (emailed) await clearEmail(env.DB, id)
+  return { row: await get(env.DB, id), emailed }
+}
+
+const clearEmail = (db: D1Database, id: string) => db.prepare('UPDATE polaroids SET email = NULL WHERE id = ?').bind(id).run()
 
 export async function fail(db: D1Database, id: string, error: string) {
   const now = Date.now()
@@ -211,6 +225,18 @@ export async function remove(env: Env, id: string) {
   const files = await env.POLAROIDS.list({ prefix: `${id}/` })
   if (files.objects.length > 0) await env.POLAROIDS.delete(files.objects.map((o) => o.key))
   await env.DB.prepare('DELETE FROM polaroids WHERE id = ?').bind(id).run()
+}
+
+/** How long an address whose "ready" email never went is kept for a resend, counted from when it was made. */
+export const EMAIL_KEEP_DAYS = 30
+
+/** Addresses still held EMAIL_KEEP_DAYS after their polaroid was made (or turned down): cleared, sent or not. */
+export async function sweepEmails(db: D1Database) {
+  const { meta } = await db
+    .prepare("UPDATE polaroids SET email = NULL WHERE email IS NOT NULL AND status IN ('made', 'shown', 'rejected') AND updated_at < ?")
+    .bind(Date.now() - EMAIL_KEEP_DAYS * 24 * 60 * 60 * 1000)
+    .run()
+  return meta.changes
 }
 
 /** Submissions whose clip never arrived within a day: the row, and any part of a clip. */

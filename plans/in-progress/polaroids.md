@@ -124,7 +124,8 @@ project is left as it was, no longer updated. Bound to the Worker:
 
 - **D1, `lysterfield-polaroids`** (`apps/client/migrations/`): one row per
   submission: id, status, the crop, an optional email (cleared once it's
-  sent), the clip's type and size, a failure log, and timestamps.
+  sent; kept for a resend from the admin if sending fails, and cleared
+  anyway 30 days after it's made), the clip's type and size, a failure log, and timestamps.
 - **R2, `lysterfield-polaroids-inbox`** (private): the visitors' clips, each
   deleted once its polaroid is made.
 - **R2, `lysterfield-polaroids`** (public, polaroids.lysterfieldlake.com,
@@ -147,7 +148,7 @@ Routes:
 - `GET /api/polaroids?before=&limit=`: the shown ones, newest first, a page
   at a time, for the gallery.
 - `GET /api/polaroids/<id>`: one polaroid's status, for its private link.
-- `/api/admin/polaroids[/<id>[/clip|review|files/<name>|done|failed]]` and
+- `/api/admin/polaroids[/<id>[/clip|review|files/<name>|done|failed|email]]` and
   `POST /api/admin/queue/claim`: moderation and the queue, for the Mac.
 
 **Changed from the plan:**
