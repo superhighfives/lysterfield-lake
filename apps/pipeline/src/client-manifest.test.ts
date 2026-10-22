@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { writeSplitClientAssets } from './client-manifest.ts'
 
-const SIZES = ['.webm', '.mov', '-small.webm', '-small.mov']
+const SIZES = ['.webm', '.mp4', '-small.webm', '-small.mp4']
 
 /** A fake compose-split output: `main/` plus `7-dreams/<take>/split/` per take. */
 async function fakeJob(takes: string[]) {
@@ -31,7 +31,7 @@ describe('writeSplitClientAssets', () => {
     expect((await readdir(dreams)).sort()).toEqual(['cold-water', 'lush-and-light', 'main'])
     expect((await readdir(path.join(dreams, 'main'))).sort()).toEqual(SIZES.map((s) => `main${s}`).sort())
     expect((await readdir(path.join(dreams, 'cold-water'))).sort()).toEqual(SIZES.map((s) => `dream${s}`).sort())
-    expect(await readFile(path.join(dreams, 'lush-and-light', 'dream-small.mov'), 'utf8')).toBe('lush-and-light-small.mov')
+    expect(await readFile(path.join(dreams, 'lush-and-light', 'dream-small.mp4'), 'utf8')).toBe('lush-and-light-small.mp4')
     expect(written).toHaveLength(12)
   })
 

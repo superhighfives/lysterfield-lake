@@ -58,7 +58,7 @@ on the flux-kontext path. `dream-repair` is capped at `MAX_REPAIR_ROUNDS`
   (gitignored), the stills `public/assets/<id>/{hero,00-03}.jpg` and the
   `loop.{mov,webm}` (committed), and a `src/dreams.json` entry with title
   `TBA`, an empty prompt and a placeholder link.
-- `compose-split` writes the dream-only `dreams/<id>/dream{,-small}.{webm,mov}`
+- `compose-split` writes the dream-only `dreams/<id>/dream{,-small}.{mp4,webm}`
   from the take's `video/panel.mov` (which `compose` makes), and rewrites the
   shared `dreams/main/main*`.
 - The next app plays only the split files. Its videos are in the
@@ -87,15 +87,11 @@ on the next bucket already has the depth fix (`done/depth-walk-away-gaps.md`).
    `compose-split --takes <client-id>`. Fill in the `dreams.json` entry's
    title and prompt (the `link` is unused now: every dream links to the one
    YouTube video, `utils/youtube.ts`).
-6. **Upload** the four `dream*` files to the next bucket. Nothing is deleted. `wrangler` 3 writes to the real bucket by
-   default (it has no `--remote` flag):
-   ```sh
-   bunx wrangler r2 object put lysterfield-lake-next-dreams/<id>/dream.webm \
-     --file apps/client/dreams/<id>/dream.webm \
-     --content-type video/webm --cache-control "public, max-age=604800"
-   ```
-   (`.mov` files as `video/quicktime`.) Check each URL on
-   next-dreams.lysterfieldlake.com before going on.
+6. **Upload** the dream's split files to the next bucket with
+   `apps/client/scripts/upload-next-dreams.sh <id>`: additive, skipping any
+   already there at the same size. The player loads `dream{,-small}.mp4`
+   (H.264 in every browser: `utils/dream-video.ts` says why). Check the URLs
+   on next-dreams.lysterfieldlake.com before going on.
 7. **Ship.** A PR with `public/assets/<id>/` and `src/dreams.json`. Merging
    deploys it. Then play it on the next app, desktop and phone, including a
    swap into and out of it.
@@ -107,9 +103,9 @@ on the next bucket already has the depth fix (`done/depth-walk-away-gaps.md`).
 - [ ] Full song (user's go-ahead: ~$20)
 - [ ] Check, repair, one full watch
 - [ ] `compose`, `compose-split`, fill in `dreams.json`
-- [ ] A small upload script for a dream's split files, so step 6 isn't
+- [x] A small upload script for a dream's split files, so step 6 isn't
       typed by hand: `apps/client/scripts/upload-next-dreams.sh <id>`,
-      skipping files whose size and etag already match
+      skipping files already there at the same size
 - [ ] Upload, check the URLs, PR, merge
 - [ ] Play it on the next app (desktop and phone)
 

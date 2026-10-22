@@ -216,10 +216,14 @@ export interface ComposeSplitResult {
  * The composite split in two, so the client can swap dreams mid-song without
  * reloading the audio:
  *
- * - `main/main{,-small}.{mov,webm}`: panels 1-6 in their usual order, with the
+ * - `main/main{,-small}.{mp4,webm}`: panels 1-6 in their usual order, with the
  *   audio. Shared by every take, so made once per job.
- * - `7-dreams/<take>/split/dream{,-small}.{mov,webm}`: panel 7 alone, silent,
+ * - `7-dreams/<take>/split/dream{,-small}.{mp4,webm}`: panel 7 alone, silent,
  *   the same length and frame rate as the main video, so the two stay in step.
+ *
+ * H.264 in `.mp4`, not `.mov` as `compose` writes: Cloudflare's edge caches
+ * `.mp4` and not `.mov`, and the client plays the dream clips as H.264 in
+ * every browser (apps/client/src/utils/dream-video.ts says why).
  *
  * Built from the panel videos `compose` already compiled (`<panel>/video/panel.mov`),
  * so run `compose` on a take first. Anything already made is skipped.
@@ -242,7 +246,7 @@ export async function composeSplit(job: Job, takes: string[]): Promise<ComposeSp
   for (const take of takes) {
     const dir = `7-dreams/${take}/split`
     dreamDirs.push(path.join(job.dir, dir))
-    const outputs = ['dream.mov', 'dream.webm', 'dream-small.mov', 'dream-small.webm'].map((f) => path.join(job.dir, dir, f))
+    const outputs = ['dream.mp4', 'dream.webm', 'dream-small.mp4', 'dream-small.webm'].map((f) => path.join(job.dir, dir, f))
     if ((await Promise.all(outputs.map(exists))).every(Boolean)) continue
 
     const dreamPanel = await panelVideo(`7-dreams/${take}`)
@@ -259,9 +263,9 @@ export async function composeSplit(job: Job, takes: string[]): Promise<ComposeSp
   return { mainDir: path.join(job.dir, mainDir), dreamDirs }
 }
 
-/** `<base>.mov`, `<base>.webm`, `<base>-small.mov` and `<base>-small.webm` from one source, the same passes `compose` makes. Skips any that exist. */
+/** `<base>.mp4`, `<base>.webm`, `<base>-small.mp4` and `<base>-small.webm` from one source, the same passes `compose` makes. Skips any that exist. */
 async function compressAll(job: Job, source: string, base: string): Promise<void> {
-  for (const [suffix, ext, half] of [['', 'mov', false], ['', 'webm', false], ['-small', 'mov', true], ['-small', 'webm', true]] as const) {
+  for (const [suffix, ext, half] of [['', 'mp4', false], ['', 'webm', false], ['-small', 'mp4', true], ['-small', 'webm', true]] as const) {
     await once(await videoPath(job, `${base}${suffix}`, ext), (out) => compress(source, out, { half }))
   }
 }
@@ -331,10 +335,11 @@ async function compress(inputPath: string, outputPath: string, opts: { half?: bo
   } else {
     // Without +faststart, ffmpeg's default mp4/mov muxer writes moov (the
     // index a browser needs before it can start playback) after mdat — the
-    // full media payload. A browser without WebM support (Safari) falls
-    // back to this .mov source, and must then download the entire file
-    // before playback can begin at all: indistinguishable from "stuck at
-    // 0:00" on anything but a tiny clip.
+    // full media payload. Every browser plays the dream video from this
+    // H.264 file, and one without WebM support (Safari) uses it for the main
+    // video too. Without faststart it must download the entire file before
+    // playback can begin at all: indistinguishable from "stuck at 0:00" on
+    // anything but a tiny clip.
     args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '28', '-movflags', '+faststart')
   }
   args.push(outputPath)

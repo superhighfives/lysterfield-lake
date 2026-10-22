@@ -82,8 +82,13 @@ function createDreamElement() {
   return el
 }
 
-const webm = document.createElement('video').canPlayType('video/webm; codecs="vp9"')
-const extension = webm ? 'webm' : 'mov'
+// Dream videos are H.264 everywhere, not VP9 where it plays: Chrome on
+// Apple Silicon decodes a 1024px VP9 video in hardware, and that failed on
+// these (PIPELINE_ERROR_DECODE) on 4 seeks in 10, each costing seconds
+// before the retry. The same dream as H.264 played every seek in ~100ms.
+// The main video stays VP9 first: at 6144px wide it's decoded in software,
+// which doesn't fail. `.mp4`, not `.mov`, so Cloudflare's edge caches it.
+const extension = 'mp4'
 
 type Slot = {
   el: HTMLVideoElement
