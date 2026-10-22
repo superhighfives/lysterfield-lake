@@ -32,9 +32,8 @@ share() {
 mkdir -p "$main/apps/pipeline/.jobs"
 share apps/pipeline/.jobs
 
-if [ -d "$main/apps/pipeline/resources/colours" ]; then
-  share apps/pipeline/resources/colours
-fi
+mkdir -p "$main/apps/pipeline/resources/colours"
+share apps/pipeline/resources/colours
 
 if [ -e "$main/apps/pipeline/.env" ]; then
   share apps/pipeline/.env
