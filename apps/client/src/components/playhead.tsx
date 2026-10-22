@@ -505,10 +505,14 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                 type="video/webm"
                 key={`${mainBase}-webm`}
               />
+              {/* H.264 for browsers without VP9 (Safari): `.mp4` for the
+                  split layout's shared main video, which Cloudflare's edge
+                  caches (it doesn't cache `.mov`); the 7-panel files only
+                  have `.mov`. */}
               <source
-                src={`${mainBase}.mov`}
+                src={`${mainBase}.${isSplit(dream) ? 'mp4' : 'mov'}`}
                 type="video/mp4"
-                key={`${mainBase}-mov`}
+                key={`${mainBase}-h264`}
               />
             </video>
             {/* `noautohide` on this, the one slotted control element: even

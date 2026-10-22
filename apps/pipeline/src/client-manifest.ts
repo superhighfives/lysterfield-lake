@@ -66,13 +66,13 @@ async function upsertDreamsJson(clientDir: string, id: string): Promise<void> {
  * Copies compose-split()'s output into `apps/client/dreams/`, next to the
  * 7-panel files, for the same R2 sync:
  *
- * - `dreams/main/main{,-small}.{webm,mov}`: the shared 6-panel video with the audio.
- * - `dreams/<id>/dream{,-small}.{webm,mov}`: each take's silent dream clip, `<id>` being the take's name.
+ * - `dreams/main/main{,-small}.{webm,mp4}`: the shared 6-panel video with the audio.
+ * - `dreams/<id>/dream{,-small}.{webm,mp4}`: each take's silent dream clip, `<id>` being the take's name.
  *
  * See plans/done/split-dream-video-client.md for how the client plays them.
  */
 export async function writeSplitClientAssets(clientDir: string, result: ComposeSplitResult): Promise<string[]> {
-  const files = ['', '-small'].flatMap((size) => ['webm', 'mov'].map((ext) => `${size}.${ext}`))
+  const files = ['', '-small'].flatMap((size) => ['webm', 'mp4'].map((ext) => `${size}.${ext}`))
   const written: string[] = []
   const copy = async (from: string, toDir: string, name: string) => {
     await mkdir(toDir, { recursive: true })

@@ -233,10 +233,11 @@ For a new take (the steps in detail: `ready/next-dream.md`):
 1. `compose --job .jobs/full-video --take <take> --id <client-id>` (local,
    25-38 minutes): the stills and loop into
    `apps/client/public/assets/<id>/`, a `dreams.json` entry to fill in.
-2. `compose-split --takes <client-id>`: the take's `dream{,-small}.{webm,mov}`.
+2. `compose-split --takes <client-id>`: the take's `dream{,-small}.{mp4,webm}`.
    The shared `main*` is already made and doesn't change.
 3. Review: one full watch of panel 7.
-4. Upload the split files to the next bucket with `wrangler r2 object put`,
+4. Upload the split files to the next bucket with
+   `apps/client/scripts/upload-next-dreams.sh <id>`,
    without deleting anything. **Needs the user's go-ahead.**
 5. A PR with the assets and `dreams.json`. Merging deploys it.
 
