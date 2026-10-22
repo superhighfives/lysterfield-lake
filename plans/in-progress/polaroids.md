@@ -298,9 +298,11 @@ deleted straight after along with the bucket.
       crossfade 6 frames)
 - [x] The R3F polaroid (`/admin/polaroid`)
 - [x] One model for panels 2, 4, 5 and 6, built and measured on the 4090
-- [ ] 1. The polaroid container as a standing service on the PC
-      (`POLAROID_URL`), `polaroid-run`'s PC path, and the `pc` lane in
-      `/admin`; then update CLAUDE.md's Replicate-only rule
+- [x] 1. The polaroid container as a standing service on the PC
+      (`POLAROID_URL`), `polaroid-run`'s PC path, the `pc` lane and a
+      4090/Replicate switch in `/admin/polaroid`; CLAUDE.md updated.
+      Checked on a copy of `park-party-2`: 120 frames in 1,051s, free,
+      matching the Replicate run's panels by eye
 - [ ] 2. The next app as a Worker with static assets; D1, the two buckets,
       the routes, Access
 - [ ] 3. The inbox and "run the queue" in `/admin/polaroid`
