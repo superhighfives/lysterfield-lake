@@ -4,6 +4,8 @@
 # - apps/pipeline/.jobs: pipeline outputs, so the skip-if-output-exists checks
 #   guarding Replicate calls aren't defeated by a fresh, empty copy.
 # - apps/pipeline/.env: REPLICATE_API_TOKEN and friends.
+# - apps/pipeline/resources/colours: the colour and style images /admin's
+#   new-dream form offers (gitignored; uploads land here too).
 # Runs automatically on `git worktree add`; safe to run by hand in an
 # existing worktree.
 
@@ -29,6 +31,9 @@ share() {
 
 mkdir -p "$main/apps/pipeline/.jobs"
 share apps/pipeline/.jobs
+
+mkdir -p "$main/apps/pipeline/resources/colours"
+share apps/pipeline/resources/colours
 
 if [ -e "$main/apps/pipeline/.env" ]; then
   share apps/pipeline/.env

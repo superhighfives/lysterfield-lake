@@ -32,7 +32,7 @@ models/deforum/deforum/
 models/deforum/probe.json
 
 # Colour references for dream takes (from the HDD backups/Dreaming/Colours, ~55MB), not committed.
-apps/pipeline/resources/colours/
+apps/pipeline/resources/colours
 
 
 # Code models/polaroid copies in from its sibling models (fetch.sh), not committed.
