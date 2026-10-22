@@ -26,7 +26,10 @@ import { playback } from '../utils/dream-video'
 // - drag: the ring fills toward the point where letting go swaps, with
 //   the dream it'll swap to shown beside it on the side it'll come from
 // - busy: a spinning dashed ring, labelled, while the player waits on
-//   video (the first dream loading, or a swap) — no drag offered then
+//   video (the first dream loading, or a swap) — no drag offered then.
+//   Over the polaroid a drag is still offered while it waits (a swap can
+//   skip past a slow one), so there the polaroid ring spins and says it's
+//   loading instead
 
 type Mode = 'default' | 'hover' | 'polaroid' | 'drag' | 'busy'
 
@@ -67,6 +70,9 @@ function Cursor() {
   const [mode, setMode] = useState<Mode>('default')
   const [visible, setVisible] = useState(false)
   const [label, setLabel] = useState('')
+  /** Waiting on video: the old dream going, the next one loading, or the
+   *  player buffering. Not the new dream's reveal, which has its video. */
+  const [waiting, setWaiting] = useState(false)
   const [preview, setPreview] = useState<{
     dream: Dream
     side: 'left' | 'right'
@@ -99,6 +105,7 @@ function Cursor() {
     let currentMode: Mode = 'default'
     let previewKey = ''
     let currentLabel = ''
+    let currentWaiting = false
     let frame = 0
 
     const handleMove = (event: PointerEvent) => {
@@ -170,6 +177,17 @@ function Cursor() {
       }
 
       const { swapPhase } = useStore.getState()
+      // playback.waiting is also true through the reveal ('in'), so leave
+      // that out here.
+      const nowWaiting =
+        swapPhase === 'out' ||
+        swapPhase === 'loading' ||
+        (swapPhase !== 'in' && playback.waiting)
+      if (nowWaiting !== currentWaiting) {
+        currentWaiting = nowWaiting
+        setWaiting(nowWaiting)
+      }
+
       let next: Mode = 'default'
       const hint = cursorHint.active ? cursorHint : null
       if (swapDrag.active || hint?.dragging) next = 'drag'
@@ -180,7 +198,7 @@ function Cursor() {
       // Not on touch: a busy ring appearing under a finger read as part of
       // the page, not a cursor (the drag ring still shows when a swap's on
       // offer, loading or not).
-      else if (fine && (swapPhase !== 'idle' || playback.waiting)) next = 'busy'
+      else if (fine && nowWaiting) next = 'busy'
       else if (
         hovered?.closest(INTERACTIVE) ||
         document.body.style.cursor === 'pointer'
@@ -281,7 +299,7 @@ function Cursor() {
         >
           <div
             className={`w-full h-full rounded-full border transition-[color,background-color,border-color,box-shadow] duration-300 ease-out ${
-              mode === 'busy'
+              mode === 'busy' || (mode === 'polaroid' && waiting)
                 ? 'border-dashed border-stone-900/60 dark:border-white/60 animate-spin'
                 : mode === 'hover'
                   ? 'border-yellow-500 bg-yellow-400/20'
@@ -347,7 +365,7 @@ function Cursor() {
             className="absolute left-1/2 -translate-x-1/2 font-mono text-[10px] uppercase tracking-widest bg-white/80 dark:bg-stone-900/80 rounded-full px-2"
             style={{ top: touch ? -size / 2 - 24 : size / 2 + 12 }}
           >
-            drag
+            {waiting ? 'Loading…' : 'drag'}
           </span>
           <CaretRight
             weight="bold"
