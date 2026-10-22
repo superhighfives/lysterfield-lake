@@ -1,8 +1,8 @@
 ---
 title: Play the dream as its own video beside a shared 6-panel main video
-status: In progress
+status: Done
 created: 2026-10-18
-updated: 2026-10-18
+updated: 2026-10-21
 ---
 
 # Play the dream as its own video beside a shared 6-panel main video
@@ -205,16 +205,21 @@ once the split path is the only one in use.
       `playhead.tsx`; `use-history-sync.ts` needed no change)
 - [x] Publishing: `compose-split` copies `main/` and each `split/` into
       `apps/client/dreams/` (done for all ten, 2026-10-18)
-- [ ] R2: copy, deploy the client, then delete the datestamp folders, with
-      the user's go-ahead; check `Accept-Ranges` and `Cache-Control` there
-- [ ] Check on real devices:
-  - iPhone Safari, including Low Power Mode
-  - an Android phone
-  - desktop Safari, Chrome and Firefox
-  - sync after seeks, pause/resume, backgrounding the tab, and the
-    back/forward cache
-- [ ] Measure: how long a switch takes on R2 (cold and warm), and what
-      happens to drift over the whole song on iPhone
+- [x] R2: done differently. The split client shipped as a separate Pages
+      app, `lysterfield-lake-next` (PR #42), with its own bucket,
+      `lysterfield-lake-next-dreams`, holding only the split files, served
+      from next-dreams.lysterfieldlake.com (PR #43; `Accept-Ranges` and
+      `Cache-Control` checked, cached at the edge). The live site and its
+      datestamp folders are untouched until the domain moves over.
+- [x] Real devices: desktop Chrome and an iPhone (Safari, the artist,
+      2026-10-20); the fixes from that are `done/touch-interactions.md`
+- [x] Fallbacks: a dream that won't load falls back to the one on screen
+      (or the choose screen); a decode error gets one retry; a swap can be
+      dragged past while a dream loads
+
+Not done, and not blocking: Android, desktop Safari and Firefox, Low Power
+Mode, the back/forward cache, and measuring a switch's time and the whole
+song's drift on an iPhone. Worth a pass before the domain moves over.
 
 ## Things to watch
 

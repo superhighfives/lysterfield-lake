@@ -1,8 +1,8 @@
 ---
 title: Polaroid loops end to end in /admin
-status: In Progress
+status: Done
 created: 2026-10-18
-updated: 2026-10-18
+updated: 2026-10-21
 ---
 
 # Polaroid loops end to end in /admin
@@ -14,7 +14,7 @@ paid step behind a button that shows its cost. Get the prototype work off its br
 the polaroid, the dreams and the player stop living in separate worktrees.
 
 Still dev-only `/admin`, as the dreams tooling is. The public, hosted version (accounts, gallery, budget)
-stays in `backlog/user-polaroid-loops.md`.
+stays in `backlog/release-polaroids.md`.
 
 ## Context
 
@@ -34,14 +34,14 @@ stays in `backlog/user-polaroid-loops.md`.
   `polaroid/atlas.mp4`).
 - `/admin/polaroid`: the atlas on the player's polaroid model, with the person as a depth-displaced
   cut-out in front of the background (`materials/polaroid-loop-material.tsx`). Drag to turn.
-- Measurements and decisions: `backlog/user-polaroid-loops.md`.
+- Measurements and decisions: `backlog/release-polaroids.md`.
 
 **What `main` has since gained** that this builds on or must fit with:
 
 - `steps/background-video.ts` and `r2.ts` (PR #32): panel 3 from Bria via a public R2 bucket, upload,
   run, delete. A 5s polaroid is one chunk, $0.25. Needs the `R2_*` settings in `apps/pipeline/.env`. Not
   yet run against a real bucket; the polaroid flow will be its first real run.
-- `ready/split-dream-video-client.md`: the player's atlas becomes six panels plus a separate dream video.
+- `done/split-dream-video-client.md`: the player's atlas becomes six panels plus a separate dream video.
   It doesn't touch the polaroid's own 5-panel atlas or material.
 
 **Other open branches that touch the same files:**
@@ -56,7 +56,7 @@ stays in `backlog/user-polaroid-loops.md`.
 ### 1. Consolidate onto `main` first
 
 1. Rebase `polaroid-prototype` onto `main`. Expect conflicts only in `vite-plugin-admin.ts`, `main.tsx`,
-   `.eslintrc.json` and `backlog/user-polaroid-loops.md`.
+   `.eslintrc.json` and `backlog/release-polaroids.md`.
 2. Land it as two PRs, so the risky one is small:
    - **Pipeline and models:** `init --crop`, `models/diffusionclip/run.py`, `models/polaroid`, `polaroid`
      and `polaroid-panels`. Nothing calls these by default, so it changes no existing run.
@@ -135,12 +135,11 @@ address as `POLAROID_URL` in `apps/pipeline/.env` (never in code). Both containe
 ## Tasks
 
 - [x] Rebase `polaroid-prototype` onto `main` and land it (#37, as one PR, after `polaroid-swap` #36)
-- [x] Replicate deployment test (L40S, 4-way split): 9 minutes cold, about $2 (`backlog/user-polaroid-loops.md`)
+- [x] Replicate deployment test (L40S, 4-way split): 9 minutes cold, about $2 (`backlog/release-polaroids.md`)
 - [x] `polaroid-run` on the Replicate deployment, with cost printed first and resumable predictions
       (Replicate only for now, by decision 2026-10-18; the PC runner below is deferred)
 - [x] `kind: "polaroid"` in `job.json`, from `/admin/record`
-- [ ] First real run of `background-video` on a polaroid job (needs `R2_*` in `.env`; the bucket
-      `lysterfield-bria-temp` exists, the R2 API token doesn't yet)
+- [ ] First real run of `background-video` on a polaroid job: moved to `backlog/release-polaroids.md`
 - [x] Admin actions, lanes (polaroid generation pinned to Replicate) and the polaroid job detail API
 - [x] `/admin/polaroid` list, job view with stages, costs and tasks; record → polaroid hand-off
 - [x] Flattened loop (`polaroid/loop.mp4`, from the `polaroid` step, cut from the atlas) and its download link
@@ -155,7 +154,8 @@ address as `POLAROID_URL` in `apps/pipeline/.env` (never in code). Both containe
       downloadable loop has the outline baked in
 - [x] CLAUDE.md: polaroid jobs, their atlas layout, Replicate only, the R2 bucket, building on the PC
 - [x] Switch `models.ts`'s portrait to the optimised DiffusionCLIP version `fd60b4d9…`
-- [ ] Later: the polaroid container as a standing service on the PC (`POLAROID_URL`), for free runs
+- [ ] The polaroid container as a standing service on the PC (`POLAROID_URL`): moved to
+      `backlog/release-polaroids.md`, where the PC makes polaroids in batches
 
 ## Choices made (say if any are wrong)
 

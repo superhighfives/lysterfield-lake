@@ -190,7 +190,7 @@ switch (step) {
       frameDirFlag(job, '4-matte/frames', 'alpha'),
       concurrency,
       // --frames 736-756,2846-3125 redoes just those (the old ones move to 5-depth/replaced/);
-      // --fit-to-subject true scales each to the subject's own depth (plans/in-progress/depth-walk-away-gaps.md).
+      // --fit-to-subject true scales each to the subject's own depth (plans/done/depth-walk-away-gaps.md).
       { frames: flags.frames ? parseFrameRanges(flags.frames) : undefined, fitToSubject: flags['fit-to-subject'] === 'true' }
     )
     console.log(JSON.stringify(result, null, 2))
@@ -232,7 +232,7 @@ switch (step) {
   }
 
   case 'polaroid': {
-    // The polaroid's looping 5-panel atlas (plans/backlog/user-polaroid-loops.md). ffmpeg only.
+    // The polaroid's looping 5-panel atlas (plans/backlog/release-polaroids.md). ffmpeg only.
     const job = await loadJob(requireFlag('job'))
     const result = await polaroid(job, {
       trim: flags.trim ? Number(flags.trim) : undefined,

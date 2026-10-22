@@ -19,7 +19,7 @@ export interface Crop {
 export interface JobConfig {
   /** Frame rate used throughout this job — matches the source video's extraction rate. */
   fps: number
-  /** A visitor's polaroid loop (plans/in-progress/polaroid-admin-flow.md) rather than a song's footage. Unset: a song. */
+  /** A visitor's polaroid loop (plans/done/polaroid-admin-flow.md) rather than a song's footage. Unset: a song. */
   kind?: 'polaroid'
   /**
    * What `init` was given, so the job can be rebuilt from its own footage:

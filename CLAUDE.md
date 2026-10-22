@@ -72,16 +72,18 @@ or resize either layout without updating both those files to match.
 ## Dream panel (7) must never show a person
 
 Abstract reinterpretation only — shapes, light, and colour, never a
-recognisable person or face. `dream.ts` always appends a fixed
-`NO_PEOPLE_SUFFIX` to every take's prompt so this can't be forgotten
-per-take; don't bypass that by calling the model directly with a raw
-prompt. Both dream takes in `real-15s-60fps` (`dream-styletransfer-v2`,
+recognisable person or face. On the flux-kontext path `dream.ts` always
+appends a fixed `NO_PEOPLE_SUFFIX` to every take's prompt (`dreamFrame`)
+so this can't be forgotten per-take; Deforum takes instead rely on the
+legacy dreams' fixed negative prompt (no people, faces, bodies), which
+always applies on top of any per-take `negativePrompt`. Don't bypass
+either by calling the model directly with a raw prompt. Both dream takes in `real-15s-60fps` (`dream-styletransfer-v2`,
 `dream-styletransfer-v2-fixed`) failed review for exactly this reason — a
 per-take prompt alone wasn't a strong enough guarantee.
 
 ## Polaroid jobs are separate from the song's
 
-A visitor's polaroid (`/admin/record` → `/admin/polaroid`, `plans/in-progress/polaroid-admin-flow.md`) is a job
+A visitor's polaroid (`/admin/record` → `/admin/polaroid`, `plans/done/polaroid-admin-flow.md`) is a job
 with `"kind": "polaroid"` in `job.json`: 5 seconds, panels 2-6 only, no dream. Its atlas is its own
 5-panel layout (`apps/pipeline/src/steps/polaroid.ts`, `POLAROID_PANELS`), read by
 `apps/client/src/materials/polaroid-loop-material.tsx`. It isn't the player's 7-panel atlas, so the rule
@@ -91,8 +93,10 @@ above doesn't apply to it, and changing one doesn't change the other.
   `rejected`. The admin refuses to run any polaroid stage unless it's `approved`, so a visitor's clip
   costs nothing until a person has looked at it. Delete only works on polaroid jobs, never a song's.
 - Panels 2, 4, 5 and 6 come from one model, `models/polaroid`, on the `lysterfield-polaroid` Replicate
-  deployment (`polaroid-run`, about $1.90 a loop). Polaroid generation runs on Replicate only, never on
-  the 4090 PC.
+  deployment (`polaroid-run`, about $1.90 a loop). For now polaroid generation runs on Replicate only,
+  not the 4090 PC. `plans/backlog/release-polaroids.md` changes that: the public release makes approved
+  submissions in batches on the PC (`POLAROID_URL`), with Replicate as the fallback. Update this when the
+  PC path lands.
 - Panel 3 is Bria (`background-video`, about $0.25), whose inputs go through the public R2 bucket
   `lysterfield-bria-temp` (objects expire after a day). It needs `R2_*` in `apps/pipeline/.env`.
 - `models/polaroid` builds on the PC (`~/lysterfield-models`), not the Mac: the image is ~33GB and a

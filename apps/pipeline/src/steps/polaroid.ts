@@ -8,7 +8,7 @@ import { exists, listFrames, videoPath, type Job } from '../job.ts'
 const execFileAsync = promisify(execFile)
 
 /**
- * The polaroid's panels, in atlas order (plans/backlog/user-polaroid-loops.md). Its own layout, not the music
+ * The polaroid's panels, in atlas order (plans/backlog/release-polaroids.md). Its own layout, not the music
  * video's 7-panel one (CLAUDE.md): no words, no dream. The client's polaroid-loop-material.tsx reads these
  * indices, 1-based like the player's.
  */

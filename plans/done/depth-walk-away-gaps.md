@@ -1,8 +1,8 @@
 ---
 title: Redo the depth panel where the walk-away goes black
-status: In progress
+status: Done
 created: 2026-10-17
-updated: 2026-10-18
+updated: 2026-10-21
 ---
 
 # Redo the depth panel where the walk-away goes black
@@ -59,9 +59,8 @@ frames the avatar also goes flat.
    ease it in.
 3. Review the fixed frames as stills and in motion, including the avatar's
    relief in the player.
-4. Re-compose: every dream shares panel 5, so all ten need `compose` again
-   (about 5½ hours locally, 24-38 minutes each), then `compose-split` for
-   the main video. Then the R2 sync.
+4. Re-compose. In the split layout panel 5 is only in the shared main
+   video, so only it needed remaking, not the ten dreams.
 
 ## Cost
 
@@ -96,5 +95,10 @@ the whole song, mostly reading the 2160px matte PNGs.
   character (the 2023 torso is brighter and blurrier); the 2023 frames just
   before 2846 already flickered.
 
-Still to do: re-compose the ten dreams and the split main video, review in
-motion, R2 sync.
+The split main video was made after the redone frames (2026-10-18 00:20,
+the frames 2026-10-17 23:36), and has them: at frames 2900 and 2920 its
+panel 5 matches the redone frames (checked 2026-10-21). That's the file on
+the next bucket (`main/main.webm`, the same size byte for byte), so the next
+app plays the fix. The artist watched the walk-away (1:52-2:16) in the new
+composite on 2026-10-18. Only the live site's old 7-panel videos still have
+the black frames, and they go when the domain moves over.

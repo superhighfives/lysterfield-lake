@@ -2,7 +2,7 @@ import { shaderMaterial } from '@react-three/drei'
 import { extend, ThreeElement } from '@react-three/fiber'
 import { ShaderMaterial, Texture, Vector2 } from 'three'
 
-// A visitor's looping polaroid (plans/in-progress/polaroid-admin-flow.md), drawn from the pipeline's 5-panel
+// A visitor's looping polaroid (plans/done/polaroid-admin-flow.md), drawn from the pipeline's 5-panel
 // polaroid atlas (apps/pipeline/src/steps/polaroid.ts), not the music video's 7-panel one, which
 // video-material.tsx reads. Panel order is fixed by POLAROID_PANELS there.
 //
