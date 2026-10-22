@@ -6,7 +6,7 @@ import formulaireCss from 'formulaire-ui/styles.css?raw'
 import ThemeToggle from '../components/theme-toggle.tsx'
 import { useStore } from '../store.ts'
 import { active, api, jobFile, pad, reason, runAction, type Task } from './admin-api.ts'
-import { priced, RunOnContext, RunOnSwitch, useRunOn, type GpuStatus, type RunOn } from './admin-run-on.tsx'
+import { priced, RunOnContext, RunOnSwitch, useRunOn, useRunOnChoice } from './admin-run-on.tsx'
 import { PaletteSwatch } from './admin-palette.tsx'
 import { Tasks } from './admin-tasks.tsx'
 import { PersonCheck, type CheckSummary } from './admin-person-check.tsx'
@@ -725,32 +725,8 @@ export default function Admin() {
   /** This footage's tasks (admin-queue.ts): everything waiting or running, and the most recent finished ones. */
   const [tasks, setTasks] = useState<Task[]>([])
   const [error, setError] = useState('')
-  const [gpu, setGpu] = useState<GpuStatus | null>(null)
-  /** Where Deforum jobs run, remembered on this machine. The PC when it's set up, unless chosen otherwise. */
-  const [runOn, setRunOn] = useState<RunOn>(() => {
-    try {
-      return localStorage.getItem('admin-run-on') === 'replicate' ? 'replicate' : 'pc'
-    } catch {
-      return 'pc'
-    }
-  })
-  const chooseRunOn = (value: RunOn) => {
-    setRunOn(value)
-    try {
-      localStorage.setItem('admin-run-on', value)
-    } catch {
-      // Storage blocked: the choice still holds for this visit.
-    }
-  }
-
-  /** Without a GPU server set up, everything runs on Replicate whatever was chosen. */
-  const effectiveRunOn: RunOn = gpu?.configured ? runOn : 'replicate'
-  useEffect(() => {
-    const load = () => api<GpuStatus>('/__admin/api/gpu').then(setGpu, () => setGpu(null))
-    load()
-    const timer = setInterval(load, 15000)
-    return () => clearInterval(timer)
-  }, [])
+  /** Where Deforum jobs run, remembered on this machine. */
+  const { gpu, runOn: effectiveRunOn, choose: chooseRunOn } = useRunOnChoice('admin-run-on')
   /** Tasks seen waiting or running, so the page reloads the footage's details once when each ends. */
   const unfinished = useRef(new Set<string>())
 

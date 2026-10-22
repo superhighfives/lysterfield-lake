@@ -8,6 +8,7 @@ import { PolaroidLoopMaterial } from '../materials/polaroid-loop-material.tsx'
 import Polaroid, { polaroidBend } from '../models/polaroid.tsx'
 import { useStore } from '../store.ts'
 import { active, api, jobFile, type Task } from './admin-api.ts'
+import { RunOnSwitch, useRunOnChoice, type RunOn } from './admin-run-on.tsx'
 import { Tasks } from './admin-tasks.tsx'
 
 // Dev-only: a visitor's polaroid from recording to finished loop (plans/done/polaroid-admin-flow.md).
@@ -238,10 +239,13 @@ const STAGES = [
     key: 'panels',
     action: 'polaroid-panels',
     title: 'Portrait, matte, depth and outline',
-    detail: 'The polaroid model on Replicate, the clip split four ways. About 9 minutes from cold.',
+    detail: (on: RunOn) =>
+      on === 'pc'
+        ? 'The polaroid model on the 4090, the whole clip in one go. Free, about 17 minutes, taking turns with dreams.'
+        : 'The polaroid model on Replicate, the clip split four ways. About 9 minutes from cold.',
   },
-  { key: 'background', action: 'polaroid-background', title: 'Background', detail: 'Bria erases the person from the portrait, keeping the scene. About a minute.' },
-  { key: 'atlas', action: 'polaroid-atlas', title: 'Polaroid', detail: 'The looping atlas and a flat video to download. Free, a few seconds.' },
+  { key: 'background', action: 'polaroid-background', title: 'Background', detail: () => 'Bria erases the person from the portrait, keeping the scene. On Replicate, about a minute.' },
+  { key: 'atlas', action: 'polaroid-atlas', title: 'Polaroid', detail: () => 'The looping atlas and a flat video to download. Free, a few seconds.' },
 ] as const
 
 const BUTTON = 'rounded bg-stone-900 dark:bg-stone-100 px-3 py-1.5 text-sm font-medium text-white dark:text-stone-900 disabled:opacity-40'
@@ -294,7 +298,7 @@ function SpendButton({ label, cost, what, disabled, onConfirm }: { label: string
     <ConfirmButton
       label={`${label} (${cost})`}
       title={`Spend about ${cost}?`}
-      body={`${what} It runs on Replicate. Finished work isn't paid for twice if it's run again, but what has run is spent.`}
+      body={`${what} The cost is what runs on Replicate; the 4090 is free. Finished work isn't paid for twice if it's run again, but what has run is spent.`}
       confirm={`Spend ${cost} and start`}
       disabled={disabled}
       onConfirm={onConfirm}
@@ -376,12 +380,14 @@ function JobView({ job }: { job: string }) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [error, setError] = useState('')
   const fail = (e: Error) => setError(e.message)
+  /** Where the panels run: the 4090 by default, Replicate when chosen. Bria is on Replicate either way. */
+  const { gpu, runOn, choose } = useRunOnChoice('admin-polaroid-run-on', 'polaroid')
 
   const reload = useCallback(async () => {
-    const [d, t] = await Promise.all([api<PolaroidJob>(`/__admin/api/polaroids/${job}`), api<Task[]>(`/__admin/api/jobs/${job}/tasks`)])
+    const [d, t] = await Promise.all([api<PolaroidJob>(`/__admin/api/polaroids/${job}?on=${runOn}`), api<Task[]>(`/__admin/api/jobs/${job}/tasks`)])
     setDetail(d)
     setTasks(t)
-  }, [job])
+  }, [job, runOn])
   useEffect(() => {
     reload().catch(fail)
   }, [reload])
@@ -397,7 +403,7 @@ function JobView({ job }: { job: string }) {
   const run = async (actions: string[]) => {
     setError('')
     try {
-      for (const action of actions) await api(`/__admin/api/jobs/${job}/actions`, { action, take: 'polaroid' })
+      for (const action of actions) await api(`/__admin/api/jobs/${job}/actions`, { action, take: 'polaroid', on: runOn })
     } catch (e) {
       fail(e as Error)
     }
@@ -445,11 +451,14 @@ function JobView({ job }: { job: string }) {
   return (
     <Page>
       <header className="mb-6 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <a href="/admin/polaroid" className="text-sm text-stone-500 hover:underline dark:text-stone-400">
+        <a href="/admin/polaroid" className="w-full text-sm text-stone-500 hover:underline dark:text-stone-400">
           ← All polaroids
         </a>
-        <h1 className="w-full font-serif text-4xl">{detail.name}</h1>
-        <p className="text-sm text-stone-600 dark:text-stone-400">
+        <h1 className="font-serif text-4xl">{detail.name}</h1>
+        <div className="ml-auto">
+          <RunOnSwitch value={runOn} gpu={gpu} onChange={choose} label="Run the polaroid model on" />
+        </div>
+        <p className="w-full text-sm text-stone-600 dark:text-stone-400">
           {detail.frames} frames at {detail.fps}fps
         </p>
       </header>
@@ -524,7 +533,7 @@ function JobView({ job }: { job: string }) {
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">{stage.title}</div>
                   <div className="text-sm text-stone-600 dark:text-stone-400">
-                    {stage.detail}
+                    {stage.detail(runOn)}
                     {!state.done && state.frames ? ` ${state.frames} of ${detail.frames} frames so far.` : ''}
                   </div>
                 </div>
@@ -536,8 +545,8 @@ function JobView({ job }: { job: string }) {
                   <span className="text-sm text-stone-500">Needs approval</span>
                 ) : !ready ? (
                   <span className="text-sm text-stone-500">After step {i}</span>
-                ) : cost ? (
-                  <SpendButton label="Run" cost={cost} what={stage.detail} onConfirm={() => run([stage.action])} />
+                ) : cost && cost !== '$0.00' ? (
+                  <SpendButton label="Run" cost={cost} what={stage.detail(runOn)} onConfirm={() => run([stage.action])} />
                 ) : (
                   <button type="button" onClick={() => run([stage.action])} className={BUTTON}>
                     Make it

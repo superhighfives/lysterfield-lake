@@ -26,11 +26,21 @@ The image is about 33GB, and a build needs room for roughly twice that, more tha
 it on the 4090 PC (`~/lysterfield-models/polaroid` there), which is natively x86 and can test it on its GPU
 for free.
 
+## Running on the PC
+
+The pipeline uses the PC's polaroid model as a standing service, like Deforum's: `start-polaroid.sh` (copied to
+`~/lysterfield-models/` there) starts the image as the `polaroid` container on port 5001 (Deforum keeps 5000),
+restarted by Docker, and the Mac reaches it over Tailscale at `POLAROID_URL` in `apps/pipeline/.env`. Run it
+again after a new build or an NVIDIA driver update: it re-makes the `libcuda.so` link below, whose target
+folder is named after the driver.
+
 ## Testing on the PC
 
+
 `~/lysterfield-models/run-local.py <image> <out> key=value...` runs one prediction on the PC's GPU (port 5001,
-since Deforum keeps 5000). Under WSL, cuDNN 8.5 in this image can't find the driver (only `libcuda.so.1`
-exists there) and the first conv segfaults; the script mounts a `libcuda.so` link to fix that. Replicate's
+since Deforum keeps 5000, so `docker stop polaroid` first). Under WSL, cuDNN 8.5 in this image can't find the
+driver (only `libcuda.so.1` exists there) and the first conv segfaults; the script mounts a `libcuda.so` link to
+fix that. Replicate's
 machines don't need it.
 
 The Deforum container holds about 8GB of the 4090's 24GB, so keep `portrait_batch` at 1 there: at 4 the GPU

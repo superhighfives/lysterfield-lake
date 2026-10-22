@@ -35,8 +35,13 @@ From the artist, 2026-10-21:
   the polaroid API, with D1 and R2 bound to it.
 - **Approve before making.** A submission waits for the artist to approve
   it before the 4090 touches it, so a person has seen every clip first.
-- **Panel 3 stays Bria** (~$0.25 a polaroid, on Replicate), so it needs
-  the R2 token for `lysterfield-bria-temp`.
+- **Panel 3 stays Bria** (~$0.25 a polaroid, on Replicate), whose inputs
+  go through `lysterfield-bria-temp` with the `R2_*` key already in
+  `apps/pipeline/.env` (checked: write, public read and delete all work).
+- **The 4090 by default, Replicate when the artist chooses.** Panels 2, 4,
+  5 and 6 can always run on Replicate instead (`--on replicate`, the
+  switch in `/admin/polaroid`), to share out work. Bria is Replicate
+  either way.
 - **Email when it's ready, sent with Cloudflare** (its Email Service from the
   Worker), with the private link.
 - **The gallery's music is a loop from the song.**
@@ -65,7 +70,7 @@ Still holding from earlier:
   4090: **122 frames in 1,015s (8.3s a frame) plus 24s setup, free**. On
   Replicate (`lysterfield-polaroid` deployment, L40S) the same clip is about
   9 minutes cold and ~$2.
-- `polaroid-run` (Replicate only today), `background-video` (Bria, panel 3,
+- `polaroid-run` (the 4090 or Replicate, below), `background-video` (Bria, panel 3,
   ~$0.25, needs `R2_*`), `polaroid` (the 5-panel atlas and `loop.mp4`).
 - Moderation in `job.json`'s `review`, and the admin refuses paid stages
   unless approved. Delete works on polaroid jobs only.
@@ -82,10 +87,6 @@ Still holding from earlier:
 - `polaroid-run` gains its PC path: one prediction against the container's
   Cog HTTP API, one frame at a time (`portrait_batch` 1, since Deforum holds
   8GB of the 4090), as `gpu-server.ts` does for Deforum.
-- **CLAUDE.md says polaroid generation runs on Replicate only, never on
-  the PC.** That rule reflects the 2026-10-18 decision; this plan reverses
-  it for batches, so update CLAUDE.md when the PC path lands (Replicate
-  stays as a fallback).
 - Panel 3 is still Bria on Replicate (~$0.25 a polaroid). For it to be
   free too, panel 3 needs a local equivalent; see Open questions.
 - The next app is a Pages project (direct upload, deployed by
@@ -102,9 +103,15 @@ Its address goes in `apps/pipeline/.env` as `POLAROID_URL`, never in code.
 
 `polaroid-run` gets a PC path: one prediction against the container's Cog
 HTTP API, one frame at a time (`portrait_batch` 1: Deforum holds 8GB of the
-4090), in the way `gpu-server.ts` drives Deforum. Replicate stays as the
-fallback (`--on replicate`). In `/admin`, polaroid stages join the `pc` lane,
-so they take turns with dream runs rather than competing for the GPU.
+4090), in the way `gpu-server.ts` drives Deforum. Replicate stays a choice,
+not just a fallback (`--on replicate`, and a switch in `/admin/polaroid`
+that remembers its setting, defaulting to the 4090). In `/admin`, polaroid
+stages on the PC join the `pc` lane, so they take turns with dream runs
+rather than competing for the GPU.
+
+Done: `models/polaroid/start-polaroid.sh` runs the `polaroid` container on
+port 5001 (`--restart unless-stopped`), reachable from the Mac over
+Tailscale with no firewall change.
 
 ### 2. The next app becomes a Worker
 
