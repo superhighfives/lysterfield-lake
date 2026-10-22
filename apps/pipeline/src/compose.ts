@@ -335,10 +335,11 @@ async function compress(inputPath: string, outputPath: string, opts: { half?: bo
   } else {
     // Without +faststart, ffmpeg's default mp4/mov muxer writes moov (the
     // index a browser needs before it can start playback) after mdat — the
-    // full media payload. A browser without WebM support (Safari) falls
-    // back to this .mov source, and must then download the entire file
-    // before playback can begin at all: indistinguishable from "stuck at
-    // 0:00" on anything but a tiny clip.
+    // full media payload. Every browser plays the dream video from this
+    // H.264 file, and one without WebM support (Safari) uses it for the main
+    // video too. Without faststart it must download the entire file before
+    // playback can begin at all: indistinguishable from "stuck at 0:00" on
+    // anything but a tiny clip.
     args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '28', '-movflags', '+faststart')
   }
   args.push(outputPath)
