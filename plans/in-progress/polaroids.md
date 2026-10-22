@@ -113,34 +113,63 @@ Done: `models/polaroid/start-polaroid.sh` runs the `polaroid` container on
 port 5001 (`--restart unless-stopped`), reachable from the Mac over
 Tailscale with no firewall change.
 
-### 2. The next app becomes a Worker
+### 2. The next app becomes a Worker (done)
 
-Move `lysterfield-lake-next` from Pages to a Worker with static assets:
-`wrangler deploy` with `assets.directory` set to `dist`, 404s handled by
-`404.html` as now, and `_redirects` kept. The deploy workflow swaps
-`wrangler pages deploy` for `wrangler deploy`. Then the polaroid API is
-routes in the same Worker, with these bound to it:
+`lysterfield-lake-next` is a Worker with static assets
+(`apps/client/wrangler.jsonc`, code in `apps/client/worker/`), at
+lysterfield-lake-next.superhighfives.workers.dev: the built site from
+`dist`, 404s from `404.html` and `_redirects` as on Pages, and only `/api/*`
+reaching the Worker. `deploy-next.yml` runs `wrangler deploy`. The Pages
+project is left as it was, no longer updated. Bound to the Worker:
 
-- **D1, `lysterfield-polaroids`:** one row per submission: id, the clip's
-  crop, status (`queued`, `making`, `made`, `shown`, `rejected`,
-  `failed`), timestamps, a failure log, an optional email.
-- **R2, a private inbox bucket** for submitted clips, uploaded straight from
-  the browser with a short-lived signed URL.
-- **R2, a public bucket** for finished polaroids (`atlas.mp4`, `loop.mp4`,
-  `still.jpg`), on its own subdomain like the dreams.
+- **D1, `lysterfield-polaroids`** (`apps/client/migrations/`): one row per
+  submission: id, status, the crop, an optional email (cleared once it's
+  sent), the clip's type and size, a failure log, and timestamps.
+- **R2, `lysterfield-polaroids-inbox`** (private): the visitors' clips, each
+  deleted once its polaroid is made.
+- **R2, `lysterfield-polaroids`** (public, polaroids.lysterfieldlake.com,
+  the dreams bucket's CORS): `<id>/atlas.mp4`, `loop.mp4`, and optionally
+  `.webm`s and `still.jpg`.
+- **Email** (`send_email`) and a daily cron that clears submissions whose
+  clip never arrived.
 
-Statuses: `submitted` → `approved` (queued to make) → `making` → `made` →
-`shown`, or `rejected` / `failed`.
+Statuses: `uploading` (the row, waiting for its clip) → `submitted` →
+`approved` (queued to make) → `making` → `made` → `shown`, or `rejected` /
+`failed`. Each decision only applies from the statuses that allow it
+(`worker/polaroids.ts`, `DECISIONS`).
 
 Routes:
 
-- `POST /api/polaroids`: Turnstile check, create the row (`submitted`),
-  return a signed upload URL and the private id.
-- `GET /api/polaroids`: the shown ones, for the gallery.
+- `POST /api/polaroids` `{ crop, email?, turnstile }`: Turnstile, then the
+  row; returns the private id and where to `PUT` the clip
+  (`/api/polaroids/<id>/clip`, once, up to 60MB). The inbox refuses more
+  than 300 waiting submissions.
+- `GET /api/polaroids?before=&limit=`: the shown ones, newest first, a page
+  at a time, for the gallery.
 - `GET /api/polaroids/<id>`: one polaroid's status, for its private link.
-- `/api/admin/...`: the queue for the worker (next, claim, done, failed)
-  and moderation (show, reject, delete), behind Cloudflare Access, with a
-  service token for the Mac.
+- `/api/admin/polaroids[/<id>[/clip|review|files/<name>|done|failed]]` and
+  `POST /api/admin/queue/claim`: moderation and the queue, for the Mac.
+
+**Changed from the plan:**
+
+- **The clip goes up through the Worker, not a signed URL.** A 5-second
+  clip is a few MB, well inside a Worker's request limit, and the Worker
+  can then check its type and size and accept it only once, with no R2 API
+  keys to keep as secrets.
+- **The admin routes take a bearer token, not Cloudflare Access.** Only the
+  Mac calls them, from the pipeline, so one secret (`ADMIN_TOKEN` on the
+  Worker, `POLAROIDS_ADMIN_TOKEN` and `POLAROIDS_API` in
+  `apps/pipeline/.env`), compared in constant time, does the job with less
+  to set up. Access can still go in front later.
+
+`apps/client/scripts/polaroids-smoke.sh` walks a submission through its
+whole life against `wrangler dev`, refusals included.
+
+**Still to switch on:** submissions refuse everything until the Worker has
+a `TURNSTILE_SECRET` (step 4 makes the widget), and email needs
+lysterfieldlake.com onboarded to Email Service
+(`wrangler email sending enable`, which adds DNS records): until then a
+"ready" email fails quietly and the polaroid is made anyway.
 
 ### 3. The queue in `/admin/polaroid`
 
@@ -303,8 +332,10 @@ deleted straight after along with the bucket.
       4090/Replicate switch in `/admin/polaroid`; CLAUDE.md updated.
       Checked on a copy of `park-party-2`: 120 frames in 1,051s, free,
       matching the Replicate run's panels by eye
-- [ ] 2. The next app as a Worker with static assets; D1, the two buckets,
-      the routes, Access
+- [x] 2. The next app as a Worker with static assets; D1, the two buckets,
+      the routes (a bearer token for the admin, not Access)
+- [ ] Onboard lysterfieldlake.com to Email Service (user's go-ahead: DNS)
+- [ ] The CI token needs Workers Scripts, D1 and R2: Edit (was Pages)
 - [ ] 3. The inbox and "run the queue" in `/admin/polaroid`
 - [ ] 4. The gallery, the link under the stack, and submitting, behind
       `VITE_APP_POLAROIDS`

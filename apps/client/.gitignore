@@ -30,3 +30,7 @@ dreams/**/*
 
 .env.staging
 .env.production
+
+# The Worker's local secrets and state (wrangler dev)
+.dev.vars
+.wrangler

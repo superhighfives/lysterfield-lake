@@ -1,0 +1,44 @@
+// The next app (plans/in-progress/polaroids.md): one Worker serving the built
+// site from dist/ and the polaroid API under /api. Deployed by
+// .github/workflows/deploy-next.yml, or `bun run deploy-next` by hand.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lysterfield-lake-next",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "dist",
+    "binding": "ASSETS",
+    // A missing page gets public/404.html, as on Pages; only /api reaches the Worker.
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      // One row per submission (migrations/).
+      "binding": "DB",
+      "database_name": "lysterfield-polaroids",
+      "database_id": "8e68223e-ef2e-4212-bf48-7a3b00ab2e97"
+    }
+  ],
+  "r2_buckets": [
+    // Visitors' clips, private, until their polaroid is made.
+    { "binding": "INBOX", "bucket_name": "lysterfield-polaroids-inbox" },
+    // Finished polaroids, public at polaroids.lysterfieldlake.com.
+    { "binding": "POLAROIDS", "bucket_name": "lysterfield-polaroids" }
+  ],
+  // Cloudflare Email Service: "your polaroid is ready". Sends only once
+  // lysterfieldlake.com is onboarded (`wrangler email sending enable`).
+  "send_email": [{ "name": "EMAIL" }],
+  "vars": {
+    "APP_URL": "https://lysterfield-lake-next.superhighfives.workers.dev",
+    "EMAIL_FROM": "polaroids@lysterfieldlake.com"
+  },
+  // Clears submissions whose clip never arrived.
+  "triggers": { "crons": ["17 4 * * *"] },
+  "observability": { "enabled": true }
+  // Secrets (`wrangler secret put`): ADMIN_TOKEN, the Mac's key to /api/admin
+  // (also in apps/pipeline/.env), and TURNSTILE_SECRET.
+}

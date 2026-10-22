@@ -1,8 +1,9 @@
 name: Deploy next
 
-# Deploys the client to the lysterfield-lake-next Pages project
-# (lysterfield-lake-next.pages.dev) when main changes, as
-# `bun run --cwd apps/client deploy-next` does by hand. Its videos aren't
+# Deploys the client to the lysterfield-lake-next Worker
+# (lysterfield-lake-next.superhighfives.workers.dev: the built site as static
+# assets, and the polaroid API, apps/client/wrangler.jsonc) when main changes,
+# as `bun run --cwd apps/client deploy-next` does by hand. Its videos aren't
 # part of the build: they're in the lysterfield-lake-next-dreams R2 bucket,
 # served from next-dreams.lysterfieldlake.com (apps/client/.env.next).
 #
@@ -10,8 +11,12 @@ name: Deploy next
 # `generate` step, which reads the gitignored dreams/ folder that only
 # exists on a machine with the videos.
 #
-# Needs two repo secrets: CLOUDFLARE_API_TOKEN (a token with Cloudflare
-# Pages: Edit on the account) and CLOUDFLARE_ACCOUNT_ID.
+# Needs two repo secrets: CLOUDFLARE_API_TOKEN (a token with Workers Scripts:
+# Edit on the account, plus D1: Edit and Workers R2 Storage: Edit for the
+# Worker's bindings) and CLOUDFLARE_ACCOUNT_ID. D1 migrations
+# (apps/client/migrations) aren't applied here: run
+# `wrangler d1 migrations apply lysterfield-polaroids --remote` by hand
+# before merging one.
 
 on:
   push:
@@ -45,9 +50,9 @@ jobs:
       - name: Build
         run: bun run --cwd apps/client build-next
 
-      - name: Deploy to Pages
+      - name: Deploy the Worker
         working-directory: apps/client
-        run: bunx wrangler pages deploy dist --project-name lysterfield-lake-next --branch main --commit-hash ${{ github.sha }}
+        run: bunx wrangler deploy --message "${{ github.sha }}"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
