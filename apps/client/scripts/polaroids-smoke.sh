@@ -2,7 +2,8 @@
 # Walks the polaroid API (worker/) through a submission's whole life against
 # `wrangler dev`: submit, upload, approve, claim, files, done, show, delete,
 # and the refusals along the way. Local only: it uses .dev.vars' ADMIN_TOKEN
-# and Turnstile's always-pass test secret, and fake media.
+# and Turnstile's always-pass test secret, and fake media. Needs
+# POLAROIDS_PUBLIC=true in .dev.vars: the public routes are off by default.
 #
 #   bunx wrangler d1 migrations apply lysterfield-polaroids --local
 #   bunx wrangler dev --port 8799 &
