@@ -1,6 +1,6 @@
 build:
   # Every per-frame model behind a polaroid's panels 2, 4, 5 and 6 in one image, so a whole loop is one
-  # prediction with one boot (plans/backlog/release-polaroids.md): RVM (matte), DiffusionCLIP + Real-ESRGAN
+  # prediction with one boot (plans/in-progress/polaroids.md): RVM (matte), DiffusionCLIP + Real-ESRGAN
   # (portrait), ZoeDepth (depth) and the coarse lineart network (outline). Panel 3 stays on Bria. Run
   # ./fetch.sh first: it copies DiffusionCLIP's and lineart's code in from their own model folders.
   #

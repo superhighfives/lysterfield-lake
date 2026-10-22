@@ -19,7 +19,7 @@ const PIPELINE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const JOBS_DIR = path.join(PIPELINE_DIR, '.jobs')
 const COLOURS_DIR = path.join(PIPELINE_DIR, 'resources', 'colours')
 const MAX_COLOUR_UPLOAD = 20 * 1024 * 1024
-/** Webcam clips from /admin/record (plans/backlog/release-polaroids.md), kept apart from the jobs made from them. */
+/** Webcam clips from /admin/record (plans/in-progress/polaroids.md), kept apart from the jobs made from them. */
 const RECORDINGS_DIR = path.join(JOBS_DIR, '_recordings')
 const MAX_RECORDING_UPLOAD = 150 * 1024 * 1024
 const DEFORUM_PRESETS = path.resolve(PIPELINE_DIR, '..', '..', 'models', 'deforum', 'settings', 'presets.json')
@@ -350,7 +350,8 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
         ...(body.status ? ['--status', String(body.status)] : []),
         ...(body.notes !== undefined ? ['--notes', String(body.notes)] : []),
       ]
-    // A polaroid's stages (plans/done/polaroid-admin-flow.md). The paid two run on Replicate, never the PC.
+    // A polaroid's stages (plans/done/polaroid-admin-flow.md). Panels 2, 4, 5 and 6 run on the 4090 when
+    // POLAROID_URL is set (free), else Replicate; the background is Bria, on Replicate.
     case 'polaroid-panels':
     case 'polaroid-background':
     case 'polaroid-atlas':

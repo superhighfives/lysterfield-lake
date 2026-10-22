@@ -95,7 +95,7 @@ above doesn't apply to it, and changing one doesn't change the other.
   costs nothing until a person has looked at it. Delete only works on polaroid jobs, never a song's.
 - Panels 2, 4, 5 and 6 come from one model, `models/polaroid`, on the `lysterfield-polaroid` Replicate
   deployment (`polaroid-run`, about $1.90 a loop). For now polaroid generation runs on Replicate only,
-  not the 4090 PC. `plans/backlog/release-polaroids.md` changes that: the public release makes approved
+  not the 4090 PC. `plans/in-progress/polaroids.md` changes that: the public release makes approved
   submissions in batches on the PC (`POLAROID_URL`), with Replicate as the fallback. Update this when the
   PC path lands.
 - Panel 3 is Bria (`background-video`, about $0.25), whose inputs go through the public R2 bucket
