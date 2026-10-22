@@ -177,8 +177,12 @@ function Cursor() {
       }
 
       const { swapPhase } = useStore.getState()
+      // playback.waiting is also true through the reveal ('in'), so leave
+      // that out here.
       const nowWaiting =
-        swapPhase === 'out' || swapPhase === 'loading' || playback.waiting
+        swapPhase === 'out' ||
+        swapPhase === 'loading' ||
+        (swapPhase !== 'in' && playback.waiting)
       if (nowWaiting !== currentWaiting) {
         currentWaiting = nowWaiting
         setWaiting(nowWaiting)
