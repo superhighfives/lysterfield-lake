@@ -33,6 +33,10 @@
   // lysterfieldlake.com is onboarded (`wrangler email sending enable`).
   "send_email": [{ "name": "EMAIL" }],
   "vars": {
+    // Visitors' polaroids aren't released yet: until this is "true" the
+    // public /api/polaroids routes answer 404. The admin routes still work.
+    // The app's own switch is VITE_APP_POLAROIDS (.env.next).
+    "POLAROIDS_PUBLIC": "false",
     "APP_URL": "https://lysterfield-lake-next.superhighfives.workers.dev",
     "EMAIL_FROM": "polaroids@lysterfieldlake.com"
   },
