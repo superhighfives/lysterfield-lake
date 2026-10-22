@@ -27,21 +27,8 @@
     <link rel="stylesheet" href="/error.css" />
   </head>
   <body>
-    <!-- Keys the title loop's white out in dark mode, as the welcome screen
-         does (src/components/key-white-filter.tsx). -->
-    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
-      <filter id="key-white" color-interpolation-filters="sRGB" x="0" y="0" width="1" height="1">
-        <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  -4 -4 -4 11.52 0" result="alpha" />
-        <feMorphology in="alpha" operator="erode" radius="1" result="choked" />
-        <feComposite in="SourceGraphic" in2="choked" operator="arithmetic" k1="0" k2="1" k3="1" k4="-1" />
-      </filter>
-    </svg>
     <div class="fireflies" aria-hidden="true"></div>
     <main class="error">
-      <video class="error__title" autoplay muted loop playsinline aria-label="Lysterfield Lake">
-        <source src="/video/loop.webm" type="video/webm" />
-        <source src="/video/loop.mov" type="video/mp4" />
-      </video>
       <div class="error__print" aria-hidden="true">
         <div class="error__photo"><div class="error__grain"></div></div>
         <div class="error__code">404</div>
