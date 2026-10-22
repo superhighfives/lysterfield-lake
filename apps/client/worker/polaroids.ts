@@ -233,7 +233,7 @@ export const EMAIL_KEEP_DAYS = 30
 /** Addresses still held EMAIL_KEEP_DAYS after their polaroid was made (or turned down): cleared, sent or not. */
 export async function sweepEmails(db: D1Database) {
   const { meta } = await db
-    .prepare("UPDATE polaroids SET email = NULL WHERE email IS NOT NULL AND status IN ('made', 'shown', 'rejected') AND updated_at < ?")
+    .prepare("UPDATE polaroids SET email = NULL WHERE email IS NOT NULL AND status IN ('made', 'shown', 'rejected') AND COALESCE(made_at, updated_at) < ?")
     .bind(Date.now() - EMAIL_KEEP_DAYS * 24 * 60 * 60 * 1000)
     .run()
   return meta.changes
