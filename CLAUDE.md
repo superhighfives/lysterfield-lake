@@ -1,4 +1,4 @@
-# lysterfield
+# lysterfield-lake
 
 Baseline rules live in [superhighfives/control-room](https://github.com/superhighfives/control-room/blob/main/BASELINE.md).
 This file is the repo-specific part.

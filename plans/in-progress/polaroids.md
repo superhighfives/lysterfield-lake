@@ -117,6 +117,7 @@ Tailscale with no firewall change.
 
 `lysterfield-lake-next` is a Worker with static assets
 (`apps/client/wrangler.jsonc`, code in `apps/client/worker/`), at
+lysterfieldlake.com (since 2026-10-23) and
 lysterfield-lake-next.superhighfives.workers.dev: the built site from
 `dist`, 404s from `404.html` and `_redirects` as on Pages, and only `/api/*`
 reaching the Worker. `deploy-next.yml` runs `wrangler deploy`. The Pages

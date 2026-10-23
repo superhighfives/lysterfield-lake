@@ -7,6 +7,8 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-01",
   "workers_dev": true,
+  // The live site. It was the lysterfield-lake Pages project until 2026-10-23.
+  "routes": [{ "pattern": "lysterfieldlake.com", "custom_domain": true }],
   "preview_urls": false,
   "assets": {
     "directory": "dist",
@@ -37,7 +39,7 @@
     // public /api/polaroids routes answer 404. The admin routes still work.
     // The app's own switch is VITE_APP_POLAROIDS (.env.next).
     "POLAROIDS_PUBLIC": "false",
-    "APP_URL": "https://lysterfield-lake-next.superhighfives.workers.dev",
+    "APP_URL": "https://lysterfieldlake.com",
     "EMAIL_FROM": "polaroids@lysterfieldlake.com"
   },
   // Clears submissions whose clip never arrived.

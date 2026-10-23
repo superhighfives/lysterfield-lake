@@ -91,7 +91,7 @@ after one frame.
 | 4. Full song | ~54 chained runs | ~$20 | confirm dialog |
 | 5. Check | Score every dream frame for a person | free | none |
 | 6. Repair | Re-render flagged stretches with Deforum | ~$0.008 a frame | user approves flagged stretches and the cost |
-| 7. Publish | `compose`, `deploy-dreams`, client deploy | free | user's go-ahead for R2 |
+| 7. Publish | `compose`, `compose-split`, `upload-next-dreams.sh`, a PR | free | user's go-ahead for R2 |
 
 Stages 1-4 exist. Stages 5 and 6 are new and are what makes this
 manageable: most leaks are rerolled away as the frame is made, and the
@@ -220,13 +220,14 @@ cheap:
 
 ### 7. Publish
 
-The split client now ships as its own app, lysterfield-lake-next.pages.dev
-(PR #42), which deploys itself when `main` changes
+The split client now ships as its own app, the lysterfield-lake-next Worker
+at lysterfieldlake.com (PR #42; the domain moved from the old Pages site on
+2026-10-23), which deploys itself when `main` changes
 (`.github/workflows/deploy-next.yml`, PR #45). It plays only the split files,
 from its own bucket, `lysterfield-lake-next-dreams`, at
 next-dreams.lysterfieldlake.com (PR #43). The ten legacy dreams are there,
-under their readable ids. The live site keeps its own bucket and datestamp
-folders until the domain moves over.
+under their readable ids. The old site's bucket and datestamp folders are
+left as they were.
 
 For a new take (the steps in detail: `ready/next-dream.md`):
 
@@ -394,6 +395,11 @@ Make and publish:
 - [x] Publish the ten to the next app: split files in the
       `lysterfield-lake-next-dreams` bucket, the app on Pages (2026-10-19).
       The live site's bucket is left as it is until the domain moves over
+- [x] Move lysterfieldlake.com from the old Pages project to the next
+      Worker (`wrangler.jsonc`'s custom domain), 2026-10-23. Removing the
+      domain from Pages left its CNAME record behind, which blocks a Worker
+      custom domain, and wrangler's login can't edit DNS: the record was
+      deleted by hand in the dashboard, about two minutes of downtime
 - [ ] Optional: review `repairGlitchedFrames`'s 80 flagged matte frames on
       this job (see phase 4e's Other fixes)
 
