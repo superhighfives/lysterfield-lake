@@ -11,7 +11,7 @@ import Playhead from '../components/playhead'
 import Viewport from '../components/viewport'
 import ThemeToggle from '../components/theme-toggle'
 import KeyWhiteFilter from '../components/key-white-filter'
-import { handleDeviceOrientationPermissions, isTouchDevice, shuffle } from '../utils'
+import { handleDeviceOrientationPermissions, isTouchDevice } from '../utils'
 import dreams from '../dreams.json'
 import { Info, MusicNotes, CircleNotch } from '@phosphor-icons/react'
 import { useHistorySync } from '../utils/use-history-sync'
@@ -67,7 +67,8 @@ function Root() {
 
   useEffect(() => {
     console.log('Loaded!')
-    setCollection(shuffle(dreams))
+    // In dreams.json's order: the first is the newest, on top of the stack.
+    setCollection(dreams)
     setHasLoaded(true)
   }, [])
 

@@ -237,9 +237,10 @@ function useTopLoop(id: string | undefined, colorSpace: string) {
 }
 
 function Stack({ items, onSelect, presence }: CarouselProps) {
-  // Bottom to top: the last is the card on top.
-  const [order, setOrder] = useState(() => items.map((_, i) => i))
-  useEffect(() => setOrder(items.map((_, i) => i)), [items])
+  // Bottom to top: the last is the card on top, so the first item starts
+  // there.
+  const [order, setOrder] = useState(() => items.map((_, i) => i).reverse())
+  useEffect(() => setOrder(items.map((_, i) => i).reverse()), [items])
   const cards = useRef<(Group | null)[]>([])
   const drag = useRef<{
     startX: number

@@ -1,5 +1,5 @@
  
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
 import { MathUtils, Mesh, MeshBasicMaterial, Vector3 } from 'three'
 import {
@@ -76,7 +76,11 @@ function Choose(props: ThreeElements['group']) {
     start: false,
   })
 
-  const titleImage = useVideoTexture(`/assets/${collection[0].id}/loop.mov`)
+  // A random dream behind the title, picked once per load.
+  const [titleDream] = useState(
+    () => collection[Math.floor(Math.random() * collection.length)]
+  )
+  const titleImage = useVideoTexture(`/assets/${titleDream.id}/loop.mov`)
 
   // Choosing a card already leaves the page scrolled down to the player,
   // but a dream restored from the URL or browser history (see
