@@ -54,7 +54,8 @@ async function upsertDreamsJson(clientDir: string, id: string): Promise<void> {
     dreams.push({
       id,
       title: 'TBA',
-      link: 'https://youtube.com/watch?v=',
+      // Unused: every dream links to the one YouTube video (apps/client/src/utils/youtube.ts).
+      link: '',
       prompt: '',
     })
   }

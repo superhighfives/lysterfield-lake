@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, statfs, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -74,6 +74,25 @@ export function flaggedStretches(scored: { frame: number; score: number }[], thr
   return stretches
 }
 
+/**
+ * Free disk space a check or repair needs before it starts. The scores
+ * themselves are small, but the model run writes Metal caches to the system
+ * temp folder, and a full disk fails a check only after it has scored every
+ * frame (or a re-render only after it has been paid for).
+ */
+const MIN_FREE_BYTES = 2 * 1024 ** 3
+
+/** Refuses to start `what` when the temp folder's or the job's disk has less than `MIN_FREE_BYTES` free. */
+export async function assertFreeSpace(what: string, dirs: string[]): Promise<void> {
+  for (const dir of dirs) {
+    const { bavail, bsize } = await statfs(dir)
+    const free = bavail * bsize
+    if (free < MIN_FREE_BYTES) {
+      throw new Error(`Only ${(free / 1024 ** 3).toFixed(1)}GB free on the disk holding ${dir}. ${what} needs at least ${MIN_FREE_BYTES / 1024 ** 3}GB, so free some space and try again.`)
+    }
+  }
+}
+
 export function runCheck(paths: string[], outPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn('uv', ['run', '--quiet', CHECK_SCRIPT, '--out', outPath], { stdio: ['pipe', 'inherit', 'inherit'] })
@@ -114,6 +133,7 @@ export async function listDreamFrames(dreamFramesDir: string): Promise<DreamFram
 export async function dreamCheck(dreamFramesDir: string, outPath: string, threshold = PERSON_SCORE_THRESHOLD): Promise<DreamCheck> {
   const unique = await listDreamFrames(dreamFramesDir)
   if (unique.length === 0) throw new Error(`No dream frames in ${dreamFramesDir}`)
+  await assertFreeSpace('The person check', [os.tmpdir(), path.dirname(outPath)])
 
   const workDir = await mkdtemp(path.join(os.tmpdir(), 'dream-check-'))
   try {
