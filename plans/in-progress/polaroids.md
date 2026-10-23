@@ -90,7 +90,8 @@ Still holding from earlier:
 - Panel 3 is still Bria on Replicate (~$0.25 a polaroid). For it to be
   free too, panel 3 needs a local equivalent; see Open questions.
 - The app was a Pages project (direct upload, deployed by
-  `.github/workflows/deploy-next.yml`), with no custom domain.
+  `.github/workflows/deploy-next.yml`, now `deploy.yml`), with no
+  custom domain.
 
 ## Approach
 
