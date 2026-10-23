@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { exists, type Job } from '../job.ts'
-import { flaggedStretches, listDreamFrames, runCheck, type DreamCheck, type DreamFrame } from './dream-check.ts'
+import { assertFreeSpace, flaggedStretches, listDreamFrames, runCheck, type DreamCheck, type DreamFrame } from './dream-check.ts'
 import { deforumRun } from './dream-deforum.ts'
 import { loadTake, type TakeConfig } from './dream.ts'
 
@@ -127,6 +127,7 @@ export async function dreamRepair(
     again?: number
   }
 ): Promise<RepairResult[]> {
+  await assertFreeSpace('A repair', [os.tmpdir(), opts.takeDir])
   const config = opts.action === 'rerender' ? await repairConfig(job, take) : undefined
   const checkPath = path.join(opts.takeDir, 'check.json')
   const replacedDir = path.join(opts.takeDir, 'replaced')
@@ -286,6 +287,7 @@ async function updateCheck(checkPath: string, changes: { frame: number; score?: 
  * are scored again so check.json stays right.
  */
 export async function restoreFrames(opts: { takeDir: string; framesDir: string; frames: number[] }): Promise<number[]> {
+  await assertFreeSpace('Putting the originals back', [os.tmpdir(), opts.takeDir])
   const replacedDir = path.join(opts.takeDir, 'replaced')
   const names = (await readdir(opts.framesDir)).filter((f) => /^\d{4}\.jpg$/.test(f)).sort()
   const restored: string[] = []
