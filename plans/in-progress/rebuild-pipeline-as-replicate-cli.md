@@ -386,7 +386,7 @@ parent plan, not a substitute for per-phase specs.
 - [x] Phase 5: end-to-end run + parity check against an existing published scene — superseded by 4e, see `done/phase-5-end-to-end-parity-check.md`
 - [x] Phase 4e: full-song job `.jobs/full-video` — legacy panels reused, panel 3 via Bria, legacy dreams imported under readable ids, numbered job layout
 - [ ] Phase 4f: regenerate and publish all ten dreams (now the Publish stage of `in-progress/dreams.md`)
-- [ ] Phase 6: archive `lysterfield-lake-pipeline` (on 2026-10-23 this repo was renamed
+- [x] Phase 6: archive `lysterfield-lake-pipeline`, with `lysterfield-lake-client`, on 2026-10-23 (that day this repo was renamed
       from `lysterfield` to `lysterfield-lake`, and the original client repo from
       `lysterfield-lake` to `lysterfield-lake-client`; both old repos' READMEs point here)
 
