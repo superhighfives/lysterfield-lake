@@ -9,6 +9,8 @@ import dreams from '../dreams.json'
 // same loose jitter as the choose screen's stack (components/carousels/
 // stack.tsx). Cards beneath the newest go grey, as they do there, and each
 // photo starts as a blank, milky print and develops as its image arrives.
+// A spinner turns where they land until the first covers it, and the count
+// beneath fades out once it's complete.
 //
 // Plain HTML over the canvas rather than the canvas's Suspense fallback,
 // so it can leave rather than vanish. A card only drops once its photo has
@@ -108,6 +110,17 @@ function Loading() {
   return (
     <div className="fixed inset-0 z-10 flex flex-col items-center justify-center gap-10 pointer-events-none whitespace-nowrap">
       <div className="relative w-[180px] h-[220px]">
+        {/* Behind the cards, which cover it as they land. Faded on a wrapper,
+            since the fade-in's fill would override an opacity class. */}
+        <div
+          className={`absolute inset-0 grid place-items-center transition-opacity duration-300 ${
+            leaving ? 'opacity-0' : ''
+          }`}
+        >
+          <div className="animate-fade-in">
+            <div className="w-7 h-7 rounded-full border-2 border-stone-300 border-t-stone-500 dark:border-stone-700 dark:border-t-stone-400 motion-safe:animate-spin" />
+          </div>
+        </div>
         {Array.from({ length: count }, (_, i) => {
           const dream = dreams[i % dreams.length]
           const newest = i === count - 1
@@ -156,12 +169,15 @@ function Loading() {
           )
         })}
       </div>
+      {/* Fades in, and out once it reaches n of n. */}
       <div
-        className={`font-serif italic text-lg text-stone-500 dark:text-stone-400 tabular-nums transition-opacity duration-300 ${
-          leaving ? 'opacity-0' : ''
+        className={`font-serif italic text-lg text-stone-500 dark:text-stone-400 tabular-nums transition-opacity duration-500 ${
+          sceneLoaded || (total > 0 && loaded >= total) ? 'opacity-0' : ''
         }`}
       >
-        {loaded} of {Math.max(total, loaded)}
+        <div className="animate-fade-in">
+          {loaded} of {Math.max(total, loaded)}
+        </div>
       </div>
     </div>
   )

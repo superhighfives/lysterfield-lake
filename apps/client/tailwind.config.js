@@ -23,9 +23,9 @@ export default {
       animation: {
         background: 'background 30s linear infinite',
         'fade-in': 'fade-in 0.3s linear forwards',
-        // A loading polaroid falling onto the pile (components/loading.tsx),
-        // overshooting a touch as it lands.
-        'card-drop': 'card-drop 0.55s cubic-bezier(0.3, 1.35, 0.5, 1) both',
+        // A loading polaroid dropping onto the pile (components/loading.tsx)
+        // and fading in as it falls, overshooting a touch as it lands.
+        'card-drop': 'card-drop 0.6s cubic-bezier(0.3, 1.35, 0.5, 1) both',
         // A loading polaroid's photo developing: milky and pale, then the
         // tones, then the colour.
         develop: 'develop 1.6s ease-out both',
@@ -37,10 +37,10 @@ export default {
         'card-drop': {
           '0%': {
             transform:
-              'translate(var(--x), calc(var(--y) - 55vh)) rotate(calc(var(--r) + 28deg)) scale(1.12)',
+              'translate(var(--x), calc(var(--y) - 14vh)) rotate(calc(var(--r) + 12deg)) scale(1.08)',
             opacity: '0',
           },
-          '40%': { opacity: '1' },
+          '80%': { opacity: '1' },
           '100%': {
             transform: 'translate(var(--x), var(--y)) rotate(var(--r))',
             opacity: '1',
