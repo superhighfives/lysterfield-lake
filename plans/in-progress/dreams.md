@@ -395,8 +395,11 @@ Make and publish:
 - [x] Publish the ten to the next app: split files in the
       `lysterfield-lake-next-dreams` bucket, the app on Pages (2026-10-19).
       The live site's bucket is left as it is until the domain moves over
-- [ ] Move lysterfieldlake.com from the old Pages project to the next
-      Worker (`wrangler.jsonc`'s custom domain)
+- [x] Move lysterfieldlake.com from the old Pages project to the next
+      Worker (`wrangler.jsonc`'s custom domain), 2026-10-23. Removing the
+      domain from Pages left its CNAME record behind, which blocks a Worker
+      custom domain, and wrangler's login can't edit DNS: the record was
+      deleted by hand in the dashboard, about two minutes of downtime
 - [ ] Optional: review `repairGlitchedFrames`'s 80 flagged matte frames on
       this job (see phase 4e's Other fixes)
 
