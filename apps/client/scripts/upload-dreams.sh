@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Uploads dreams' split files from dreams/ to the app's bucket
-# (lysterfield-lake-next-dreams, served at next-dreams.lysterfieldlake.com):
+# (lysterfield-lake-dreams, served at dreams.lysterfieldlake.com):
 # the files the player loads, `dream{,-small}.{mp4,webm}` per dream and
 # `main{,-small}.{mp4,webm}` for main. Additive: nothing in the bucket is
 # deleted, and a file already there at the same size is skipped.
@@ -9,8 +9,8 @@
 #   scripts/upload-dreams.sh --dry-run <id>...
 set -euo pipefail
 cd "$(dirname "$0")/.."
-BUCKET=lysterfield-lake-next-dreams
-PUBLIC=https://next-dreams.lysterfieldlake.com
+BUCKET=lysterfield-lake-dreams
+PUBLIC=https://dreams.lysterfieldlake.com
 dry=false
 [ "${1:-}" = --dry-run ] && { dry=true; shift; }
 [ $# -gt 0 ] || { echo "usage: $0 [--dry-run] <id>..." >&2; exit 1; }

@@ -4,8 +4,8 @@ name: Deploy
 # (lysterfieldlake.com, and its workers.dev URL: the built site as static
 # assets, and the polaroid API, apps/client/wrangler.jsonc) when main changes,
 # as `bun run --cwd apps/client deploy` does by hand. Its videos aren't
-# part of the build: they're in the lysterfield-lake-next-dreams R2 bucket,
-# served from next-dreams.lysterfieldlake.com (apps/client/.env.production).
+# part of the build: they're in the lysterfield-lake-dreams R2 bucket,
+# served from dreams.lysterfieldlake.com (apps/client/.env.production).
 #
 # It builds from the committed src/dreams.json, without the deploy script's
 # `generate` step, which reads the gitignored dreams/ folder that only

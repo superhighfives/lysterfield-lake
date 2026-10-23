@@ -62,7 +62,7 @@ on the flux-kontext path. `dream-repair` is capped at `MAX_REPAIR_ROUNDS`
   from the take's `video/panel.mov` (which `compose` makes), and rewrites the
   shared `dreams/main/main*`.
 - The app plays only the split files. Its videos are in the
-  `lysterfield-lake-next-dreams` bucket, at next-dreams.lysterfieldlake.com.
+  `lysterfield-lake-dreams` bucket, at dreams.lysterfieldlake.com.
   The site deploys itself when `main` changes (`.github/workflows/deploy.yml`),
   building from the committed `dreams.json`.
 
@@ -91,7 +91,7 @@ on the next bucket already has the depth fix (`done/depth-walk-away-gaps.md`).
    `apps/client/scripts/upload-dreams.sh <id>`: additive, skipping any
    already there at the same size. The player loads `dream{,-small}.mp4`
    (H.264 in every browser: `utils/dream-video.ts` says why). Check the URLs
-   on next-dreams.lysterfieldlake.com before going on.
+   on dreams.lysterfieldlake.com before going on.
 7. **Ship.** A PR with `public/assets/<id>/` and `src/dreams.json`. Merging
    deploys it. Then play it on lysterfieldlake.com, desktop and phone, including a
    swap into and out of it.
