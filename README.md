@@ -89,4 +89,4 @@ bun run --cwd apps/pipeline cli init --job .jobs/my-video --source ~/Movies/my-v
 bun run --cwd apps/pipeline cli matte --job .jobs/my-video
 ```
 
-Merging to `main` deploys the app (`.github/workflows/deploy-next.yml`).
+Merging to `main` deploys the app (`.github/workflows/deploy.yml`).

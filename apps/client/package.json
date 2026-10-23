@@ -11,8 +11,7 @@
     "preview": "vite preview",
     "test": "vitest",
     "generate": "node scripts/generate-dreams.js",
-    "build-next": "vite build --mode next",
-    "deploy-next": "bun run generate && bun run build-next && wrangler deploy",
+    "deploy": "bun run generate && bun run build && wrangler deploy",
     "postinstall": "bun run generate"
   },
   "dependencies": {

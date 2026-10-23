@@ -61,9 +61,9 @@ on the flux-kontext path. `dream-repair` is capped at `MAX_REPAIR_ROUNDS`
 - `compose-split` writes the dream-only `dreams/<id>/dream{,-small}.{mp4,webm}`
   from the take's `video/panel.mov` (which `compose` makes), and rewrites the
   shared `dreams/main/main*`.
-- The next app plays only the split files. Its videos are in the
+- The app plays only the split files. Its videos are in the
   `lysterfield-lake-next-dreams` bucket, at next-dreams.lysterfieldlake.com.
-  The site deploys itself when `main` changes (`.github/workflows/deploy-next.yml`),
+  The site deploys itself when `main` changes (`.github/workflows/deploy.yml`),
   building from the committed `dreams.json`.
 
 **The shared main video stays as it is.** Panels 1-6 are the same for
@@ -88,12 +88,12 @@ on the next bucket already has the depth fix (`done/depth-walk-away-gaps.md`).
    title and prompt (the `link` is unused now: every dream links to the one
    YouTube video, `utils/youtube.ts`).
 6. **Upload** the dream's split files to the next bucket with
-   `apps/client/scripts/upload-next-dreams.sh <id>`: additive, skipping any
+   `apps/client/scripts/upload-dreams.sh <id>`: additive, skipping any
    already there at the same size. The player loads `dream{,-small}.mp4`
    (H.264 in every browser: `utils/dream-video.ts` says why). Check the URLs
    on next-dreams.lysterfieldlake.com before going on.
 7. **Ship.** A PR with `public/assets/<id>/` and `src/dreams.json`. Merging
-   deploys it. Then play it on the next app, desktop and phone, including a
+   deploys it. Then play it on lysterfieldlake.com, desktop and phone, including a
    swap into and out of it.
 
 ## Tasks
@@ -104,10 +104,10 @@ on the next bucket already has the depth fix (`done/depth-walk-away-gaps.md`).
 - [ ] Check, repair, one full watch
 - [ ] `compose`, `compose-split`, fill in `dreams.json`
 - [x] A small upload script for a dream's split files, so step 6 isn't
-      typed by hand: `apps/client/scripts/upload-next-dreams.sh <id>`,
+      typed by hand: `apps/client/scripts/upload-dreams.sh <id>`,
       skipping files already there at the same size
 - [ ] Upload, check the URLs, PR, merge
-- [ ] Play it on the next app (desktop and phone)
+- [ ] Play it on lysterfieldlake.com (desktop and phone)
 
 ## Open questions
 

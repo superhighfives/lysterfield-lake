@@ -9,13 +9,13 @@ updated: 2026-10-21
 
 ## Goal
 
-Visitors to the next app can find an "Add your own" link under the
+Visitors to the app can find an "Add your own" link under the
 chooser's stack, open an endless, explorable grid of everyone's looping
 polaroids, and submit a 5-second clip of their own. Submissions wait in a
 queue. When the artist feels like it, they switch "run the queue" on and the
 4090 works through it, publishing each polaroid as it's made.
 
-Everything sits behind an env flag, on in the next app only, until it's
+Everything sits behind an env flag, until it's
 ready. Today the whole loop works, but only in the dev-only `/admin`
 (`/admin/record` → `/admin/polaroid`, `done/polaroid-admin-flow.md`), one
 clip at a time, on Replicate.
@@ -89,8 +89,8 @@ Still holding from earlier:
   8GB of the 4090), as `gpu-server.ts` does for Deforum.
 - Panel 3 is still Bria on Replicate (~$0.25 a polaroid). For it to be
   free too, panel 3 needs a local equivalent; see Open questions.
-- The next app is a Pages project (direct upload, deployed by
-  `.github/workflows/deploy-next.yml`). It has no custom domain yet.
+- The app was a Pages project (direct upload, deployed by
+  `.github/workflows/deploy-next.yml`), with no custom domain.
 
 ## Approach
 
@@ -113,14 +113,14 @@ Done: `models/polaroid/start-polaroid.sh` runs the `polaroid` container on
 port 5001 (`--restart unless-stopped`), reachable from the Mac over
 Tailscale with no firewall change.
 
-### 2. The next app becomes a Worker (done)
+### 2. The app becomes a Worker (done)
 
-`lysterfield-lake-next` is a Worker with static assets
+`lysterfield-lake` (named `lysterfield-lake-next` until 2026-10-23) is a Worker with static assets
 (`apps/client/wrangler.jsonc`, code in `apps/client/worker/`), at
 lysterfieldlake.com (since 2026-10-23) and
-lysterfield-lake-next.superhighfives.workers.dev: the built site from
+lysterfield-lake.superhighfives.workers.dev: the built site from
 `dist`, 404s from `404.html` and `_redirects` as on Pages, and only `/api/*`
-reaching the Worker. `deploy-next.yml` runs `wrangler deploy`. The Pages
+reaching the Worker. `deploy.yml` runs `wrangler deploy`. The Pages
 project is left as it was, no longer updated. Bound to the Worker:
 
 - **D1, `lysterfield-polaroids`** (`apps/client/migrations/`): one row per
@@ -170,7 +170,7 @@ whole life against `wrangler dev`, refusals included.
 **Behind a flag until release:** the public routes answer 404 until
 `POLAROIDS_PUBLIC` is `"true"` (`wrangler.jsonc`); the admin routes work
 regardless. The app's own switch, for step 4, is `VITE_APP_POLAROIDS`
-(`.env.next`, `false`).
+(`.env.production`, `false`).
 
 **Still to switch on:** submissions refuse everything until the Worker has
 a `TURNSTILE_SECRET` (step 4 makes the widget), and email needs
@@ -339,7 +339,7 @@ deleted straight after along with the bucket.
       4090/Replicate switch in `/admin/polaroid`; CLAUDE.md updated.
       Checked on a copy of `park-party-2`: 120 frames in 1,051s, free,
       matching the Replicate run's panels by eye
-- [x] 2. The next app as a Worker with static assets; D1, the two buckets,
+- [x] 2. The app as a Worker with static assets; D1, the two buckets,
       the routes (a bearer token for the admin, not Access)
 - [ ] Onboard lysterfieldlake.com to Email Service (user's go-ahead: DNS)
 - [ ] The CI token needs Workers Scripts, D1 and R2: Edit (was Pages)

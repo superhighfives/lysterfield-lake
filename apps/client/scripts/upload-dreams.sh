@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Uploads dreams' split files from dreams/ to the next app's bucket
+# Uploads dreams' split files from dreams/ to the app's bucket
 # (lysterfield-lake-next-dreams, served at next-dreams.lysterfieldlake.com):
 # the files the player loads, `dream{,-small}.{mp4,webm}` per dream and
 # `main{,-small}.{mp4,webm}` for main. Additive: nothing in the bucket is
 # deleted, and a file already there at the same size is skipped.
 #
-#   scripts/upload-next-dreams.sh <id>...      # e.g. lake-light, or main
-#   scripts/upload-next-dreams.sh --dry-run <id>...
+#   scripts/upload-dreams.sh <id>...      # e.g. lake-light, or main
+#   scripts/upload-dreams.sh --dry-run <id>...
 set -euo pipefail
 cd "$(dirname "$0")/.."
 BUCKET=lysterfield-lake-next-dreams

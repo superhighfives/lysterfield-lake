@@ -1,9 +1,9 @@
-// The next app (plans/in-progress/polaroids.md): one Worker serving the built
+// The app (plans/in-progress/polaroids.md): one Worker serving the built
 // site from dist/ and the polaroid API under /api. Deployed by
-// .github/workflows/deploy-next.yml, or `bun run deploy-next` by hand.
+// .github/workflows/deploy.yml, or `bun run deploy` by hand.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "lysterfield-lake-next",
+  "name": "lysterfield-lake",
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-01",
   "workers_dev": true,
@@ -37,7 +37,7 @@
   "vars": {
     // Visitors' polaroids aren't released yet: until this is "true" the
     // public /api/polaroids routes answer 404. The admin routes still work.
-    // The app's own switch is VITE_APP_POLAROIDS (.env.next).
+    // The app's own switch is VITE_APP_POLAROIDS (.env.production).
     "POLAROIDS_PUBLIC": "false",
     "APP_URL": "https://lysterfieldlake.com",
     "EMAIL_FROM": "polaroids@lysterfieldlake.com"
