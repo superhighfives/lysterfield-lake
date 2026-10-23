@@ -1,11 +1,11 @@
-name: Deploy next
+name: Deploy
 
-# Deploys the client to the lysterfield-lake-next Worker
+# Deploys the client to the lysterfield-lake Worker
 # (lysterfieldlake.com, and its workers.dev URL: the built site as static
 # assets, and the polaroid API, apps/client/wrangler.jsonc) when main changes,
-# as `bun run --cwd apps/client deploy-next` does by hand. Its videos aren't
+# as `bun run --cwd apps/client deploy` does by hand. Its videos aren't
 # part of the build: they're in the lysterfield-lake-next-dreams R2 bucket,
-# served from next-dreams.lysterfieldlake.com (apps/client/.env.next).
+# served from next-dreams.lysterfieldlake.com (apps/client/.env.production).
 #
 # It builds from the committed src/dreams.json, without the deploy script's
 # `generate` step, which reads the gitignored dreams/ folder that only
@@ -24,12 +24,12 @@ on:
     paths:
       - apps/client/**
       - bun.lock
-      - .github/workflows/deploy-next.yml
+      - .github/workflows/deploy.yml
   workflow_dispatch:
 
 # One at a time, the newest winning: a push mid-deploy replaces it.
 concurrency:
-  group: deploy-next
+  group: deploy
   cancel-in-progress: true
 
 permissions:
@@ -48,7 +48,7 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - name: Build
-        run: bun run --cwd apps/client build-next
+        run: bun run --cwd apps/client build
 
       - name: Deploy the Worker
         working-directory: apps/client

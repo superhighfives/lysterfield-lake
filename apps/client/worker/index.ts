@@ -1,4 +1,4 @@
-// The next app's Worker (plans/in-progress/polaroids.md, step 2). The built
+// The app's Worker (plans/in-progress/polaroids.md, step 2). The built
 // site is static assets (wrangler.jsonc); only /api comes here.
 //
 // Visitors: POST /api/polaroids (Turnstile, then a row), PUT its clip to

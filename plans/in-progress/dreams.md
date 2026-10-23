@@ -91,7 +91,7 @@ after one frame.
 | 4. Full song | ~54 chained runs | ~$20 | confirm dialog |
 | 5. Check | Score every dream frame for a person | free | none |
 | 6. Repair | Re-render flagged stretches with Deforum | ~$0.008 a frame | user approves flagged stretches and the cost |
-| 7. Publish | `compose`, `compose-split`, `upload-next-dreams.sh`, a PR | free | user's go-ahead for R2 |
+| 7. Publish | `compose`, `compose-split`, `upload-dreams.sh`, a PR | free | user's go-ahead for R2 |
 
 Stages 1-4 exist. Stages 5 and 6 are new and are what makes this
 manageable: most leaks are rerolled away as the frame is made, and the
@@ -220,10 +220,10 @@ cheap:
 
 ### 7. Publish
 
-The split client now ships as its own app, the lysterfield-lake-next Worker
+The split client now ships as its own app, the lysterfield-lake Worker
 at lysterfieldlake.com (PR #42; the domain moved from the old Pages site on
 2026-10-23), which deploys itself when `main` changes
-(`.github/workflows/deploy-next.yml`, PR #45). It plays only the split files,
+(`.github/workflows/deploy.yml`, PR #45). It plays only the split files,
 from its own bucket, `lysterfield-lake-next-dreams`, at
 next-dreams.lysterfieldlake.com (PR #43). The ten legacy dreams are there,
 under their readable ids. The old site's bucket and datestamp folders are
@@ -237,8 +237,8 @@ For a new take (the steps in detail: `ready/next-dream.md`):
 2. `compose-split --takes <client-id>`: the take's `dream{,-small}.{mp4,webm}`.
    The shared `main*` is already made and doesn't change.
 3. Review: one full watch of panel 7.
-4. Upload the split files to the next bucket with
-   `apps/client/scripts/upload-next-dreams.sh <id>`,
+4. Upload the split files to the app's bucket with
+   `apps/client/scripts/upload-dreams.sh <id>`,
    without deleting anything. **Needs the user's go-ahead.**
 5. A PR with the assets and `dreams.json`. Merging deploys it.
 

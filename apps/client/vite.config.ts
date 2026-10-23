@@ -8,9 +8,8 @@ import adminPlugin from './vite-plugin-admin'
 
 // public/dreams links to dreams/ (the gitignored playback videos, ~9GB) so
 // `vite dev` serves them; a build must leave them out — they're hosted on
-// R2 (VITE_APP_DREAMS), and Pages rejects files over 25MB. So `--mode next`
-// builds copy public/ themselves, skipping dreams/. Other modes still point
-// VITE_APP_DREAMS at /dreams, so they keep vite's own copy.
+// R2 (VITE_APP_DREAMS), and Workers' static assets reject files over 25MB. So
+// builds copy public/ themselves, skipping dreams/.
 function publicWithoutDreams(): Plugin {
   let publicDir = ''
   let outDir = ''
@@ -33,16 +32,15 @@ function publicWithoutDreams(): Plugin {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
+export default defineConfig(() => {
   const external = process.env.npm_lifecycle_event === 'dev-external'
-  const next = mode === 'next'
   // adminPlugin only applies to `vite dev` (apply: 'serve'); see vite-plugin-admin.ts.
-  const included = [react(), removeConsole(), adminPlugin(), ...(next ? [publicWithoutDreams()] : [])]
+  const included = [react(), removeConsole(), adminPlugin(), publicWithoutDreams()]
   const plugins = external ? [mkcert(), ...included] : included
 
   return {
     plugins,
     server: { https: external },
-    build: { copyPublicDir: !next },
+    build: { copyPublicDir: false },
   }
 })
