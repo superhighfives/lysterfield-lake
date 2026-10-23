@@ -224,8 +224,10 @@ The split client now ships as its own app, the lysterfield-lake Worker
 at lysterfieldlake.com (PR #42; the domain moved from the old Pages site on
 2026-10-23), which deploys itself when `main` changes
 (`.github/workflows/deploy.yml`, PR #45). It plays only the split files,
-from its own bucket, `lysterfield-lake-next-dreams`, at
-next-dreams.lysterfieldlake.com (PR #43). The ten legacy dreams are there,
+from its own bucket, `lysterfield-lake-dreams`, at
+dreams.lysterfieldlake.com (PR #43; `lysterfield-lake-next-dreams` at
+next-dreams.lysterfieldlake.com until 2026-10-23, when the 2023 bucket of
+that name moved to `lysterfield-lake-archive`). The ten legacy dreams are there,
 under their readable ids. The old site's bucket and datestamp folders are
 left as they were.
 
