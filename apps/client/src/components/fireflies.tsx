@@ -233,10 +233,12 @@ function Swarm({
     // Playing is read off the video itself as well as the store: arriving
     // straight at a dream (from its URL), the store's flag could miss the
     // start, and the bugs stayed on screen through the song.
-    const { dream, videoPlaying, resetting } = useStore.getState()
+    // Held out of frame until the loading pile starts falling away, so the
+    // first fly-in is seen as the scene fades in (components/loading.tsx).
+    const { dream, videoPlaying, resetting, pileLeaving } = useStore.getState()
     const main = dreamVideo.main
     const playing = videoPlaying || (!!main && !main.paused && !main.ended)
-    const target = dream && playing && !resetting ? 1 : 0
+    const target = !pileLeaving || (dream && playing && !resetting) ? 1 : 0
     const scatter = material.uniforms.uScatter
     if (scatter.value < 0.01) arrived.current = true
     scatter.value = MathUtils.damp(

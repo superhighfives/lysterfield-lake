@@ -102,11 +102,13 @@ function Choose(props: ThreeElements['group']) {
     if (dream) scrollToPlayer.current = true
   }, [dream])
 
+  // The title paints itself in once the loading pile starts falling away
+  // and the scene fades in (components/loading.tsx). Started as the scene
+  // mounted, it had finished behind the pile.
+  const pileLeaving = useStore((state) => state.pileLeaving)
   useEffect(() => {
-    if (titleVisible) {
-      titleMask.source.data.play()
-    }
-  }, [titleVisible])
+    if (pileLeaving) titleMask.source.data.play()
+  }, [pileLeaving, titleMask])
 
   const { height: h } = useThree((state) => state.viewport)
 

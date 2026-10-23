@@ -9,8 +9,8 @@ import dreams from '../dreams.json'
 // same loose jitter as the choose screen's stack (components/carousels/
 // stack.tsx). Cards beneath the newest go grey, as they do there, and each
 // photo starts as a blank, milky print and develops as its image arrives.
-// A spinner turns where they land until the first covers it, and the count
-// beneath fades out once it's complete.
+// They fall from above the window. A spinner turns where they land until
+// the first covers it, and the count beneath fades out once it's complete.
 //
 // Plain HTML over the canvas rather than the canvas's Suspense fallback,
 // so it can leave rather than vanish. A card only drops once its photo has
