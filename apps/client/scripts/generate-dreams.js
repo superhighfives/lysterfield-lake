@@ -23,23 +23,24 @@ if (dreams.length === 0 && existingDreams.length > 0) {
   process.exit(0)
 }
 
-const dreamsOutput = dreams
-  // Not dreams: old takes, and the split layout's shared main video
-  // (dreams/main/, see src/utils/dream-video.ts).
-  .filter((dream) => dream != 'archive' && dream != 'main')
-  .map((dream) => {
-    const existingDream = existingDreams.find((d) => d.id === dream)
-    if (existingDream) {
-      return existingDream
-    } else {
-      return {
-        id: dream,
-        title: 'TBA',
-        link: 'https://youtube.com/watch?v=',
-        prompt: '',
-      }
-    }
-  })
+// Not dreams: old takes, and the split layout's shared main video
+// (dreams/main/, see src/utils/dream-video.ts).
+const scenes = dreams.filter((dream) => dream != 'archive' && dream != 'main')
+
+// Order is the chooser's: the first dream is the newest, on top of the
+// stack (see src/routes/root.tsx). Known dreams keep their place, and a new
+// scene folder goes first.
+const dreamsOutput = [
+  ...scenes
+    .filter((dream) => !existingDreams.some((d) => d.id === dream))
+    .map((dream) => ({
+      id: dream,
+      title: 'TBA',
+      link: '',
+      prompt: '',
+    })),
+  ...existingDreams.filter((d) => scenes.includes(d.id)),
+]
 
 let data = JSON.stringify(dreamsOutput)
 fs.writeFileSync('src/dreams.json', data)

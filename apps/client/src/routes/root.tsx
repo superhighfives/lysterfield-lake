@@ -67,7 +67,10 @@ function Root() {
 
   useEffect(() => {
     console.log('Loaded!')
-    setCollection(shuffle(dreams))
+    // The newest dream is first in dreams.json and stays first (on top of
+    // the stack); the rest are shuffled.
+    const [newest, ...rest] = dreams
+    setCollection([newest, ...shuffle(rest)])
     setHasLoaded(true)
   }, [])
 
