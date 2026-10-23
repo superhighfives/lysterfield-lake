@@ -1,42 +1,17 @@
-# Lysterfield Lake (App)
+# Lysterfield Lake app
 
-Client for the Lysterfield Lake project.
+The app that plays [Lysterfield Lake](https://lysterfieldlake.com/). See the [root README](../../README.md) for how the project fits together.
 
-🚨 **Please note:** 🚨 This was a passion project, provided purely as a resource for anyone looking to dive into aspects of how [Lysterfield Lake](https://lysterfieldlake.com/) was created. It is not a great representation of how to build a performant React app (or at least, I'm pretty sure it isn't).
+## Commands
 
-> The pipeline for generating the visuals is available at [superhighfives/lysterfield-lake-pipeline](https://github.com/superhighfives/lysterfield-lake-pipeline)
+Run these from the repo root with `bun run --cwd apps/client <script>`.
 
-✋ You can [learn more about how the project works here](https://medium.com/@superhighfives/lysterfield-lake-71345aa8c016).
-
-<a href="https://medium.com/@superhighfives/lysterfield-lake-71345aa8c016">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/superhighfives/lysterfield-lake/assets/449385/36e1b0ab-c7f1-4450-992a-681b254ee1ea">
-    <img src="https://github.com/superhighfives/lysterfield-lake/assets/449385/4c14e91a-26bc-4f92-9301-7b0f12dc79de">
-  </picture>
-</a>
-
-## Getting started
-
-You'll need to get the video files. These are available here:
-https://drive.google.com/drive/folders/15I4ll5xXZZM9p2RhYRrsui7UqELMy4YG?usp=drive_link
-
-Place them in the `dreams/` folder, so they should look like `dreams/watercolour` (the dream's id from `src/dreams.json`), etc.
-
-You'll also need to run `npm install`.
-
-## Development
-
-### `npm run dev`
-Runs vite.
-
-### `npm run dev-external`
-Runs vite, allowing access on the network (important for testing accelerometer features, which require a https server to be running locally).
-
-### `build`
-Builds the app.
-
-### `generate`
-Generates the json file required for the dreams.
-
-### `deploy`
-Builds and deploys using rclone. You will need a `r2:lysterfield-lake` remote set up in your rclone config.
+| Script | What it does |
+| --- | --- |
+| `dev` | Runs Vite. `/admin`, the dream and polaroid tools, only exists here. |
+| `dev-external` | Runs Vite on your network, for testing tilt on a phone. |
+| `generate` | Writes `src/dreams.json` from the `dreams/` folder. |
+| `build-next` | Builds the site for lysterfieldlake.com. |
+| `deploy-next` | Builds and deploys the Worker by hand. Merging to `main` does the same. |
+| `test` | Runs the tests with Vitest. |
+| `lint` | Runs ESLint. |
