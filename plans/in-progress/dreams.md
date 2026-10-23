@@ -91,7 +91,7 @@ after one frame.
 | 4. Full song | ~54 chained runs | ~$20 | confirm dialog |
 | 5. Check | Score every dream frame for a person | free | none |
 | 6. Repair | Re-render flagged stretches with Deforum | ~$0.008 a frame | user approves flagged stretches and the cost |
-| 7. Publish | `compose`, `deploy-dreams`, client deploy | free | user's go-ahead for R2 |
+| 7. Publish | `compose`, `compose-split`, `upload-next-dreams.sh`, a PR | free | user's go-ahead for R2 |
 
 Stages 1-4 exist. Stages 5 and 6 are new and are what makes this
 manageable: most leaks are rerolled away as the frame is made, and the

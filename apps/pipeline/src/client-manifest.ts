@@ -14,8 +14,8 @@ export interface Dream {
  * from — they're genuinely separate, not one "dreams/" folder:
  *
  * - `apps/client/dreams/<id>/` — full-quality playback video, gitignored,
- *   not part of the Vite build. Deployed by syncing this folder to R2
- *   (`npm run deploy-dreams`), read at runtime via `VITE_APP_DREAMS`.
+ *   not part of the Vite build. Uploaded to R2
+ *   (`apps/client/scripts/upload-next-dreams.sh`), read at runtime via `VITE_APP_DREAMS`.
  * - `apps/client/public/assets/<id>/` — choose-screen assets, committed
  *   directly to the repo, part of the normal Vite public/ build.
  *
