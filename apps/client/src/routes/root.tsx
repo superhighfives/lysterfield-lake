@@ -32,7 +32,7 @@ const divider = <span aria-hidden className="w-px h-4 bg-current opacity-20" />
 function Root() {
   const dream = useStore((state) => state.dream)
   const ready = useStore((state) => state.ready)
-  const sceneLoaded = useStore((state) => state.sceneLoaded)
+  const pileLeaving = useStore((state) => state.pileLeaving)
   const colorScheme = useStore((state) => state.colorScheme)
   const touchDevice = useStore((state) => state.isMobile || state.isTouch)
   const setCollection = useStore((state) => state.setCollection)
@@ -186,7 +186,7 @@ function Root() {
                   (components/loading.tsx). */}
               <div
                 className={`absolute inset-0 transition-opacity duration-1000 ease-out ${
-                  sceneLoaded ? 'opacity-100' : 'opacity-0'
+                  pileLeaving ? 'opacity-100' : 'opacity-0'
                 }`}
               >
                 <Canvas shadows dpr={dpr}>

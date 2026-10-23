@@ -377,18 +377,14 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
           </button>
         </div>
         {/* The dream's name and prompt, while the controls are hovered or
-            for a moment when the dream changes: just above the controls
-            (at either of their heights), or on touch at the top, under the
+            for a moment when the dream changes: at the top, under the
             header and clear of a phone's status bar, where it isn't over
-            the lyrics. Fades out as a swap starts, and in again (keyed on
-            the dream) with the new one. */}
+            the lyrics (scene.tsx's PLAYER_HEADER keeps the polaroid below
+            it). Fades out as a swap starts, and in again (keyed on the
+            dream) with the new one. */}
         <div
           aria-live="polite"
-          className={`fixed z-10 left-1/2 -translate-x-1/2 ${
-            isTouch
-              ? 'top-[calc(env(safe-area-inset-top)+3rem)]'
-              : 'bottom-[calc(2.5rem+104px+0.75rem)] xs:bottom-[calc(2.5rem+34px+0.75rem)]'
-          } w-[calc(100vw-2rem)] flex flex-col items-center text-center pointer-events-none transition-opacity duration-300 ${
+          className={`fixed z-10 left-1/2 -translate-x-1/2 top-[calc(env(safe-area-inset-top)+3rem)] w-[calc(100vw-2rem)] flex flex-col items-center text-center pointer-events-none transition-opacity duration-300 ${
             showPlayhead &&
             polaroidPillVisible &&
             dream &&

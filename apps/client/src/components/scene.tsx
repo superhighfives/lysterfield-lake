@@ -73,14 +73,15 @@ const PLAYER_SPOT = { light: 5, dark: 1.2 };
 // on below it), centred, and on a short window the controls at the
 // bottom cover the lyrics. So the view lifts to clear them — and, if
 // lifting alone isn't enough, zooms out a little — keeping it under the
-// header (PLAYER_HEADER px). The controls are measured where they are
+// header and the dream's name and prompt (PLAYER_HEADER px; see
+// components/playhead.tsx). The controls are measured where they are
 // (components/playhead.tsx, [data-playhead]: lower on touch, two rows when
 // narrow), plus PLAYER_CONTROLS_GAP; PLAYER_CONTROLS is the fallback
 // before they're on the page. PLAYER_FIT_EASE: how quickly (per frame) it
 // settles.
 const PLAYER_TOP = 0.17;
 const PLAYER_BOTTOM = 0.92;
-const PLAYER_HEADER = 64;
+const PLAYER_HEADER = 100;
 const PLAYER_CONTROLS = 40 + 34 + 16;
 const PLAYER_CONTROLS_GAP = 16;
 const PLAYER_FIT_EASE = 0.1;

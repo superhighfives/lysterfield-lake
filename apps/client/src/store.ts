@@ -42,6 +42,9 @@ export interface AppState {
   /** The 3D scene's assets have loaded and it's mounted (see
    *  components/loading.tsx, which clears away as it comes in). */
   sceneLoaded: boolean
+  /** The loading pile has started falling away, once every card's
+   *  developed: the scene fades in beneath it (routes/root.tsx). */
+  pileLeaving: boolean
   showPlayhead: boolean
   initialRotation: [number, number, number]
   globalPointer: Vector2
@@ -84,6 +87,7 @@ export interface AppState {
   setGlobalPointer: (globalPointer: Vector2) => void
   setReady: (ready: boolean) => void
   setSceneLoaded: (sceneLoaded: boolean) => void
+  setPileLeaving: (pileLeaving: boolean) => void
   setIsTooSlow: (ready: boolean) => void
   setThemePreference: (themePreference: ThemePreference) => void
   setColorScheme: (colorScheme: ColorScheme) => void
@@ -112,6 +116,7 @@ export const useStore = create<AppState>()((set) => ({
   polaroidPillVisible: false,
   ready: false,
   sceneLoaded: false,
+  pileLeaving: false,
   showPlayhead: false,
   initialRotation: [0, 0, 0],
   globalPointer: new Vector2(0, 0),
@@ -160,6 +165,7 @@ export const useStore = create<AppState>()((set) => ({
   setGlobalPointer: (globalPointer: Vector2) => set(() => ({ globalPointer })),
   setReady: (ready: boolean) => set(() => ({ ready })),
   setSceneLoaded: (sceneLoaded: boolean) => set(() => ({ sceneLoaded })),
+  setPileLeaving: (pileLeaving: boolean) => set(() => ({ pileLeaving })),
   setIsTooSlow: (isTooSlow: boolean) => set(() => ({ isTooSlow })),
   setSeeking: (seeking: boolean) => set(() => ({ seeking })),
   setThemePreference: (themePreference: ThemePreference) =>

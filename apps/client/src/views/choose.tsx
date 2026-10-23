@@ -39,12 +39,19 @@ const invertInk = (shader: { fragmentShader: string }) => {
 // making the cards bigger on screen without changing their spacing or
 // pile. Applied to the group around the stack, like the scale below.
 const CAROUSEL_FORWARD = 0.25
+// How far the pile sits up toward its heading ("Where are we going?"), in
+// viewport heights, leaving room below for the top card's title and prompt.
+const CAROUSEL_LIFT = 0.1
 
 // Frames between nudges while arriving at the player (see useFrame).
 const NUDGE_EVERY = 4
 
 const CAROUSEL_REFERENCE_HEIGHT = 900
 const CAROUSEL_MIN_SCALE = 0.6
+// And never above CAROUSEL_MAX_SCALE: at full size, on a laptop-height
+// window, the top card grown on hover ran off the bottom, taking its
+// title and prompt with it.
+const CAROUSEL_MAX_SCALE = 0.9
 // On a tall, narrow screen (a phone upright), the camera zooms out to fit
 // the width but the pile still filled it and ran off the side, its lower
 // cards squeezed out of sight. Below CAROUSEL_NARROW_ASPECT (width over
@@ -106,13 +113,18 @@ function Choose(props: ThreeElements['group']) {
   // The carousel is sized in world units, which makes it a fixed share of
   // the canvas height — as tall a share on a big external monitor as on a
   // laptop, where it reads as enormous. Past CAROUSEL_REFERENCE_HEIGHT CSS
-  // pixels of canvas, it's scaled down to hold roughly that on-screen size.
+  // pixels of canvas, it's scaled down to hold roughly that on-screen size
+  // (and below it, held at CAROUSEL_MAX_SCALE).
   // Applied to the group around the stack, which lays its cards out in
   // its own local space.
   const canvasHeight = useThree((state) => state.size.height)
   const canvasWidth = useThree((state) => state.size.width)
   const carouselScale =
-    MathUtils.clamp(CAROUSEL_REFERENCE_HEIGHT / canvasHeight, CAROUSEL_MIN_SCALE, 1) *
+    MathUtils.clamp(
+      CAROUSEL_REFERENCE_HEIGHT / canvasHeight,
+      CAROUSEL_MIN_SCALE,
+      CAROUSEL_MAX_SCALE
+    ) *
     MathUtils.clamp(
       canvasWidth / canvasHeight / CAROUSEL_NARROW_ASPECT,
       CAROUSEL_NARROW_MIN,
@@ -143,7 +155,7 @@ function Choose(props: ThreeElements['group']) {
   )
 
   const [{ position: polaroidPosition }, polaroidApi] = useSpring(() => ({
-    position: [0, -h * 1.8, CAROUSEL_FORWARD],
+    position: [0, -h * (1.8 - CAROUSEL_LIFT), CAROUSEL_FORWARD],
     config: { ...config.molasses, precision: 0.0000001 },
   }))
 
@@ -205,7 +217,7 @@ function Choose(props: ThreeElements['group']) {
     polaroidApi.start({
       position: [
         0,
-        -h * (1.8 + (1 - nextPolaroidVisibility) * 2),
+        -h * (1.8 - CAROUSEL_LIFT + (1 - nextPolaroidVisibility) * 2),
         CAROUSEL_FORWARD,
       ],
     })

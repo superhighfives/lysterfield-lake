@@ -11,9 +11,11 @@ import dreams from '../dreams.json'
 // photo starts as a blank, milky print and develops as its image arrives.
 //
 // Plain HTML over the canvas rather than the canvas's Suspense fallback,
-// so it can leave rather than vanish: once the scene's mounted
-// (`sceneLoaded`), the pile falls away together (the top card a touch
-// ahead), while the scene fades in beneath it (routes/root.tsx).
+// so it can leave rather than vanish. A card only drops once its photo has
+// loaded, so it lands ready to develop. Once the scene's mounted
+// (`sceneLoaded`) and every card's photo has developed, the pile holds
+// for HOLD_MS, then falls away together (the top card a touch ahead),
+// while the scene fades in beneath it (`pileLeaving`, routes/root.tsx).
 
 // The most cards the pile holds (a card per asset drei's progress counts),
 // each card's jitter in the pile (px, degrees). The fall in and out are
@@ -29,32 +31,79 @@ const DROP_STAGGER = 70
 const LEAVE_STAGGER = 12
 // How long after a card starts falling its photo starts developing (ms).
 const DEVELOP_AFTER = 400
+// The develop itself (tailwind.config.js's develop), then how long the
+// developed pile holds before it falls away (ms).
+const DEVELOP_MS = 1600
+const HOLD_MS = 1000
 const LEAVE_MS = 600 + MAX_CARDS * LEAVE_STAGGER
+
+// The photos the pile shows (one per dream, repeating), preloaded as it
+// mounts so a card can wait for its own.
+const heroUrl = (id: string) => `/assets/${id}/hero.jpg`
 
 function Loading() {
   // Counted against what's actually queued, so it ends on "n of n" (a
   // fixed 20 stopped at 19).
   const { loaded, total } = useProgress()
-  const count = Math.min(loaded, MAX_CARDS)
-  // Each card's drop delay, fixed when it first appears (changing it
-  // mid-fall would restart the fall).
-  const dropDelays = useRef<number[]>([])
-  const shown = dropDelays.current.length
-  for (let i = shown; i < count; i++)
-    dropDelays.current.push((i - shown) * DROP_STAGGER)
   const sceneLoaded = useStore((state) => state.sceneLoaded)
+  const setPileLeaving = useStore((state) => state.setPileLeaving)
   // Already loaded when this mounts (a cached scene): there's no pile to
   // clear away.
   const [gone, setGone] = useState(sceneLoaded)
+  const [leaving, setLeaving] = useState(sceneLoaded)
+
+  // Which dreams' photos have loaded. One that fails counts too, so the
+  // pile can't wait on it forever.
+  const [ready, setReady] = useState<ReadonlySet<string>>(new Set())
+  useEffect(() => {
+    if (gone) return
+    const images = dreams.map(({ id }) => {
+      const image = new Image()
+      const done = () => setReady((prev) => new Set(prev).add(id))
+      image.onload = done
+      image.onerror = done
+      image.src = heroUrl(id)
+      return image
+    })
+    return () => images.forEach((image) => (image.onload = image.onerror = null))
+  }, [gone])
+
+  // Cards drop in order, each once its asset's counted and its photo's in.
+  const wanted = Math.min(loaded, MAX_CARDS)
+  let count = 0
+  while (count < wanted && ready.has(dreams[count % dreams.length].id)) count++
+  // Each card's drop delay, fixed when it first appears (changing it
+  // mid-fall would restart the fall), and when its photo finishes
+  // developing (performance.now() ms).
+  const dropDelays = useRef<number[]>([])
+  const developed = useRef<number[]>([])
+  const shown = dropDelays.current.length
+  const now = performance.now()
+  for (let i = shown; i < count; i++) {
+    const delay = (i - shown) * DROP_STAGGER
+    dropDelays.current.push(delay)
+    developed.current.push(now + delay + DEVELOP_AFTER + DEVELOP_MS)
+  }
+
+  // Every card in (the count only reaches n of n once the scene's loaded):
+  // hold once the last has developed, then leave.
+  const allIn = sceneLoaded && count === Math.min(Math.max(loaded, total), MAX_CARDS)
+  useEffect(() => {
+    if (!allIn || leaving) return
+    const lastDeveloped = Math.max(0, ...developed.current)
+    const wait = Math.max(0, lastDeveloped - performance.now()) + HOLD_MS
+    const timeout = window.setTimeout(() => setLeaving(true), wait)
+    return () => window.clearTimeout(timeout)
+  }, [allIn, leaving])
 
   useEffect(() => {
-    if (!sceneLoaded || gone) return
+    if (leaving) setPileLeaving(true)
+    if (!leaving || gone) return
     const timeout = window.setTimeout(() => setGone(true), LEAVE_MS)
     return () => window.clearTimeout(timeout)
-  }, [sceneLoaded, gone])
+  }, [leaving, gone, setPileLeaving])
 
   if (gone) return null
-  const leaving = sceneLoaded
 
   return (
     <div className="fixed inset-0 z-10 flex flex-col items-center justify-center gap-10 pointer-events-none whitespace-nowrap">
@@ -95,7 +144,7 @@ function Loading() {
                 {/* Develops once the card's landed, whether or not the
                     image was cached (an onLoad fade never showed then). */}
                 <img
-                  src={`/assets/${dream.id}/hero.jpg`}
+                  src={heroUrl(dream.id)}
                   alt=""
                   className="w-full h-full object-cover motion-safe:animate-develop"
                   style={{
