@@ -10,7 +10,7 @@ updated: 2026-10-21
 ## Goal
 
 Take one new dream from an approved set of samples all the way to the next
-app (lysterfield-lake-next.pages.dev): a full-song take with no people in it,
+app (lysterfieldlake.com): a full-song take with no people in it,
 composed, split, uploaded and in the chooser.
 
 This is the "try the whole loop on one new take" task in

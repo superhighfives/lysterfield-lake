@@ -1,7 +1,7 @@
 name: Deploy next
 
 # Deploys the client to the lysterfield-lake-next Worker
-# (lysterfield-lake-next.superhighfives.workers.dev: the built site as static
+# (lysterfieldlake.com, and its workers.dev URL: the built site as static
 # assets, and the polaroid API, apps/client/wrangler.jsonc) when main changes,
 # as `bun run --cwd apps/client deploy-next` does by hand. Its videos aren't
 # part of the build: they're in the lysterfield-lake-next-dreams R2 bucket,

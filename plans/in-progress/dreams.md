@@ -220,13 +220,14 @@ cheap:
 
 ### 7. Publish
 
-The split client now ships as its own app, lysterfield-lake-next.pages.dev
-(PR #42), which deploys itself when `main` changes
+The split client now ships as its own app, the lysterfield-lake-next Worker
+at lysterfieldlake.com (PR #42; the domain moved from the old Pages site on
+2026-10-23), which deploys itself when `main` changes
 (`.github/workflows/deploy-next.yml`, PR #45). It plays only the split files,
 from its own bucket, `lysterfield-lake-next-dreams`, at
 next-dreams.lysterfieldlake.com (PR #43). The ten legacy dreams are there,
-under their readable ids. The live site keeps its own bucket and datestamp
-folders until the domain moves over.
+under their readable ids. The old site's bucket and datestamp folders are
+left as they were.
 
 For a new take (the steps in detail: `ready/next-dream.md`):
 
@@ -394,6 +395,8 @@ Make and publish:
 - [x] Publish the ten to the next app: split files in the
       `lysterfield-lake-next-dreams` bucket, the app on Pages (2026-10-19).
       The live site's bucket is left as it is until the domain moves over
+- [ ] Move lysterfieldlake.com from the old Pages project to the next
+      Worker (`wrangler.jsonc`'s custom domain)
 - [ ] Optional: review `repairGlitchedFrames`'s 80 flagged matte frames on
       this job (see phase 4e's Other fixes)
 
