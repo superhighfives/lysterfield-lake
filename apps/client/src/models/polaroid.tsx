@@ -44,23 +44,31 @@ const shadowTexture = (() => {
 })()
 
 // The chooser's pile: every card marks where it is in the stencil buffer
-// (an invisible, card-shaped marker, drawn with the opaque objects, so all
-// are marked before any shadow), and casts two shadows down and a little
-// right: a hard-edged, faint one drawn only where a card is marked — on the
-// cards beneath, a fine line like the one the player's polaroid casts as it
-// bends — and a soft one drawn only where none is, on the backdrop. The
-// hard one ignores depth, so a photo sitting a touch forward of its frame
-// doesn't cut it; the cards above it, drawn later, cover it. The frame is
-// 3.66 x 4.47 units; the canvas needs a stencil buffer
-// (components/experience.tsx), and so does the wake's render target
-// (components/wake-pass.tsx).
-const PILE_CARD_SIZE: [number, number] = [3.66, 4.47]
-// A short cast, so each card leaves a thin line along the edges of the
-// card beneath: a longer one overlapped its neighbours' into stripes.
-const PILE_SHADOW_OFFSET: [number, number, number] = [0.05, -0.07, -0.12]
+// (an invisible marker the card's exact shape, drawn with the opaque
+// objects, so all are marked before any shadow), and casts shadows a
+// little downward. On the cards beneath (drawn only where a card is
+// marked), a contact shadow: crisp right at the edge and quickly softer
+// and fainter further out, all the way round; only the top card, the one
+// you hold, draws the crisp line, the rest just the soft part. On the
+// backdrop (drawn only where no card is marked), a soft one. The shadows
+// on cards ignore depth, so a photo sitting a touch forward of its frame
+// doesn't cut them; the cards above, drawn later, cover them. The canvas
+// needs a stencil buffer (components/experience.tsx), and so does the
+// wake's render target (components/wake-pass.tsx).
+// The card's outline, from the model: 3.66 x 4.47 units, sitting a touch
+// below the origin.
+const PILE_CARD_SIZE: [number, number] = [3.659, 4.473]
+const PILE_CARD_CENTRE: [number, number, number] = [0, -0.07, 0]
+// How far each shadow's plane reaches past the card, as a fraction of its
+// size each side, and where it sits (just behind the card, closer than the
+// next card down, 0.25 of these units: the pile's LAYER,
+// components/carousels/stack.tsx).
+const PILE_SHADOW_MARGIN = 0.12
+const PILE_SHADOW_POSITION: [number, number, number] = [0, -0.11, -0.12]
 const PILE_SHADOW_OPACITY = {
-  hard: { light: 0.08, dark: 0.3 },
-  soft: { light: 0.08, dark: 0.25 },
+  line: { light: 0.16, dark: 0.45 },
+  soft: { light: 0.1, dark: 0.32 },
+  backdrop: { light: 0.08, dark: 0.25 },
 }
 const STENCIL_MARK = { stencilWrite: true, stencilRef: 1, stencilZPass: ReplaceStencilOp }
 // Ignoring depth too (see above).
@@ -71,6 +79,33 @@ const ON_CARDS = {
   stencilFunc: EqualStencilFunc,
 }
 const OFF_CARDS = { stencilWrite: true, stencilRef: 1, stencilFunc: NotEqualStencilFunc }
+const pileShadowSize = (scale = 1): [number, number] => [
+  PILE_CARD_SIZE[0] * (1 + PILE_SHADOW_MARGIN * 2) * scale,
+  PILE_CARD_SIZE[1] * (1 + PILE_SHADOW_MARGIN * 2) * scale,
+]
+// The card's shape, blurred by `blur` canvas px, in a plane
+// PILE_SHADOW_MARGIN larger each side (white on black, as above).
+const cardShadowTexture = (blur: number) => {
+  const width = 256
+  const height = Math.round(width * (PILE_CARD_SIZE[1] / PILE_CARD_SIZE[0]))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = 'black'
+  ctx.fillRect(0, 0, width, height)
+  const insetX = (width * PILE_SHADOW_MARGIN) / (1 + PILE_SHADOW_MARGIN * 2)
+  const insetY = (height * PILE_SHADOW_MARGIN) / (1 + PILE_SHADOW_MARGIN * 2)
+  ctx.shadowColor = 'white'
+  ctx.shadowBlur = blur
+  ctx.shadowOffsetX = width * 4
+  ctx.fillStyle = 'white'
+  ctx.fillRect(insetX - width * 4, insetY, width - insetX * 2, height - insetY * 2)
+  return new CanvasTexture(canvas)
+}
+
+const pileLineTexture = cardShadowTexture(3)
+const pileSoftTexture = cardShadowTexture(16)
 
 type GLTFResult = GLTF & {
   nodes: {
@@ -190,8 +225,11 @@ const Polaroid = forwardRef<
      *  they came out low-res and jagged. The drop-shadow plane does that
      *  job instead. */
     layered?: boolean
+    /** Carousel card on top of the pile: it casts the crisp line of its
+     *  contact shadow onto the cards beneath (see PILE_SHADOW_OPACITY). */
+    castsLine?: boolean
   }
->(({ layered, passthroughMaterial, intersectRef, ...props }, ref) => {
+>(({ layered, castsLine, passthroughMaterial, intersectRef, ...props }, ref) => {
   const { nodes, materials } = useGLTF(
     '/models/polaroid.glb'
   ) as unknown as GLTFResult
@@ -267,31 +305,41 @@ const Polaroid = forwardRef<
           occlude anything. */}
       {layered ? (
         <>
-          <mesh>
+          <mesh position={PILE_CARD_CENTRE}>
             <planeGeometry args={PILE_CARD_SIZE} />
-            <meshBasicMaterial
-              colorWrite={false}
-              depthWrite={false}
-              {...STENCIL_MARK}
-            />
+            <meshBasicMaterial colorWrite={false} depthWrite={false} {...STENCIL_MARK} />
           </mesh>
-          <mesh position={PILE_SHADOW_OFFSET}>
-            <planeGeometry args={PILE_CARD_SIZE} />
+          {castsLine ? (
+            <mesh position={PILE_SHADOW_POSITION}>
+              <planeGeometry args={pileShadowSize()} />
+              <meshBasicMaterial
+                color="black"
+                alphaMap={pileLineTexture}
+                transparent
+                opacity={PILE_SHADOW_OPACITY.line[dark ? 'dark' : 'light']}
+                depthWrite={false}
+                {...ON_CARDS}
+              />
+            </mesh>
+          ) : null}
+          <mesh position={PILE_SHADOW_POSITION}>
+            <planeGeometry args={pileShadowSize(1.03)} />
             <meshBasicMaterial
               color="black"
+              alphaMap={pileSoftTexture}
               transparent
-              opacity={PILE_SHADOW_OPACITY.hard[dark ? 'dark' : 'light']}
+              opacity={PILE_SHADOW_OPACITY.soft[dark ? 'dark' : 'light']}
               depthWrite={false}
               {...ON_CARDS}
             />
           </mesh>
-          <mesh position={PILE_SHADOW_OFFSET}>
-            <planeGeometry args={[5.6, 6.6]} />
+          <mesh position={PILE_SHADOW_POSITION}>
+            <planeGeometry args={pileShadowSize(1.06)} />
             <meshBasicMaterial
               color="black"
-              alphaMap={shadowTexture}
+              alphaMap={pileSoftTexture}
               transparent
-              opacity={PILE_SHADOW_OPACITY.soft[dark ? 'dark' : 'light']}
+              opacity={PILE_SHADOW_OPACITY.backdrop[dark ? 'dark' : 'light']}
               depthWrite={false}
               {...OFF_CARDS}
             />
