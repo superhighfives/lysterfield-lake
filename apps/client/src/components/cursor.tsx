@@ -3,7 +3,7 @@ import { CaretLeft, CaretRight } from '@phosphor-icons/react'
 import { useStore } from '../store'
 import type { Dream } from '../utils/types'
 import {
-  canSwap,
+  canDrag,
   dragPreview,
   nearPolaroid,
   swapDrag,
@@ -203,7 +203,7 @@ function Cursor() {
       if (swapDrag.active || hint?.dragging) next = 'drag'
       // Over the polaroid, a drag's on offer even while it waits on video
       // (it skips past); elsewhere, waiting shows as busy.
-      else if (hint?.near || (canSwap() && nearPolaroid(pointer.x, pointer.y)))
+      else if (hint?.near || (canDrag() && nearPolaroid(pointer.x, pointer.y)))
         next = 'polaroid'
       // Not on touch: a busy ring appearing under a finger read as part of
       // the page, not a cursor (the drag ring still shows when a swap's on

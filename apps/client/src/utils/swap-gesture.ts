@@ -53,10 +53,12 @@ const EDGE_MIN_PX = 24
 const FLICK_VELOCITY = 0.4
 const FLICK_MIN_PX = 20
 const VELOCITY_WINDOW_MS = 120
-// A swap asked for while the last is still fading out or settling in (a
-// quick second flick) waits up to SWAP_QUEUE_MS for it, rather than being
-// lost: longer than a whole swap's out and in.
-const SWAP_QUEUE_MS = 1200
+// A swap asked for while the last is still under way (a quick second
+// flick) waits up to SWAP_QUEUE_MS for it, rather than being lost: long
+// enough for a whole swap, a slow video load included.
+const SWAP_QUEUE_MS = 3000
+// At most this many swaps wait their turn.
+const MAX_QUEUED = 3
 
 export function nearPolaroid(x: number, y: number, margin = NEAR_MARGIN) {
   const r = polaroidRect
@@ -86,13 +88,19 @@ export function canSwap() {
   )
 }
 
-// A drag can take hold a little sooner than a swap can start: while the
-// last swap's new polaroid settles in, so a quick second flick moves it
-// (and its swap waits for that one to finish, see SWAP_QUEUE_MS). Not
-// while the photo is fading out.
-function canDrag() {
+// The polaroid can be grabbed and flicked whenever the player's showing,
+// whatever a swap is doing: it follows the drag, and a swap asked for
+// mid-swap runs as soon as the current one finishes (SWAP_QUEUE_MS).
+// Holding drags back until a swap could start felt unresponsive.
+export function canDrag() {
   const state = useStore.getState()
-  return canSwap() || (state.pileLeaving && state.showPlayhead && state.swapPhase === 'in')
+  return (
+    state.pileLeaving &&
+    state.showPlayhead &&
+    state.polaroidPillVisible &&
+    !!state.dream &&
+    !state.resetting
+  )
 }
 
 export function commitDistance() {
@@ -144,33 +152,38 @@ export function useSwapInput() {
     }
 
 
-    // A swap waiting for the last to finish (see SWAP_QUEUE_MS).
-    let queued: { direction: SwapDirection; until: number } | null = null
+    // Swaps waiting for the one under way, in order (see SWAP_QUEUE_MS),
+    // so three quick flicks are three swaps. Each waits up to
+    // SWAP_QUEUE_MS from when it's next in line.
+    const queued: SwapDirection[] = []
+    let nextBy = 0
     let queueFrame = 0
     const tryQueued = () => {
       queueFrame = 0
-      if (!queued) return
-      if (performance.now() > queued.until) {
-        queued = null
+      if (!queued.length) return
+      if (performance.now() > nextBy) {
+        queued.length = 0
         return
       }
 
-      if (canSwap()) {
-        useStore.getState().requestSwap(queued.direction)
-        queued = null
-        return
+      const next = canSwap() ? queued.shift() : undefined
+      if (next) {
+        useStore.getState().requestSwap(next)
+        nextBy = performance.now() + SWAP_QUEUE_MS
       }
 
-      queueFrame = requestAnimationFrame(tryQueued)
+      if (queued.length) queueFrame = requestAnimationFrame(tryQueued)
     }
 
     const swap = (direction: SwapDirection) => {
-      if (canSwap()) {
+      if (!queued.length && canSwap()) {
         useStore.getState().requestSwap(direction)
         return
       }
 
-      queued = { direction, until: performance.now() + SWAP_QUEUE_MS }
+      if (queued.length >= MAX_QUEUED) return
+      if (!queued.length) nextBy = performance.now() + SWAP_QUEUE_MS
+      queued.push(direction)
       if (!queueFrame) queueFrame = requestAnimationFrame(tryQueued)
     }
 
@@ -243,9 +256,7 @@ export function useSwapInput() {
 
       if (!swapDrag.active) {
         const moved = Math.abs(event.clientX - (pressedAt?.x ?? event.clientX))
-        if (onPolaroid && moved < TAP_DISTANCE && canSwap()) {
-          useStore.getState().requestSwap(1)
-        }
+        if (onPolaroid && moved < TAP_DISTANCE && canDrag()) swap(1)
 
         return
       }
