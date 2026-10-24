@@ -25,7 +25,7 @@ export default {
         'fade-in': 'fade-in 0.3s linear forwards',
         // Fading in from --from (px, sideways), easing to a stop.
         'slide-in': 'slide-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both',
-        // A loading polaroid flying onto the pile from offscreen
+        // A loading polaroid falling onto the pile from above the window
         // (components/loading.tsx), overshooting a touch as it lands.
         'card-drop': 'card-drop 0.55s cubic-bezier(0.3, 1.35, 0.5, 1) both',
         // A loading polaroid's photo developing: milky and pale, then the
@@ -40,12 +40,10 @@ export default {
         'card-fall': 'card-fall 0.7s cubic-bezier(0.32, 0, 0.67, 0) both',
       },
       keyframes: {
-        // From offscreen in the card's own direction: where it scatters
-        // back out to when the pile leaves (--sx, --sy, --sr).
         'card-drop': {
           '0%': {
             transform:
-              'translate(calc(var(--x) + var(--sx)), calc(var(--y) + var(--sy))) rotate(calc(var(--r) + var(--sr))) scale(1.12)',
+              'translate(var(--x), calc(var(--y) - 75vh)) rotate(calc(var(--r) + 28deg)) scale(1.12)',
           },
           '100%': {
             transform: 'translate(var(--x), var(--y)) rotate(var(--r))',
