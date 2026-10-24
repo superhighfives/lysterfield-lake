@@ -25,7 +25,6 @@ import {
   MediaMuteButton,
   MediaTimeDisplay,
   MediaTimeRange,
-  MediaPreviewTimeDisplay,
 } from 'media-chrome/react'
 import Footer from '../views/footer'
 import { connectAudio } from '../utils/audio'
@@ -455,11 +454,6 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
               // back to 24px) — left unset, the icons rendered a real
               // height but a 0 width, making them invisible.
               '--media-button-icon-width': '24px',
-              // media-time-range's default preview styling assumes the
-              // preview time sits over a video thumbnail and applies a
-              // blurred drop shadow for contrast — against our opaque white
-              // pill that shadow just renders as a stray gray halo.
-              '--media-preview-time-text-shadow': 'none',
             } as CSSProperties
           }
         >
@@ -580,12 +574,11 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                     [&::part(buffered)]:bg-slate-300/60 dark:[&::part(buffered)]:bg-stone-500/60 [&::part(buffered)]:rounded-full
                     [&::part(progress)]:bg-yellow-400 [&::part(progress)]:rounded-full
                     [&::part(thumb)]:bg-slate-50 dark:[&::part(thumb)]:bg-stone-900 [&::part(thumb)]:border [&::part(thumb)]:border-solid [&::part(thumb)]:border-yellow-500 [&::part(thumb)]:w-4 [&::part(thumb)]:h-4 [&::part(thumb)]:rounded-full"
-                >
-                  <MediaPreviewTimeDisplay
-                    slot="preview"
-                    className="text-gray-400 font-mono bg-white dark:bg-stone-900 text-xs px-2 rounded-full tracking-wider pointer-events-none"
-                  />
-                </MediaTimeRange>
+                  // The time under the pointer shows in the cursor's label
+                  // (components/cursor.tsx), as every control's name does,
+                  // so media-chrome's own preview box is hidden.
+                  style={{ '--media-preview-box-display': 'none' } as CSSProperties}
+                />
               </div>
             </div>
           </MediaController>

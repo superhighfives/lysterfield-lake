@@ -61,6 +61,12 @@ const INTERACTIVE =
 const finePointer = () =>
   window.matchMedia('(hover: hover) and (pointer: fine)').matches
 
+// Seconds as the player's own time display shows them: m:ss.
+const formatTime = (seconds: number) => {
+  const whole = Math.max(0, Math.floor(seconds))
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`
+}
+
 // On a touch screen there's no pointer to replace, but the ring still
 // shows while a finger's down: what a tap or drag is over, and a drag's
 // progress and the dream it'll land on. It jumps to each touch rather than
@@ -70,6 +76,8 @@ function Cursor() {
   const [mode, setMode] = useState<Mode>('default')
   const [visible, setVisible] = useState(false)
   const [label, setLabel] = useState('')
+  // The label sits above the ring rather than under it (see tick).
+  const [above, setAbove] = useState(false)
   /** Waiting on video: the old dream going, the next one loading, or the
    *  player buffering. Not the new dream's reveal, which has its video. */
   const [waiting, setWaiting] = useState(false)
@@ -105,6 +113,7 @@ function Cursor() {
     let currentMode: Mode = 'default'
     let previewKey = ''
     let currentLabel = ''
+    let currentAbove = false
     let currentWaiting = false
     let frame = 0
 
@@ -214,11 +223,31 @@ function Cursor() {
       let nextLabel = currentLabel
       if (next === 'hover') {
         const control = hovered?.closest(INTERACTIVE)
-        nextLabel =
-          (
-            control?.querySelector('[data-cursor-label]') ??
-            control?.parentElement?.querySelector(':scope > [data-cursor-label]')
-          )?.textContent ?? ''
+        // The scrubber: the time under the pointer, which media-chrome sets
+        // on it as the pointer moves (and clears in between, when the last
+        // time shown stays).
+        const scrubber = !!control?.matches('media-time-range')
+        const previewAttribute = scrubber
+          ? control?.getAttribute('mediapreviewtime')
+          : null
+        const previewTime = previewAttribute ? Number(previewAttribute) : NaN
+        nextLabel = Number.isFinite(previewTime)
+          ? formatTime(previewTime)
+          : scrubber
+            ? currentLabel
+            : ((
+              control?.querySelector('[data-cursor-label]') ??
+              control?.parentElement?.querySelector(':scope > [data-cursor-label]')
+            )?.textContent ?? '')
+      }
+
+      // Over the player's controls at the bottom, the label goes above the
+      // ring, where the window's edge and the pill don't hide it.
+      const nextAbove =
+        next === 'hover' && !!hovered?.closest(INTERACTIVE)?.closest('[data-playhead]')
+      if (nextAbove !== currentAbove) {
+        currentAbove = nextAbove
+        setAbove(nextAbove)
       }
 
       if (nextLabel !== currentLabel) {
@@ -276,9 +305,9 @@ function Cursor() {
 
   const size = RING_SIZE[mode]
   // On touch, the ring's labels and the drag's preview go above it, clear
-  // of the finger; under it otherwise.
+  // of the finger, and over the bottom controls (above); under it otherwise.
   const touch = !fine
-  const labelTop = touch
+  const labelTop = touch || above
     ? -size / 2 - 28
     : RING_SIZE[mode === 'hover' ? 'hover' : 'busy'] / 2 + 10
 

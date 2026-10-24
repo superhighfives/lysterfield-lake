@@ -69,8 +69,10 @@ const RING_WIDTH_PX = 80
 const RING_PUSH_PX = 9
 const RING_LIGHT = 0.05
 const RING_NOISE = 0.012
-const RING_CREST = 0.8
-const RING_TROUGH = 0.5
+const RING_CREST = 0.3
+const RING_TROUGH = 0.1
+// Overlapping swells add up; past this the ripple read as grey circles.
+const RING_SLOPE_MAX = 0.12
 const RING_TROUGH_TINT = [0.36, 0.42, 0.48]
 
 const vertexShader = /* glsl */ `
@@ -152,6 +154,7 @@ const fragmentShader = /* glsl */ `
       push -= normalize(away + 1e-5) * front * band * fade * 1.4;
     }
     swell = min(swell, 1.0);
+    slope = clamp(slope, -${RING_SLOPE_MAX.toFixed(3)}, ${RING_SLOPE_MAX.toFixed(3)});
 
     vec2 offset = flow * ${WAKE_PX.toFixed(1)} / uSize;
     offset += push * (1.0 - polaroid) * ${RING_PUSH_PX.toFixed(1)} / uSize;
