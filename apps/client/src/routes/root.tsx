@@ -10,7 +10,7 @@ import KeyWhiteFilter from '../components/key-white-filter'
 import { handleDeviceOrientationPermissions, isTouchDevice } from '../utils/device'
 import dreams from '../dreams.json'
 import { Info, MusicNotes, CircleNotch } from '@phosphor-icons/react'
-import { dreamFromLocation, useHistorySync } from '../utils/use-history-sync'
+import { dreamFromLocation, urlFor, useHistorySync } from '../utils/use-history-sync'
 import LoadingCard from '../components/loading-card'
 import { useSwapInput } from '../utils/swap-gesture'
 import { startAudio } from '../utils/audio'
@@ -108,9 +108,13 @@ function Root() {
   const debug = useStore((state) => state.debug)
   useSwapInput()
 
-  const handleReady = async () => {
+  // `everything`: from a dream's own link, the whole experience instead
+  // (the chooser and every dream), so the dream comes off the URL first,
+  // before anything reads it.
+  const handleReady = async (everything = false) => {
     if (started.current) return
     started.current = true
+    if (everything) history.replaceState(null, '', urlFor(null))
     // Inside the click, so Safari lets the audio context start.
     startAudio()
     const orientationGranted = (await handleDeviceOrientationPermissions()) as boolean
@@ -220,15 +224,38 @@ function Root() {
                 diving ? 'scale-90 opacity-0 pointer-events-none' : ''
               }`}
               style={diving ? { transitionDuration: `${DIVE_MS / 2}ms` } : undefined}
-              onClick={handleReady}
+              onClick={() => handleReady()}
               onPointerEnter={() => water.current?.hover(true)}
               onPointerLeave={() => water.current?.hover(false)}
             >
-              <span className="uppercase">Brightly</span>
-              <span className="font-serif italic text-2xl sm:text-3xl">
-                Lysterfield Lake
-              </span>
+              {preview ? (
+                <>
+                  <span className="uppercase">Just watch</span>
+                  <span className="font-serif italic text-2xl sm:text-3xl">
+                    {preview.title}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="uppercase">Brightly</span>
+                  <span className="font-serif italic text-2xl sm:text-3xl">
+                    Lysterfield Lake
+                  </span>
+                </>
+              )}
             </button>
+            {/* From a dream's own link: the way to everything else too. */}
+            {preview ? (
+              <button
+                className={`whitespace-nowrap fixed top-[calc(50%+2.25rem)] left-1/2 -translate-x-1/2 z-1 rounded-full px-4 py-1.5 bg-stone-900 text-white dark:bg-white dark:text-stone-900 font-serif italic text-base shadow hover:shadow-lg hover:scale-105 transition-[transform,opacity,box-shadow] duration-300 motion-reduce:transition-none ${
+                  diving ? 'scale-90 opacity-0 pointer-events-none' : ''
+                }`}
+                style={diving ? { transitionDuration: `${DIVE_MS / 2}ms` } : undefined}
+                onClick={() => handleReady(true)}
+              >
+                Experience all of Lysterfield Lake
+              </button>
+            ) : null}
             {/* The dream about to play, left on the table in the corner, out
                 of the title's way (not on a phone, where there's no room;
                 the loading polaroid shows it there). */}
