@@ -11,7 +11,10 @@ import type { Dream } from './types'
 // app (/about, "Get the song", YouTube), so without this, back always
 // landed on the welcome screen with the dream and position forgotten.
 
-const PARAM = 'dream'
+// A dream's URL is /dream/<id>. Links from before that (?dream=<id>) are
+// still read, and rewritten to the new form as the page loads (below).
+const PATH = /^\/dream\/([\w-]+)\/?$/
+const LEGACY_PARAM = 'dream'
 // How often (ms) the current playback position is written into the
 // history entry. Safari throws if replaceState is called more than ~100
 // times per 30s, so this is kept well under that.
@@ -20,14 +23,22 @@ const SAVE_INTERVAL = 1000
 export type HistoryState = { dream: string; t: number } | null
 
 export function dreamIdFromLocation() {
-  return new URLSearchParams(location.search).get(PARAM)
+  return (
+    location.pathname.match(PATH)?.[1] ??
+    new URLSearchParams(location.search).get(LEGACY_PARAM)
+  )
 }
 
 export function urlFor(dreamId: string | null) {
   const url = new URL(location.href)
-  if (dreamId) url.searchParams.set(PARAM, dreamId)
-  else url.searchParams.delete(PARAM)
+  url.searchParams.delete(LEGACY_PARAM)
+  url.pathname = dreamId ? `/dream/${dreamId}` : '/'
   return url.pathname + url.search + url.hash
+}
+
+// An old ?dream=<id> link becomes /dream/<id>, keeping its history state.
+if (new URLSearchParams(location.search).has(LEGACY_PARAM)) {
+  history.replaceState(history.state, '', urlFor(dreamIdFromLocation()))
 }
 
 /** The dream the URL names, if any, before it's restored (that waits for

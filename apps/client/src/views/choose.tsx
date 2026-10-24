@@ -21,9 +21,9 @@ import dreams from '../dreams.json'
 // drei's useProgress() store (Loading's data source) while Choose is still
 // mid-render, tripping React 19's "Cannot update a component while
 // rendering a different component" check.
-useTexture.preload('images/welcome.png')
-useTexture.preload('images/action-scroll.png')
-useTexture.preload('images/choose.png')
+useTexture.preload('/images/welcome.png')
+useTexture.preload('/images/action-scroll.png')
+useTexture.preload('/images/choose.png')
 dreams.forEach((dream) => useTexture.preload(`/assets/${dream.id}/hero.jpg`))
 
 // The welcome/choose/scroll-hint artwork is black ink on transparent —
@@ -263,9 +263,9 @@ function Choose(props: ThreeElements['group']) {
     }
   })
 
-  const welcome = useTexture('images/welcome.png')
-  const actionScroll = useTexture('images/action-scroll.png')
-  const which = useTexture('images/choose.png')
+  const welcome = useTexture('/images/welcome.png')
+  const actionScroll = useTexture('/images/action-scroll.png')
+  const which = useTexture('/images/choose.png')
 
   return (
     <group {...props}>

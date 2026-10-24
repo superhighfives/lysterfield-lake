@@ -209,8 +209,8 @@ function Root() {
               size={512}
               handle={water}
               sources={[
-                { src: 'video/loop.webm', type: 'video/webm' },
-                { src: 'video/loop.mov', type: 'video/mp4' },
+                { src: '/video/loop.webm', type: 'video/webm' },
+                { src: '/video/loop.mov', type: 'video/mp4' },
               ]}
             />
             <button

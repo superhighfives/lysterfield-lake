@@ -1,1 +1,4 @@
 /about https://charliegleason.com/work/lysterfield-lake 301
+# A dream's own link (/dream/<id>) is the app, which reads the id from the
+# path (src/utils/use-history-sync.ts).
+/dream/* / 200
