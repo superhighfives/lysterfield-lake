@@ -64,23 +64,27 @@ const CHOOSING_LIGHT = {
 	light: { ambient: 2.6, spot: 2.5 },
 	dark: { ambient: 2.6, spot: 0.6 },
 };
-// The player's spotlight, per colour scheme. On the glossy charcoal frame
-// in dark mode, the full-strength light made a hard white streak — it's
-// meant to be a faint sheen as the polaroid tilts.
-const PLAYER_SPOT = { light: 5, dark: 1.2 };
+// The player's light, per colour scheme: the spot, and the flat ambient
+// fill. The charcoal frame in dark mode needs a strong spot over a low fill
+// to show the polaroid bending in the light as the white one does; at 1.2
+// over the same fill as light mode it read as flat black. (The frames are
+// matte now, so a strong light no longer makes a hard white streak.)
+const PLAYER_SPOT = { light: 5, dark: 3.5 };
+const PLAYER_AMBIENT = { light: 0.5, dark: 0.2 };
 // Fitting the player into short windows. Left alone, the polaroid spans
 // PLAYER_TOP to PLAYER_BOTTOM of the window's height (its lyrics running
 // on below it), centred, and on a short window the controls at the
 // bottom cover the lyrics. So the view lifts to clear them — and, if
 // lifting alone isn't enough, zooms out a little — keeping it under the
-// header (PLAYER_HEADER px). The controls are measured where they are
+// header and the dream's name and prompt (PLAYER_HEADER px; see
+// components/playhead.tsx). The controls are measured where they are
 // (components/playhead.tsx, [data-playhead]: lower on touch, two rows when
 // narrow), plus PLAYER_CONTROLS_GAP; PLAYER_CONTROLS is the fallback
 // before they're on the page. PLAYER_FIT_EASE: how quickly (per frame) it
 // settles.
 const PLAYER_TOP = 0.17;
 const PLAYER_BOTTOM = 0.92;
-const PLAYER_HEADER = 64;
+const PLAYER_HEADER = 100;
 const PLAYER_CONTROLS = 40 + 34 + 16;
 const PLAYER_CONTROLS_GAP = 16;
 const PLAYER_FIT_EASE = 0.1;
@@ -243,7 +247,7 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 		if (ambient.current) {
 			ambient.current.intensity = MathUtils.lerp(
 				ambient.current.intensity,
-				choosing ? levels.ambient : 0.5,
+				choosing ? levels.ambient : PLAYER_AMBIENT[scheme],
 				0.08,
 			);
 		}

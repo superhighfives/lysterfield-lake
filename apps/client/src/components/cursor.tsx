@@ -3,7 +3,7 @@ import { CaretLeft, CaretRight } from '@phosphor-icons/react'
 import { useStore } from '../store'
 import type { Dream } from '../utils/types'
 import {
-  canSwap,
+  canDrag,
   dragPreview,
   nearPolaroid,
   swapDrag,
@@ -61,6 +61,12 @@ const INTERACTIVE =
 const finePointer = () =>
   window.matchMedia('(hover: hover) and (pointer: fine)').matches
 
+// Seconds as the player's own time display shows them: m:ss.
+const formatTime = (seconds: number) => {
+  const whole = Math.max(0, Math.floor(seconds))
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`
+}
+
 // On a touch screen there's no pointer to replace, but the ring still
 // shows while a finger's down: what a tap or drag is over, and a drag's
 // progress and the dream it'll land on. It jumps to each touch rather than
@@ -70,6 +76,9 @@ function Cursor() {
   const [mode, setMode] = useState<Mode>('default')
   const [visible, setVisible] = useState(false)
   const [label, setLabel] = useState('')
+  // The label sits above the ring rather than under it: in the lower half
+  // of the window (see tick).
+  const [above, setAbove] = useState(false)
   /** Waiting on video: the old dream going, the next one loading, or the
    *  player buffering. Not the new dream's reveal, which has its video. */
   const [waiting, setWaiting] = useState(false)
@@ -105,6 +114,7 @@ function Cursor() {
     let currentMode: Mode = 'default'
     let previewKey = ''
     let currentLabel = ''
+    let currentAbove = false
     let currentWaiting = false
     let frame = 0
 
@@ -193,7 +203,7 @@ function Cursor() {
       if (swapDrag.active || hint?.dragging) next = 'drag'
       // Over the polaroid, a drag's on offer even while it waits on video
       // (it skips past); elsewhere, waiting shows as busy.
-      else if (hint?.near || (canSwap() && nearPolaroid(pointer.x, pointer.y)))
+      else if (hint?.near || (canDrag() && nearPolaroid(pointer.x, pointer.y)))
         next = 'polaroid'
       // Not on touch: a busy ring appearing under a finger read as part of
       // the page, not a cursor (the drag ring still shows when a swap's on
@@ -214,11 +224,32 @@ function Cursor() {
       let nextLabel = currentLabel
       if (next === 'hover') {
         const control = hovered?.closest(INTERACTIVE)
-        nextLabel =
-          (
-            control?.querySelector('[data-cursor-label]') ??
-            control?.parentElement?.querySelector(':scope > [data-cursor-label]')
-          )?.textContent ?? ''
+        // The scrubber: the time under the pointer, which media-chrome sets
+        // on it as the pointer moves (and clears in between, when the last
+        // time shown stays).
+        const scrubber = !!control?.matches('media-time-range')
+        const previewAttribute = scrubber
+          ? control?.getAttribute('mediapreviewtime')
+          : null
+        const previewTime = previewAttribute ? Number(previewAttribute) : NaN
+        nextLabel = Number.isFinite(previewTime)
+          ? formatTime(previewTime)
+          : scrubber
+            ? currentLabel
+            : ((
+              control?.querySelector('[data-cursor-label]') ??
+              control?.parentElement?.querySelector(':scope > [data-cursor-label]')
+            )?.textContent ?? '')
+      }
+
+      // In the lower half of the window, the label goes above the ring, where
+      // the window's edge and the player's controls don't hide it. By where
+      // the pointer is, not what it's over, so it doesn't jump back under
+      // the ring as the pointer leaves a control (and its label fades).
+      const nextAbove = pointer.y > window.innerHeight / 2
+      if (nextAbove !== currentAbove) {
+        currentAbove = nextAbove
+        setAbove(nextAbove)
       }
 
       if (nextLabel !== currentLabel) {
@@ -276,11 +307,17 @@ function Cursor() {
 
   const size = RING_SIZE[mode]
   // On touch, the ring's labels and the drag's preview go above it, clear
-  // of the finger; under it otherwise.
+  // of the finger, and over the bottom controls (above); under it otherwise.
   const touch = !fine
+  // Spaced from the hover (or busy) ring's size, not the current one's, so
+  // the label holds still as the ring grows and shrinks on and off a
+  // control (on touch, from the ring as it is: there, the drag's).
+  const labelRing = RING_SIZE[mode === 'hover' ? 'hover' : 'busy']
   const labelTop = touch
     ? -size / 2 - 28
-    : RING_SIZE[mode === 'hover' ? 'hover' : 'busy'] / 2 + 10
+    : above
+      ? -labelRing / 2 - 28
+      : labelRing / 2 + 10
 
   return (
     <div
@@ -407,7 +444,8 @@ function Cursor() {
             <span className="font-serif italic text-sm whitespace-nowrap text-stone-900 dark:text-white bg-white/85 dark:bg-stone-900/85 backdrop-blur-sm rounded-full px-2.5 py-0.5 shadow-sm">
               {preview.dream.title}
             </span>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-stone-700 dark:text-stone-300 bg-white/85 dark:bg-stone-900/85 backdrop-blur-sm rounded-full px-2 shadow-sm opacity-0 group-data-[ready=true]:opacity-100 transition-opacity">
+            {/* Inverted against the name above it: it's the call to act. */}
+            <span className="font-mono text-[10px] uppercase tracking-widest text-white dark:text-stone-900 bg-stone-900/90 dark:bg-white/90 backdrop-blur-sm rounded-full px-2 shadow-sm opacity-0 group-data-[ready=true]:opacity-100 transition-opacity">
               let go
             </span>
           </div>

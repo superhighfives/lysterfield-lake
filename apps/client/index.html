@@ -83,75 +83,42 @@
     <meta property="twitter:description" content="%VITE_APP_DESCRIPTION%" />
     <meta property="twitter:image" content="%VITE_APP_IMAGE%" />
 
-    <!-- Preload -->
-    <!-- crossorigin="anonymous" matches three.js's TextureLoader, which
-         fetches with crossOrigin="anonymous" by default — without this the
-         preloaded request's credentials mode doesn't match the texture
-         loader's actual fetch, so the browser discards the preload and
-         double-fetches every hero.jpg. -->
-    <link
-      rel="preload"
-      href="/assets/watercolour/hero.jpg"
-      as="image"
-      crossorigin="anonymous"
-    />
-    <link
-      rel="preload"
-      href="/assets/paper-planes/hero.jpg"
-      as="image"
-      crossorigin="anonymous"
-    />
-    <link
-      rel="preload"
-      href="/assets/clouds-of-air/hero.jpg"
-      as="image"
-      crossorigin="anonymous"
-    />
-    <link
-      rel="preload"
-      href="/assets/dirty-palette/hero.jpg"
-      as="image"
-      crossorigin="anonymous"
-    />
-    <link
-      rel="preload"
-      href="/assets/horizon-storm/hero.jpg"
-      as="image"
-      crossorigin="anonymous"
-    />
-    <link
-      rel="preload"
-      href="/assets/lush-and-light/hero.jpg"
-      as="image"
-      crossorigin="anonymous"
-    />
-    <link
-      rel="preload"
-      href="/assets/ghiblis-dream/hero.jpg"
-      as="image"
-      crossorigin="anonymous"
-    />
-    <link
-      rel="preload"
-      href="/assets/mood-lighting/hero.jpg"
-      as="image"
-      crossorigin="anonymous"
-    />
-    <link
-      rel="preload"
-      href="/assets/ink-flight/hero.jpg"
-      as="image"
-      crossorigin="anonymous"
-    />
-    <link
-      rel="preload"
-      href="/assets/charcoal/hero.jpg"
-      as="image"
-      crossorigin="anonymous"
-    />
+    <style>
+      .boot-spinner {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        width: 28px;
+        height: 28px;
+        margin: -14px 0 0 -14px;
+        box-sizing: border-box;
+        border-radius: 9999px;
+        border: 2px solid #d6d3d1;
+        border-top-color: #78716c;
+      }
+      .dark .boot-spinner {
+        border-color: #44403c;
+        border-top-color: #a8a29e;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .boot-spinner {
+          animation: boot-spin 1s linear infinite;
+        }
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
   </head>
   <body class="text-stone-900 dark:text-stone-100">
-    <div id="root"></div>
+    <!-- The spinner until the app's code has loaded and rendered over it:
+         the same ring as src/components/spinner.tsx, styled inline since
+         the app's stylesheet may not have arrived yet. -->
+    <div id="root">
+      <div class="boot-spinner"></div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

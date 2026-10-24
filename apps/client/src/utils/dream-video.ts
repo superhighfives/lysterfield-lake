@@ -33,7 +33,7 @@ const small = () => {
  *  the split layout, or the dream's own 7-panel video — half size on
  *  `smallVideo` devices (mobile and touch). */
 export function mainVideoBase(dream: Dream | null, smallVideo: boolean) {
-  if (!dream) return 'video/title'
+  if (!dream) return '/video/title'
   const suffix = smallVideo ? '-small' : ''
   if (isSplit(dream)) return `${dreamsUrl}/main/main${suffix}`
   return `${dream.src ?? `${dreamsUrl}/${dream.id}`}/video${suffix}`

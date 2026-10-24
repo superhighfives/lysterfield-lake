@@ -97,6 +97,7 @@ function DreamCard({
     >
       <Polaroid
         layered
+        castsLine={interactive}
         onPointerOver={(e) => {
           e.stopPropagation()
           setHovered(true)

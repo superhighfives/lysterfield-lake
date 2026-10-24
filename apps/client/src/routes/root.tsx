@@ -1,25 +1,29 @@
 import { useStore } from '../store'
-import { Canvas } from '@react-three/fiber'
-import { Preload } from '@react-three/drei'
-import { Suspense, useEffect, useRef, useState } from 'react'
-import Loading from '../components/loading'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import Tooltip from '../views/tooltip'
 import { youtubeLink } from '../utils/youtube'
 import Fallback from '../components/fallback'
-import Scene from '../components/scene'
-import Playhead from '../components/playhead'
+import LoadingShell from '../components/loading-shell'
 import Viewport from '../components/viewport'
 import ThemeToggle from '../components/theme-toggle'
 import KeyWhiteFilter from '../components/key-white-filter'
-import { handleDeviceOrientationPermissions, isTouchDevice } from '../utils'
+import { handleDeviceOrientationPermissions, isTouchDevice } from '../utils/device'
 import dreams from '../dreams.json'
 import { Info, MusicNotes, CircleNotch } from '@phosphor-icons/react'
-import { useHistorySync } from '../utils/use-history-sync'
+import { dreamFromLocation, urlFor, useHistorySync } from '../utils/use-history-sync'
+import LoadingCard from '../components/loading-card'
 import { useSwapInput } from '../utils/swap-gesture'
 import { startAudio } from '../utils/audio'
 import WaterVideo, { DIVE_MS, useWater } from '../components/water-video'
 import Cursor from '../components/cursor'
-import DebugOverlay from '../components/debug-overlay'
+import { useDebugShortcut } from '../utils/use-debug-shortcut'
+
+// The scene, the loading pile and the player, in their own chunk: loaded
+// once the start button's pressed, so the title isn't held up by them
+// (components/experience.tsx).
+const Experience = lazy(() => import('../components/experience'))
+// The debug panel, only once debug mode's on (it brings three.js).
+const DebugOverlay = lazy(() => import('../components/debug-overlay'))
 
 // How long buffering has to last before offering the YouTube escape hatch.
 const TOO_SLOW_DELAY = 8000
@@ -32,7 +36,6 @@ const divider = <span aria-hidden className="w-px h-4 bg-current opacity-20" />
 function Root() {
   const dream = useStore((state) => state.dream)
   const ready = useStore((state) => state.ready)
-  const sceneLoaded = useStore((state) => state.sceneLoaded)
   const colorScheme = useStore((state) => state.colorScheme)
   const touchDevice = useStore((state) => state.isMobile || state.isTouch)
   const setCollection = useStore((state) => state.setCollection)
@@ -58,6 +61,9 @@ function Root() {
   )
   const water = useWater()
   const [diving, setDiving] = useState(false)
+  // Arriving straight at a dream (its URL): the title screen shows its
+  // polaroid, the one about to play.
+  const [preview] = useState(() => dreamFromLocation() ?? null)
   // Set on the first click, before the permission await, so a second click
   // (or Enter) during that await or the dive can't start it twice.
   const started = useRef(false)
@@ -98,11 +104,17 @@ function Root() {
   }, [isBuffering])
 
   useHistorySync(video)
+  useDebugShortcut()
+  const debug = useStore((state) => state.debug)
   useSwapInput()
 
-  const handleReady = async () => {
+  // `everything`: from a dream's own link, the whole experience instead
+  // (the chooser and every dream), so the dream comes off the URL first,
+  // before anything reads it.
+  const handleReady = async (everything = false) => {
     if (started.current) return
     started.current = true
+    if (everything) history.replaceState(null, '', urlFor(null))
     // Inside the click, so Safari lets the audio context start.
     startAudio()
     const orientationGranted = (await handleDeviceOrientationPermissions()) as boolean
@@ -133,7 +145,11 @@ function Root() {
     <>
       <KeyWhiteFilter />
       <Cursor />
-      <DebugOverlay />
+      {debug ? (
+        <Suspense fallback={null}>
+          <DebugOverlay />
+        </Suspense>
+      ) : null}
       {/* Three | one | one: the colour scheme, about, and the song. */}
       <div className="fixed z-10 top-[max(0.25rem,env(safe-area-inset-top))] right-[max(0.25rem,env(safe-area-inset-right))] flex items-center gap-1.5">
         <ThemeToggle />
@@ -176,29 +192,9 @@ function Root() {
                 Watch on YouTube?
               </a>
             </div>
-            {/* data-swap-surface: drags that swap dreams start in here
-                (see utils/swap-gesture.ts), not on the page's own UI. */}
-            <div
-              data-swap-surface
-              className={`${isBuffering ? 'grayscale' : ''} fixed inset-0`}
-            >
-              {/* Fades in as the loading pile falls away
-                  (components/loading.tsx). */}
-              <div
-                className={`absolute inset-0 transition-opacity duration-1000 ease-out ${
-                  sceneLoaded ? 'opacity-100' : 'opacity-0'
-                }`}
-              >
-                <Canvas shadows dpr={dpr}>
-                  <Suspense fallback={null}>
-                    <Preload all />
-                    <Scene video={video} />
-                  </Suspense>
-                </Canvas>
-              </div>
-              <Loading />
-              <Playhead ref={video} />
-            </div>
+            <Suspense fallback={<LoadingShell />}>
+              <Experience video={video} dpr={dpr} isBuffering={isBuffering} />
+            </Suspense>
           </Viewport>
         ) : hasLoaded ? (
           <div className="relative h-screen grid place-content-center space-y-2 text-center p-4">
@@ -217,8 +213,8 @@ function Root() {
               size={512}
               handle={water}
               sources={[
-                { src: 'video/loop.webm', type: 'video/webm' },
-                { src: 'video/loop.mov', type: 'video/mp4' },
+                { src: '/video/loop.webm', type: 'video/webm' },
+                { src: '/video/loop.mov', type: 'video/mp4' },
               ]}
             />
             <button
@@ -228,15 +224,53 @@ function Root() {
                 diving ? 'scale-90 opacity-0 pointer-events-none' : ''
               }`}
               style={diving ? { transitionDuration: `${DIVE_MS / 2}ms` } : undefined}
-              onClick={handleReady}
+              onClick={() => handleReady()}
               onPointerEnter={() => water.current?.hover(true)}
               onPointerLeave={() => water.current?.hover(false)}
             >
-              <span className="uppercase">Brightly</span>
-              <span className="font-serif italic text-2xl sm:text-3xl">
-                Lysterfield Lake
-              </span>
+              {preview ? (
+                <>
+                  <span className="uppercase">Just watch</span>
+                  <span className="font-serif italic text-2xl sm:text-3xl">
+                    {preview.title}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="uppercase">Brightly</span>
+                  <span className="font-serif italic text-2xl sm:text-3xl">
+                    Lysterfield Lake
+                  </span>
+                </>
+              )}
             </button>
+            {/* From a dream's own link: the way to everything else too. */}
+            {preview ? (
+              <button
+                className={`whitespace-nowrap fixed top-[calc(50%+2.25rem)] left-1/2 -translate-x-1/2 z-1 rounded-full px-4 py-1.5 bg-stone-900 text-white dark:bg-white dark:text-stone-900 font-serif italic text-base shadow hover:shadow-lg hover:scale-105 transition-[transform,opacity,box-shadow] duration-300 motion-reduce:transition-none ${
+                  diving ? 'scale-90 opacity-0 pointer-events-none' : ''
+                }`}
+                style={diving ? { transitionDuration: `${DIVE_MS / 2}ms` } : undefined}
+                onClick={() => handleReady(true)}
+              >
+                Experience all of Lysterfield Lake
+              </button>
+            ) : null}
+            {/* The dream about to play, left on the table in the corner, out
+                of the title's way (not on a phone, where there's no room;
+                the loading polaroid shows it there). */}
+            {preview ? (
+              <div
+                className={`hidden sm:block fixed right-[max(2rem,env(safe-area-inset-right))] bottom-[max(2rem,env(safe-area-inset-bottom))] pointer-events-none transition-[opacity,transform] duration-500 ${
+                  diving ? 'opacity-0 translate-y-6' : ''
+                }`}
+              >
+                <LoadingCard
+                  dream={preview}
+                  className="w-[180px] h-[220px] scale-75 origin-bottom-right -rotate-3 animate-fade-in"
+                />
+              </div>
+            ) : null}
           </div>
         ) : (
           <Fallback />

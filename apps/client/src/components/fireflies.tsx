@@ -43,8 +43,8 @@ const SCATTER_RATE_INTRO = 1.2
 // little taller than the frame so the scroll-parallax wrap happens off it.
 const SPREAD_Y = 1.3
 
-const BACK_COUNT = 70
-const FRONT_COUNT = 12
+const BACK_COUNT = 40
+const FRONT_COUNT = 7
 // renderOrder for each layer: before anything else in the scene, and after
 // everything.
 const BACK_RENDER_ORDER = -1
@@ -233,10 +233,12 @@ function Swarm({
     // Playing is read off the video itself as well as the store: arriving
     // straight at a dream (from its URL), the store's flag could miss the
     // start, and the bugs stayed on screen through the song.
-    const { dream, videoPlaying, resetting } = useStore.getState()
+    // Held out of frame until the loading pile starts falling away, so the
+    // first fly-in is seen as the scene fades in (components/loading.tsx).
+    const { dream, videoPlaying, resetting, pileLeaving } = useStore.getState()
     const main = dreamVideo.main
     const playing = videoPlaying || (!!main && !main.paused && !main.ended)
-    const target = dream && playing && !resetting ? 1 : 0
+    const target = !pileLeaving || (dream && playing && !resetting) ? 1 : 0
     const scatter = material.uniforms.uScatter
     if (scatter.value < 0.01) arrived.current = true
     scatter.value = MathUtils.damp(

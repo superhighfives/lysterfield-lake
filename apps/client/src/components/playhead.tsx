@@ -18,6 +18,7 @@ import {
   Crosshair,
 } from '@phosphor-icons/react'
 import Tooltip from '../views/tooltip'
+import { dreamFromLocation , HistoryState, urlFor } from '../utils/use-history-sync'
 
 import {
   MediaController,
@@ -25,7 +26,6 @@ import {
   MediaMuteButton,
   MediaTimeDisplay,
   MediaTimeRange,
-  MediaPreviewTimeDisplay,
 } from 'media-chrome/react'
 import Footer from '../views/footer'
 import { connectAudio } from '../utils/audio'
@@ -40,13 +40,17 @@ import {
   warmDream,
 } from '../utils/dream-video'
 import { adjacentDream, fadeInAudio, fadeOutAudio } from '../utils/swap-dream'
-import { HistoryState, urlFor } from '../utils/use-history-sync'
 
 // If the dream video still isn't ready this long after asking — the first
 // one, or a switch — carry on anyway: play the main video (the polaroid
 // shows its last frame, or nothing, until the dream catches up), or bring
 // a swapped polaroid back.
 const DREAM_READY_TIMEOUT_MS = 8000
+// A swapped-in dream that's ready holds as a blank print this much longer
+// before it develops in, so a swap queued behind it (quick flicks, see
+// utils/swap-gesture.ts) skips straight past instead of each one in
+// between flashing in.
+const SWAP_SETTLE_MS = 250
 // The song fades out going back to the choose screen (over about as long as
 // the scene takes to close), and back in as a dream starts.
 const AUDIO_HOME_FADE_MS = 900
@@ -70,13 +74,41 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     // — on touch too, where showing it throughout covered the lyrics.
     const [pillHovered, setPillHovered] = useState(false)
     const [announcing, setAnnouncing] = useState(false)
+    // The controls and the name wait for the loading pile to leave
+    // (components/loading.tsx), rather than showing over it.
+    const pileLeaving = useStore((state) => state.pileLeaving)
+    // Where the name comes in from (px, sideways): after a swap, the side
+    // the polaroid was dragged away from, following the new one in
+    // (dragging left is direction 1, so it comes in from the right); a
+    // dream chosen any other way, nowhere (it just fades in). Read as the
+    // dream changes, mid-swap, and used when it's announced (below), which
+    // restarts the entrance (announceKey) so it's seen, not over while
+    // the name was still hidden.
+    const swapEntrance = useRef(0)
+    useEffect(() => {
+      const { swapPhase, swapDirection } = useStore.getState()
+      swapEntrance.current = swapPhase === 'idle' ? 0 : swapDirection * 24
+    }, [dream])
+    const [enterFrom, setEnterFrom] = useState(0)
+    const [announceKey, setAnnounceKey] = useState(0)
+    // Arriving straight at a dream (its URL), its name isn't announced:
+    // the title screen and the loading polaroid have already shown it.
+    const arrivedAt = useRef(dreamFromLocation()?.id ?? null)
     // Counted from when the swap's done, since it's hidden until then.
     useEffect(() => {
-      if (!dream || swapping) return
+      if (!dream || swapping || !pileLeaving) return
+      if (dream.id === arrivedAt.current) {
+        arrivedAt.current = null
+        return
+      }
+
+      arrivedAt.current = null
+      setEnterFrom(swapEntrance.current)
+      setAnnounceKey((key) => key + 1)
       setAnnouncing(true)
       const timeout = setTimeout(() => setAnnouncing(false), ANNOUNCE_MS)
       return () => clearTimeout(timeout)
-    }, [dream, swapping])
+    }, [dream, swapping, pileLeaving])
     // For the mute button's label.
     const [muted, setMuted] = useState(false)
 
@@ -84,7 +116,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       (state) => state.setResetInitialRotation
     )
     const polaroidPillVisible = useStore(
-      (state) => state.polaroidPillVisible
+      (state) => state.polaroidPillVisible && state.pileLeaving
     )
     const setResetting = useStore((state) => state.setResetting)
     const setSeeking = useStore((state) => state.setSeeking)
@@ -171,12 +203,25 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
             console.warn(`Playback didn't start: ${error.name}`)
           }
         })
-      dreamReady.then(() => {
+      // Arriving straight at a dream (its URL), the song waits for the
+      // loading pile to start leaving, rather than starting under it.
+      let stopWaiting = () => {}
+
+      const pileLeft = new Promise<void>((resolve) => {
+        if (useStore.getState().pileLeaving) return resolve()
+        stopWaiting = useStore.subscribe((state) => {
+          if (!state.pileLeaving) return
+          stopWaiting()
+          resolve()
+        })
+      })
+      Promise.all([dreamReady, pileLeft]).then(() => {
         if (!cancelled && !failed) play(true)
       })
 
       return () => {
         cancelled = true
+        stopWaiting()
         el.removeEventListener('loadedmetadata', seek)
       }
       // Reloads only for a new main source; a dream change on the same one
@@ -207,11 +252,14 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       }
 
       let done = false
+      let settle = 0
       const finish = () => {
         if (done) return
         done = true
-        const { swapPhase, setSwapPhase } = useStore.getState()
-        if (swapPhase === 'loading') setSwapPhase('in')
+        settle = window.setTimeout(() => {
+          const { swapPhase, setSwapPhase } = useStore.getState()
+          if (swapPhase === 'loading') setSwapPhase('in')
+        }, SWAP_SETTLE_MS)
       }
 
       switchDream(dream, time).then((result) => {
@@ -244,7 +292,10 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
         warmDream(adjacentDream(useStore.getState().swapDirection))
       })
       const timeout = setTimeout(finish, DREAM_READY_TIMEOUT_MS)
-      return () => clearTimeout(timeout)
+      return () => {
+        clearTimeout(timeout)
+        window.clearTimeout(settle)
+      }
     }, [dream, ref])
 
     useEffect(() => {
@@ -377,18 +428,14 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
           </button>
         </div>
         {/* The dream's name and prompt, while the controls are hovered or
-            for a moment when the dream changes: just above the controls
-            (at either of their heights), or on touch at the top, under the
+            for a moment when the dream changes: at the top, under the
             header and clear of a phone's status bar, where it isn't over
-            the lyrics. Fades out as a swap starts, and in again (keyed on
-            the dream) with the new one. */}
+            the lyrics (scene.tsx's PLAYER_HEADER keeps the polaroid below
+            it). Fades out as a swap starts, and in again (keyed on the
+            dream) with the new one. */}
         <div
           aria-live="polite"
-          className={`fixed z-10 left-1/2 -translate-x-1/2 ${
-            isTouch
-              ? 'top-[calc(env(safe-area-inset-top)+3rem)]'
-              : 'bottom-[calc(2.5rem+104px+0.75rem)] xs:bottom-[calc(2.5rem+34px+0.75rem)]'
-          } w-[calc(100vw-2rem)] flex flex-col items-center text-center pointer-events-none transition-opacity duration-300 ${
+          className={`fixed z-10 left-1/2 -translate-x-1/2 top-[calc(env(safe-area-inset-top)+3rem)] w-[calc(100vw-2rem)] flex flex-col items-center text-center pointer-events-none transition-opacity duration-300 ${
             showPlayhead &&
             polaroidPillVisible &&
             dream &&
@@ -399,7 +446,11 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
           }`}
         >
           {dream ? (
-            <div key={dream.id} className="animate-fade-in flex flex-col items-center">
+            <div
+              key={`${dream.id}-${announceKey}`}
+              className="animate-slide-in flex flex-col items-center"
+              style={{ '--from': `${enterFrom}px` } as CSSProperties}
+            >
               <span className="font-serif italic text-xl text-stone-900 dark:text-stone-100">
                 {dream.title}
               </span>
@@ -459,11 +510,6 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
               // back to 24px) — left unset, the icons rendered a real
               // height but a 0 width, making them invisible.
               '--media-button-icon-width': '24px',
-              // media-time-range's default preview styling assumes the
-              // preview time sits over a video thumbnail and applies a
-              // blurred drop shadow for contrast — against our opaque white
-              // pill that shadow just renders as a stray gray halo.
-              '--media-preview-time-text-shadow': 'none',
             } as CSSProperties
           }
         >
@@ -527,7 +573,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
               ref={(el) => el?.setAttribute('noautohide', '')}
               className="flex flex-col xs:flex-row w-full h-full xs:space-x-3 items-center"
             >
-              <div className="flex flex-1 xs:flex-none self-stretch items-center justify-evenly xs:justify-center border-b xs:border-r xs:border-b-0 border-yellow-500">
+              <div className="flex flex-1 xs:flex-none self-stretch items-stretch justify-evenly xs:justify-center border-b xs:border-r xs:border-b-0 border-yellow-500">
                 <Footer />
                 <div className="group flex relative">
                   <MediaMuteButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 py-2 xs:px-2 xs:py-1">
@@ -584,12 +630,11 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                     [&::part(buffered)]:bg-slate-300/60 dark:[&::part(buffered)]:bg-stone-500/60 [&::part(buffered)]:rounded-full
                     [&::part(progress)]:bg-yellow-400 [&::part(progress)]:rounded-full
                     [&::part(thumb)]:bg-slate-50 dark:[&::part(thumb)]:bg-stone-900 [&::part(thumb)]:border [&::part(thumb)]:border-solid [&::part(thumb)]:border-yellow-500 [&::part(thumb)]:w-4 [&::part(thumb)]:h-4 [&::part(thumb)]:rounded-full"
-                >
-                  <MediaPreviewTimeDisplay
-                    slot="preview"
-                    className="text-gray-400 font-mono bg-white dark:bg-stone-900 text-xs px-2 rounded-full tracking-wider pointer-events-none"
-                  />
-                </MediaTimeRange>
+                  // The time under the pointer shows in the cursor's label
+                  // (components/cursor.tsx), as every control's name does,
+                  // so media-chrome's own preview box is hidden.
+                  style={{ '--media-preview-box-display': 'none' } as CSSProperties}
+                />
               </div>
             </div>
           </MediaController>
