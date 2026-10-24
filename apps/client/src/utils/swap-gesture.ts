@@ -40,22 +40,23 @@ export const NEAR_MARGIN = 60
 const TAP_DISTANCE = 6
 // Letting go past this (the larger of the two) swaps; short of it the
 // polaroid springs back. A quick enough flick swaps from a shorter drag.
-const COMMIT_MIN_PX = 90
-const COMMIT_SHARE_OF_WIDTH = 0.3
+const COMMIT_MIN_PX = 70
+const COMMIT_SHARE_OF_WIDTH = 0.2
 // Started near an edge, there may not be that far to go toward it: then
 // it's EDGE_SHARE of the room that's left that way (at least EDGE_MIN_PX).
 const EDGE_SHARE = 0.7
 const EDGE_MIN_PX = 24
-// A flick: at least FLICK_VELOCITY (px/ms) over the last VELOCITY_WINDOW_MS
-// of the drag, and FLICK_MIN_PX long. Measured over a window, not the
-// last two samples: a finger slows as it lifts, and that last sample
-// undersold a hard flick.
+// A flick: a peak speed of at least FLICK_VELOCITY (px/ms) toward where
+// it's going, over the last VELOCITY_WINDOW_MS before letting go, and
+// FLICK_MIN_PX long. The peak, not the last sample or the average: a hard
+// flick usually slows for a moment as the finger lifts, which undersold it.
 const FLICK_VELOCITY = 0.4
 const FLICK_MIN_PX = 20
-const VELOCITY_WINDOW_MS = 80
-// A swap asked for while the last is still fading out or in (a quick
-// second flick) waits up to SWAP_QUEUE_MS for it, rather than being lost.
-const SWAP_QUEUE_MS = 450
+const VELOCITY_WINDOW_MS = 120
+// A swap asked for while the last is still fading out or settling in (a
+// quick second flick) waits up to SWAP_QUEUE_MS for it, rather than being
+// lost: longer than a whole swap's out and in.
+const SWAP_QUEUE_MS = 1200
 
 export function nearPolaroid(x: number, y: number, margin = NEAR_MARGIN) {
   const r = polaroidRect
@@ -119,12 +120,18 @@ export function useSwapInput() {
         samples.shift()
     }
 
-    const velocity = () => {
-      if (samples.length < 2) return 0
-      const first = samples[0]
-      const last = samples[samples.length - 1]
-      const elapsed = last.time - first.time
-      return elapsed > 0 ? (last.x - first.x) / elapsed : 0
+    // The fastest stretch between samples in the window, in the drag's
+    // direction (`sign`), px/ms.
+    const peakVelocity = (sign: number) => {
+      let peak = 0
+      for (let i = 1; i < samples.length; i++) {
+        const elapsed = samples[i].time - samples[i - 1].time
+        if (elapsed <= 0) continue
+        const speed = ((samples[i].x - samples[i - 1].x) / elapsed) * sign
+        if (speed > peak) peak = speed
+      }
+
+      return peak
     }
 
 
@@ -236,13 +243,10 @@ export function useSwapInput() {
       const needed = commitDistance()
       swapDrag.active = false
       const dx = swapDrag.dx
-      // Over the window up to the release, so a pointer held still before
-      // letting go reads as no speed, not a flick.
-      const speed = velocity()
+      // Within the window up to the release, so a pointer held still
+      // before letting go reads as no speed, not a flick.
       const flicked =
-        Math.abs(speed) >= FLICK_VELOCITY &&
-        Math.abs(dx) >= FLICK_MIN_PX &&
-        Math.sign(speed) === Math.sign(dx)
+        peakVelocity(Math.sign(dx)) >= FLICK_VELOCITY && Math.abs(dx) >= FLICK_MIN_PX
       if (Math.abs(dx) >= needed || flicked) swap(directionOf(dx))
     }
 
