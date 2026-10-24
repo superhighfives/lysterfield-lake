@@ -73,7 +73,8 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     // (components/loading.tsx), rather than showing over it.
     const pileLeaving = useStore((state) => state.pileLeaving)
     // Where the name comes in from (px, sideways): after a swap, the side
-    // the polaroid was dragged toward (dragging left is direction 1); a
+    // the polaroid was dragged away from, following the new one in
+    // (dragging left is direction 1, so it comes in from the right); a
     // dream chosen any other way, nowhere (it just fades in). Read as the
     // dream changes, mid-swap, and used when it's announced (below), which
     // restarts the entrance (announceKey) so it's seen, not over while
@@ -81,7 +82,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     const swapEntrance = useRef(0)
     useEffect(() => {
       const { swapPhase, swapDirection } = useStore.getState()
-      swapEntrance.current = swapPhase === 'idle' ? 0 : -swapDirection * 24
+      swapEntrance.current = swapPhase === 'idle' ? 0 : swapDirection * 24
     }, [dream])
     const [enterFrom, setEnterFrom] = useState(0)
     const [announceKey, setAnnounceKey] = useState(0)
