@@ -1,17 +1,13 @@
 import { useStore } from '../store'
-import { Canvas } from '@react-three/fiber'
-import { Preload } from '@react-three/drei'
-import { Suspense, useEffect, useRef, useState } from 'react'
-import Loading from '../components/loading'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import Tooltip from '../views/tooltip'
 import { youtubeLink } from '../utils/youtube'
 import Fallback from '../components/fallback'
-import Scene from '../components/scene'
-import Playhead from '../components/playhead'
+import LoadingShell from '../components/loading-shell'
 import Viewport from '../components/viewport'
 import ThemeToggle from '../components/theme-toggle'
 import KeyWhiteFilter from '../components/key-white-filter'
-import { handleDeviceOrientationPermissions, isTouchDevice } from '../utils'
+import { handleDeviceOrientationPermissions, isTouchDevice } from '../utils/device'
 import dreams from '../dreams.json'
 import { Info, MusicNotes, CircleNotch } from '@phosphor-icons/react'
 import { useHistorySync } from '../utils/use-history-sync'
@@ -19,7 +15,14 @@ import { useSwapInput } from '../utils/swap-gesture'
 import { startAudio } from '../utils/audio'
 import WaterVideo, { DIVE_MS, useWater } from '../components/water-video'
 import Cursor from '../components/cursor'
-import DebugOverlay from '../components/debug-overlay'
+import { useDebugShortcut } from '../utils/use-debug-shortcut'
+
+// The scene, the loading pile and the player, in their own chunk: loaded
+// once the start button's pressed, so the title isn't held up by them
+// (components/experience.tsx).
+const Experience = lazy(() => import('../components/experience'))
+// The debug panel, only once debug mode's on (it brings three.js).
+const DebugOverlay = lazy(() => import('../components/debug-overlay'))
 
 // How long buffering has to last before offering the YouTube escape hatch.
 const TOO_SLOW_DELAY = 8000
@@ -32,7 +35,6 @@ const divider = <span aria-hidden className="w-px h-4 bg-current opacity-20" />
 function Root() {
   const dream = useStore((state) => state.dream)
   const ready = useStore((state) => state.ready)
-  const pileLeaving = useStore((state) => state.pileLeaving)
   const colorScheme = useStore((state) => state.colorScheme)
   const touchDevice = useStore((state) => state.isMobile || state.isTouch)
   const setCollection = useStore((state) => state.setCollection)
@@ -98,6 +100,8 @@ function Root() {
   }, [isBuffering])
 
   useHistorySync(video)
+  useDebugShortcut()
+  const debug = useStore((state) => state.debug)
   useSwapInput()
 
   const handleReady = async () => {
@@ -133,7 +137,11 @@ function Root() {
     <>
       <KeyWhiteFilter />
       <Cursor />
-      <DebugOverlay />
+      {debug ? (
+        <Suspense fallback={null}>
+          <DebugOverlay />
+        </Suspense>
+      ) : null}
       {/* Three | one | one: the colour scheme, about, and the song. */}
       <div className="fixed z-10 top-[max(0.25rem,env(safe-area-inset-top))] right-[max(0.25rem,env(safe-area-inset-right))] flex items-center gap-1.5">
         <ThemeToggle />
@@ -176,29 +184,9 @@ function Root() {
                 Watch on YouTube?
               </a>
             </div>
-            {/* data-swap-surface: drags that swap dreams start in here
-                (see utils/swap-gesture.ts), not on the page's own UI. */}
-            <div
-              data-swap-surface
-              className={`${isBuffering ? 'grayscale' : ''} fixed inset-0`}
-            >
-              {/* Fades in as the loading pile falls away
-                  (components/loading.tsx). */}
-              <div
-                className={`absolute inset-0 transition-opacity duration-1000 ease-out ${
-                  pileLeaving ? 'opacity-100' : 'opacity-0'
-                }`}
-              >
-                <Canvas shadows dpr={dpr}>
-                  <Suspense fallback={null}>
-                    <Preload all />
-                    <Scene video={video} />
-                  </Suspense>
-                </Canvas>
-              </div>
-              <Loading />
-              <Playhead ref={video} />
-            </div>
+            <Suspense fallback={<LoadingShell />}>
+              <Experience video={video} dpr={dpr} isBuffering={isBuffering} />
+            </Suspense>
           </Viewport>
         ) : hasLoaded ? (
           <div className="relative h-screen grid place-content-center space-y-2 text-center p-4">

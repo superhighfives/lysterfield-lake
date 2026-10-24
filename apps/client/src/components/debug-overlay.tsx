@@ -71,7 +71,6 @@ function Toggle({
 
 function DebugOverlay() {
   const debug = useStore((state) => state.debug)
-  const setDebug = useStore((state) => state.setDebug)
   const wakeEnabled = useStore((state) => state.wakeEnabled)
   const setWakeEnabled = useStore((state) => state.setWakeEnabled)
   const dprCap = useStore((state) => state.dprCap)
@@ -87,18 +86,7 @@ function DebugOverlay() {
   const graph = useRef<HTMLCanvasElement>(null)
   const [, setTick] = useState(0)
 
-  // Shift+D, anywhere but a text field.
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (!event.shiftKey || event.key.toLowerCase() !== 'd') return
-      const target = event.target as HTMLElement
-      if (target.closest('input, textarea, [contenteditable]')) return
-      setDebug(!useStore.getState().debug)
-    }
-
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [setDebug])
+  // Shift+D is utils/use-debug-shortcut.ts, in routes/root.tsx.
 
   useEffect(() => {
     if (!debug) return

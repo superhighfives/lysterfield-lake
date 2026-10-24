@@ -1,6 +1,7 @@
 import { CSSProperties, useEffect, useRef, useState } from 'react'
 import { useProgress } from '@react-three/drei'
 import { seeded } from './carousels/shared'
+import Spinner from './spinner'
 import { useStore } from '../store'
 import dreams from '../dreams.json'
 
@@ -61,6 +62,9 @@ function Loading() {
     if (gone) return
     const images = dreams.map(({ id }) => {
       const image = new Image()
+      // Anonymous, as three.js's texture loader fetches the same photos
+      // for the chooser (views/choose.tsx), so they're downloaded once.
+      image.crossOrigin = 'anonymous'
       const done = () => setReady((prev) => new Set(prev).add(id))
       image.onload = done
       image.onerror = done
@@ -110,16 +114,14 @@ function Loading() {
   return (
     <div className="fixed inset-0 z-10 flex flex-col items-center justify-center gap-10 pointer-events-none whitespace-nowrap">
       <div className="relative w-[180px] h-[220px]">
-        {/* Behind the cards, which cover it as they land. Faded on a wrapper,
-            since the fade-in's fill would override an opacity class. */}
+        {/* Behind the cards, which cover it as they land. Already faded in
+            by components/loading-shell.tsx, which draws it here first. */}
         <div
           className={`absolute inset-0 grid place-items-center transition-opacity duration-300 ${
             leaving ? 'opacity-0' : ''
           }`}
         >
-          <div className="animate-fade-in">
-            <div className="w-7 h-7 rounded-full border-2 border-stone-300 border-t-stone-500 dark:border-stone-700 dark:border-t-stone-400 motion-safe:animate-spin" />
-          </div>
+          <Spinner />
         </div>
         {Array.from({ length: count }, (_, i) => {
           const dream = dreams[i % dreams.length]
@@ -158,6 +160,7 @@ function Loading() {
                     image was cached (an onLoad fade never showed then). */}
                 <img
                   src={heroUrl(dream.id)}
+                  crossOrigin="anonymous"
                   alt=""
                   className="w-full h-full object-cover motion-safe:animate-develop"
                   style={{

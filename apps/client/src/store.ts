@@ -3,7 +3,6 @@ import { Dream } from './utils/types'
 // Circular (dream-video imports this store), and safe: neither uses the
 // other until called.
 import { isSplit } from './utils/dream-video'
-import { Vector2 } from 'three'
 import {
   ColorScheme,
   ThemePreference,
@@ -12,6 +11,11 @@ import {
 } from './utils/theme'
 
 export type Resume = { dreamId: string; time: number }
+
+/** The pointer, as views/main.tsx sets it (a three.js Vector2 there):
+ *  only its x and y are read. Kept to that shape so the store doesn't
+ *  import three.js, which the title screen otherwise doesn't need. */
+export type PointerPosition = { x: number; y: number }
 
 /** Swapping to another dream mid-song (see utils/swap-dream.ts): the
  *  polaroid's photo fades to a blank print (`out`), waits while the next
@@ -47,7 +51,7 @@ export interface AppState {
   pileLeaving: boolean
   showPlayhead: boolean
   initialRotation: [number, number, number]
-  globalPointer: Vector2
+  globalPointer: PointerPosition
   resetInitialRotation: boolean
   isTooSlow: boolean
   /** What the user picked in the theme toggle — 'system' follows
@@ -84,7 +88,7 @@ export interface AppState {
   setPolaroidPillVisible: (polaroidPillVisible: boolean) => void
   setInitialRotation: (initialRotation: [number, number, number]) => void
   setResetInitialRotation: (resetInitialRotation: boolean) => void
-  setGlobalPointer: (globalPointer: Vector2) => void
+  setGlobalPointer: (globalPointer: PointerPosition) => void
   setReady: (ready: boolean) => void
   setSceneLoaded: (sceneLoaded: boolean) => void
   setPileLeaving: (pileLeaving: boolean) => void
@@ -119,7 +123,7 @@ export const useStore = create<AppState>()((set) => ({
   pileLeaving: false,
   showPlayhead: false,
   initialRotation: [0, 0, 0],
-  globalPointer: new Vector2(0, 0),
+  globalPointer: { x: 0, y: 0 },
   resetInitialRotation: true,
   isTooSlow: false,
   themePreference: readThemePreference(),
@@ -162,7 +166,7 @@ export const useStore = create<AppState>()((set) => ({
     set(() => ({ initialRotation })),
   setResetInitialRotation: (resetInitialRotation: boolean) =>
     set(() => ({ resetInitialRotation })),
-  setGlobalPointer: (globalPointer: Vector2) => set(() => ({ globalPointer })),
+  setGlobalPointer: (globalPointer: PointerPosition) => set(() => ({ globalPointer })),
   setReady: (ready: boolean) => set(() => ({ ready })),
   setSceneLoaded: (sceneLoaded: boolean) => set(() => ({ sceneLoaded })),
   setPileLeaving: (pileLeaving: boolean) => set(() => ({ pileLeaving })),

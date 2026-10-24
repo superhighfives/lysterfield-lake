@@ -1,4 +1,3 @@
-import { MathUtils } from 'three'
 import { useStore, SwapDirection } from '../store'
 import { HistoryState, urlFor } from './use-history-sync'
 import { fadeGain } from './audio'
@@ -51,7 +50,7 @@ function fadeVolume(
   const step = (now: number) => {
     // rAF's timestamp is the frame's start, which can be a little before
     // `start`; a negative t pushes volume out of [0, 1], and that throws.
-    const t = MathUtils.clamp((now - start) / ms, 0, 1)
+    const t = Math.min(Math.max((now - start) / ms, 0), 1)
     el.volume = from + (to - from) * t
     if (t < 1) fadeFrame = requestAnimationFrame(step)
     else onDone?.()
