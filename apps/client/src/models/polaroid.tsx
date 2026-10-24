@@ -40,6 +40,36 @@ const shadowTexture = (() => {
   return new CanvasTexture(canvas)
 })()
 
+// The chooser's pile casts a tighter shadow: about the card's own size,
+// with a short soft edge, so each card shades just the strip of the card
+// beneath that shows past its edge. The broad one above, twenty deep,
+// built up into a dark halo under the pile.
+const contactShadowTexture = (() => {
+  const size = 256
+  const inset = 10
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = 'black'
+  ctx.fillRect(0, 0, size, size)
+  ctx.shadowColor = 'white'
+  ctx.shadowBlur = 7
+  ctx.shadowOffsetX = size * 4
+  ctx.fillStyle = 'white'
+  ctx.fillRect(inset - size * 4, inset, size - inset * 2, size - inset * 2)
+  return new CanvasTexture(canvas)
+})()
+// The frame is 3.66 x 4.47 units; the contact shadow's plane is a little
+// larger, so its solid middle matches the card. It sits just behind the
+// card, closer than the next card down (the pile's LAYER, 0.25 of these
+// units, components/carousels/stack.tsx), so it lands on that card rather
+// than behind it.
+const CONTACT_SHADOW = {
+  size: [3.95, 4.8] as [number, number],
+  offset: [0.16, -0.2, -0.12] as [number, number, number],
+  opacity: { light: 0.35, dark: 0.6 },
+}
+
 type GLTFResult = GLTF & {
   nodes: {
     Object_3: Mesh
@@ -229,26 +259,38 @@ const Polaroid = forwardRef<
           (3.66 x 4.47 units) to show at all — an earlier 3.5 x 3.6 sat
           entirely hidden behind its own card — and the alpha map's soft
           box only fills its middle ~60%, so it's sized well past that.
-          On the player's polaroid it's nudged left; on the chooser's
-          pile it falls down and a little right, onto the card beneath,
-          as a card resting on the pile would shade it.
+          It's also nudged left. On the chooser's pile it's the tight
+          contact shadow instead (CONTACT_SHADOW), falling down and a
+          little right onto the card beneath.
           `depthWrite={false}`: it's meant to be seen through, not to
           occlude anything. */}
-      <mesh position={layered ? [0.12, -0.32, -0.3] : [-0.35, -0.2, -0.3]}>
-        <planeGeometry args={[5.6, 6.6]} />
-        <meshBasicMaterial
-          color="black"
-          alphaMap={shadowTexture}
-          transparent
-          // Stronger on the pile's cards, where it falls on the card
-          // beneath: much stronger in dark mode, where black on charcoal
-          // barely registers otherwise. Faint on the player's polaroid,
-          // where it has no card behind to land on and just reads as a
-          // dark smudge on the background.
-          opacity={layered ? (dark ? 0.8 : 0.4) : dark ? 0.28 : 0.16}
-          depthWrite={false}
-        />
-      </mesh>
+      {layered ? (
+        <mesh position={CONTACT_SHADOW.offset}>
+          <planeGeometry args={CONTACT_SHADOW.size} />
+          <meshBasicMaterial
+            color="black"
+            alphaMap={contactShadowTexture}
+            transparent
+            // Stronger in dark mode, where black on charcoal barely
+            // registers otherwise.
+            opacity={CONTACT_SHADOW.opacity[dark ? 'dark' : 'light']}
+            depthWrite={false}
+          />
+        </mesh>
+      ) : (
+        <mesh position={[-0.35, -0.2, -0.3]}>
+          <planeGeometry args={[5.6, 6.6]} />
+          <meshBasicMaterial
+            color="black"
+            alphaMap={shadowTexture}
+            transparent
+            // Faint: the player's polaroid has no card behind to land on,
+            // and a stronger one reads as a dark smudge on the background.
+            opacity={dark ? 0.28 : 0.16}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
 
       <group ref={card}>
         {/* Overlay */}
