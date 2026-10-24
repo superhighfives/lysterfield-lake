@@ -111,7 +111,16 @@ export function dragPreview() {
 
 export function useSwapInput() {
   useEffect(() => {
-    let start: { x: number; y: number; onPolaroid: boolean } | null = null
+    // The press: where the drag starts from (it follows the finger while a
+    // swap isn't on yet, see track), and where and when it actually began.
+    let start: {
+      x: number
+      y: number
+      onPolaroid: boolean
+      pressX: number
+      pressY: number
+      pressTime: number
+    } | null = null
     // The drag's recent pointer samples, for the release velocity.
     let samples: { x: number; time: number }[] = []
     const sample = (x: number, time: number) => {
@@ -178,6 +187,9 @@ export function useSwapInput() {
         x: event.clientX,
         y: event.clientY,
         onPolaroid: nearPolaroid(event.clientX, event.clientY, 0),
+        pressX: event.clientX,
+        pressY: event.clientY,
+        pressTime: event.timeStamp,
       }
       samples = [{ x: event.clientX, time: event.timeStamp }]
     }
@@ -211,10 +223,13 @@ export function useSwapInput() {
 
     const handlePointerMove = (event: PointerEvent) => {
       if (!start) return
-      // A mouse released outside the window never sends pointerup here —
-      // a move with no button held means the press is long over.
+      // No button held: the press is over. It's the release, not a
+      // cancel: on a quick flick Chrome sends a last move with no button
+      // just before pointerup (and a mouse released outside the window
+      // never sends pointerup here at all), and dropping the drag there
+      // lost the flick.
       if (event.pointerType === 'mouse' && event.buttons === 0) {
-        handlePointerCancel()
+        handlePointerUp(event)
         return
       }
 
@@ -226,15 +241,29 @@ export function useSwapInput() {
       // The release counts as the drag's last move.
       const pressedAt = samples[0]
       track(event)
-      const { onPolaroid } = start
+      const { onPolaroid, pressX, pressY, pressTime } = start
       start = null
 
       if (!swapDrag.active) {
         const moved = Math.abs(event.clientX - (pressedAt?.x ?? event.clientX))
         if (onPolaroid && moved < TAP_DISTANCE && canSwap()) {
           useStore.getState().requestSwap(1)
+          return
         }
 
+        // Dragged while the last swap was still under way, so it never
+        // became a drag (see track): judged on the whole gesture instead,
+        // from the press, and waits for that swap (see swap).
+        const total = event.clientX - pressX
+        const elapsed = event.timeStamp - pressTime
+        const sideways = Math.abs(total) > Math.abs(event.clientY - pressY)
+        const fast = elapsed > 0 && Math.abs(total) / elapsed >= FLICK_VELOCITY
+        if (
+          sideways &&
+          Math.abs(total) >= FLICK_MIN_PX &&
+          (fast || Math.abs(total) >= commitDistance())
+        )
+          swap(directionOf(total))
         return
       }
 
