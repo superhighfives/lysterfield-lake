@@ -30,6 +30,13 @@ export function urlFor(dreamId: string | null) {
   return url.pathname + url.search + url.hash
 }
 
+/** The dream the URL names, if any, before it's restored (that waits for
+ *  the start button): the title screen previews it, and the loading pile
+ *  is just its card. */
+export function dreamFromLocation() {
+  return findDream(dreamIdFromLocation())
+}
+
 function findDream(id: string | null) {
   const preview = previewDream()
   if (preview) return preview

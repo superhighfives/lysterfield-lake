@@ -33,6 +33,9 @@ export default {
         // own way (--sx, --sy, --sr, components/loading.tsx): slowly at
         // first, then faster as it goes.
         'card-leave': 'card-leave 0.6s cubic-bezier(0.32, 0, 0.67, 0) both',
+        // A single loading polaroid (a dream's own link) sliding down off
+        // the screen instead, on the same ease.
+        'card-fall': 'card-fall 0.7s cubic-bezier(0.32, 0, 0.67, 0) both',
       },
       keyframes: {
         'card-drop': {
@@ -62,6 +65,15 @@ export default {
           '100%': {
             transform:
               'translate(calc(var(--x) + var(--sx)), calc(var(--y) + var(--sy))) rotate(calc(var(--r) + var(--sr)))',
+          },
+        },
+        'card-fall': {
+          '0%': {
+            transform: 'translate(var(--x), var(--y)) rotate(var(--r))',
+          },
+          '100%': {
+            transform:
+              'translate(var(--x), calc(var(--y) + 90vh)) rotate(calc(var(--r) - 8deg))',
           },
         },
         'fade-in': {

@@ -18,6 +18,7 @@ import {
   Crosshair,
 } from '@phosphor-icons/react'
 import Tooltip from '../views/tooltip'
+import { dreamFromLocation , HistoryState, urlFor } from '../utils/use-history-sync'
 
 import {
   MediaController,
@@ -39,7 +40,6 @@ import {
   warmDream,
 } from '../utils/dream-video'
 import { adjacentDream, fadeInAudio, fadeOutAudio } from '../utils/swap-dream'
-import { HistoryState, urlFor } from '../utils/use-history-sync'
 
 // If the dream video still isn't ready this long after asking — the first
 // one, or a switch — carry on anyway: play the main video (the polaroid
@@ -69,13 +69,25 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     // — on touch too, where showing it throughout covered the lyrics.
     const [pillHovered, setPillHovered] = useState(false)
     const [announcing, setAnnouncing] = useState(false)
+    // The controls and the name wait for the loading pile to leave
+    // (components/loading.tsx), rather than showing over it.
+    const pileLeaving = useStore((state) => state.pileLeaving)
+    // Arriving straight at a dream (its URL), its name isn't announced:
+    // the title screen and the loading polaroid have already shown it.
+    const arrivedAt = useRef(dreamFromLocation()?.id ?? null)
     // Counted from when the swap's done, since it's hidden until then.
     useEffect(() => {
-      if (!dream || swapping) return
+      if (!dream || swapping || !pileLeaving) return
+      if (dream.id === arrivedAt.current) {
+        arrivedAt.current = null
+        return
+      }
+
+      arrivedAt.current = null
       setAnnouncing(true)
       const timeout = setTimeout(() => setAnnouncing(false), ANNOUNCE_MS)
       return () => clearTimeout(timeout)
-    }, [dream, swapping])
+    }, [dream, swapping, pileLeaving])
     // For the mute button's label.
     const [muted, setMuted] = useState(false)
 
@@ -83,7 +95,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       (state) => state.setResetInitialRotation
     )
     const polaroidPillVisible = useStore(
-      (state) => state.polaroidPillVisible
+      (state) => state.polaroidPillVisible && state.pileLeaving
     )
     const setResetting = useStore((state) => state.setResetting)
     const setSeeking = useStore((state) => state.setSeeking)

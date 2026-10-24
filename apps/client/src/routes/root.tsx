@@ -10,7 +10,8 @@ import KeyWhiteFilter from '../components/key-white-filter'
 import { handleDeviceOrientationPermissions, isTouchDevice } from '../utils/device'
 import dreams from '../dreams.json'
 import { Info, MusicNotes, CircleNotch } from '@phosphor-icons/react'
-import { useHistorySync } from '../utils/use-history-sync'
+import { dreamFromLocation, useHistorySync } from '../utils/use-history-sync'
+import LoadingCard from '../components/loading-card'
 import { useSwapInput } from '../utils/swap-gesture'
 import { startAudio } from '../utils/audio'
 import WaterVideo, { DIVE_MS, useWater } from '../components/water-video'
@@ -60,6 +61,9 @@ function Root() {
   )
   const water = useWater()
   const [diving, setDiving] = useState(false)
+  // Arriving straight at a dream (its URL): the title screen shows its
+  // polaroid, the one about to play.
+  const [preview] = useState(() => dreamFromLocation() ?? null)
   // Set on the first click, before the permission await, so a second click
   // (or Enter) during that await or the dive can't start it twice.
   const started = useRef(false)
@@ -225,6 +229,21 @@ function Root() {
                 Lysterfield Lake
               </span>
             </button>
+            {/* The dream about to play, left on the table in the corner, out
+                of the title's way (not on a phone, where there's no room;
+                the loading polaroid shows it there). */}
+            {preview ? (
+              <div
+                className={`hidden sm:block fixed right-[max(2rem,env(safe-area-inset-right))] bottom-[max(2rem,env(safe-area-inset-bottom))] pointer-events-none transition-[opacity,transform] duration-500 ${
+                  diving ? 'opacity-0 translate-y-6' : ''
+                }`}
+              >
+                <LoadingCard
+                  dream={preview}
+                  className="w-[180px] h-[220px] scale-75 origin-bottom-right -rotate-3 animate-fade-in"
+                />
+              </div>
+            ) : null}
           </div>
         ) : (
           <Fallback />

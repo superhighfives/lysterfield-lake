@@ -2,7 +2,10 @@ import { CSSProperties, useEffect, useRef, useState } from 'react'
 import { useProgress } from '@react-three/drei'
 import { seeded } from './carousels/shared'
 import Spinner from './spinner'
+import LoadingCard, { heroUrl } from './loading-card'
 import { useStore } from '../store'
+import { dreamFromLocation } from '../utils/use-history-sync'
+import type { Dream } from '../utils/types'
 import dreams from '../dreams.json'
 
 // While the scene loads: the stack you'll choose from, built as it loads —
@@ -55,9 +58,14 @@ const scatter = (i: number) => {
   }
 }
 
-// The photos the pile shows (one per dream, repeating), preloaded as it
-// mounts so a card can wait for its own.
-const heroUrl = (id: string) => `/assets/${id}/hero.jpg`
+// Arriving straight at a dream (its URL), the pile is just that dream's
+// polaroid, turned a little (SINGLE_TWIST), as the title screen showed it,
+// and it slides down off the screen rather than scattering.
+const SINGLE_TWIST = -3
+// It's mostly off the screen by SINGLE_HANDOFF_MS into its slide, when the
+// scene and the player's big polaroid come in (pileLeaving), one after the
+// other rather than over each other.
+const SINGLE_HANDOFF_MS = 450
 
 function Loading() {
   // Counted against what's actually queued, so it ends on "n of n" (a
@@ -70,12 +78,17 @@ function Loading() {
   const [gone, setGone] = useState(sceneLoaded)
   const [leaving, setLeaving] = useState(sceneLoaded)
 
+  // The dream named in the URL, if any: the pile is then just its card.
+  const [single] = useState(() => dreamFromLocation() ?? null)
+  const cards: Dream[] = single ? [single] : dreams
+  const maxCards = single ? 1 : MAX_CARDS
+
   // Which dreams' photos have loaded. One that fails counts too, so the
   // pile can't wait on it forever.
   const [ready, setReady] = useState<ReadonlySet<string>>(new Set())
   useEffect(() => {
     if (gone) return
-    const images = dreams.map(({ id }) => {
+    const images = cards.map(({ id }) => {
       const image = new Image()
       // Anonymous, as three.js's texture loader fetches the same photos
       // for the chooser (views/choose.tsx), so they're downloaded once.
@@ -87,12 +100,13 @@ function Loading() {
       return image
     })
     return () => images.forEach((image) => (image.onload = image.onerror = null))
+    // `cards` is fixed for the pile's life (it's from `single`).
   }, [gone])
 
   // Cards drop in order, each once its asset's counted and its photo's in.
-  const wanted = Math.min(loaded, MAX_CARDS)
+  const wanted = Math.min(loaded, maxCards)
   let count = 0
-  while (count < wanted && ready.has(dreams[count % dreams.length].id)) count++
+  while (count < wanted && ready.has(cards[count % cards.length].id)) count++
   // Each card's drop delay, fixed when it first appears (changing it
   // mid-fall would restart the fall), and when its photo finishes
   // developing (performance.now() ms).
@@ -108,7 +122,7 @@ function Loading() {
 
   // Every card in (the count only reaches n of n once the scene's loaded):
   // hold once the last has developed, then leave.
-  const allIn = sceneLoaded && count === Math.min(Math.max(loaded, total), MAX_CARDS)
+  const allIn = sceneLoaded && count === Math.min(Math.max(loaded, total), maxCards)
   useEffect(() => {
     if (!allIn || leaving) return
     const lastDeveloped = Math.max(0, ...developed.current)
@@ -118,11 +132,21 @@ function Loading() {
   }, [allIn, leaving])
 
   useEffect(() => {
-    if (leaving) setPileLeaving(true)
+    if (!leaving) return
+    if (!single) {
+      setPileLeaving(true)
+      return
+    }
+
+    const handoff = window.setTimeout(() => setPileLeaving(true), SINGLE_HANDOFF_MS)
+    return () => window.clearTimeout(handoff)
+  }, [leaving, single, setPileLeaving])
+
+  useEffect(() => {
     if (!leaving || gone) return
     const timeout = window.setTimeout(() => setGone(true), LEAVE_MS)
     return () => window.clearTimeout(timeout)
-  }, [leaving, gone, setPileLeaving])
+  }, [leaving, gone])
 
   if (gone) return null
 
@@ -139,23 +163,27 @@ function Loading() {
           <Spinner />
         </div>
         {Array.from({ length: count }, (_, i) => {
-          const dream = dreams[i % dreams.length]
+          const dream = cards[i % cards.length]
           const newest = i === count - 1
           return (
-            <div
+            <LoadingCard
               key={i}
-              // Paper with a faint fall of light across it, a fine edge, and
-              // two shadows: tight where it touches, soft around it.
-              className={`absolute inset-0 flex flex-col rounded-[3px] p-[11px] bg-[linear-gradient(165deg,#ffffff,#f1eee9)] dark:bg-[linear-gradient(165deg,#36322e,#252220)] ring-1 ring-black/5 dark:ring-white/5 shadow-[0_1px_2px_rgba(0,0,0,0.1),0_10px_24px_rgba(0,0,0,0.16)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.5),0_10px_24px_rgba(0,0,0,0.6)] ${
+              dream={dream}
+              grey={!newest}
+              developDelay={dropDelays.current[i] + DEVELOP_AFTER}
+              className={`absolute inset-0 ${
+                // Written out in full: Tailwind only finds whole class names.
                 leaving
-                  ? 'motion-safe:animate-card-leave motion-reduce:opacity-0'
+                  ? single
+                    ? 'motion-safe:animate-card-fall motion-reduce:opacity-0'
+                    : 'motion-safe:animate-card-leave motion-reduce:opacity-0'
                   : 'motion-safe:animate-card-drop'
               }`}
               style={
                 {
-                  '--x': `${(seeded(i, 1) - 0.5) * 2 * JITTER[0]}px`,
-                  '--y': `${(seeded(i, 2) - 0.5) * 2 * JITTER[1]}px`,
-                  '--r': `${(seeded(i, 3) - 0.5) * 2 * TWIST}deg`,
+                  '--x': single ? '0px' : `${(seeded(i, 1) - 0.5) * 2 * JITTER[0]}px`,
+                  '--y': single ? '0px' : `${(seeded(i, 2) - 0.5) * 2 * JITTER[1]}px`,
+                  '--r': single ? `${SINGLE_TWIST}deg` : `${(seeded(i, 3) - 0.5) * 2 * TWIST}deg`,
                   // Where it scatters to as the pile leaves: its own
                   // direction, far enough to clear the screen, with a spin.
                   ...scatter(i),
@@ -168,41 +196,7 @@ function Loading() {
                   transform: 'translate(var(--x), var(--y)) rotate(var(--r))',
                 } as CSSProperties
               }
-            >
-              {/* Greyed here rather than on the photo, whose develop
-                  animates its own filter. */}
-              <div
-                className={`relative aspect-square w-full overflow-hidden bg-[#e7e3dc] dark:bg-[#d9d4cb] transition-[filter] duration-1000 ${
-                  newest ? '' : 'grayscale'
-                }`}
-              >
-                {/* Develops once the card's landed, whether or not the
-                    image was cached (an onLoad fade never showed then). */}
-                <img
-                  src={heroUrl(dream.id)}
-                  crossOrigin="anonymous"
-                  alt=""
-                  className="w-full h-full object-cover motion-safe:animate-develop"
-                  style={{
-                    animationDelay: `${dropDelays.current[i] + DEVELOP_AFTER}ms`,
-                  }}
-                />
-                {/* The print set into the frame, and a soft sheen. */}
-                <div className="absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08),inset_0_1px_4px_rgba(0,0,0,0.12)] bg-[linear-gradient(135deg,rgba(255,255,255,0.22),rgba(255,255,255,0)_45%)]" />
-              </div>
-              {/* The caption strip: the dream's name and prompt, as on the
-                  chooser's cards. */}
-              <div className="flex-1 min-h-0 flex flex-col justify-center gap-[2px] px-[3px] overflow-hidden">
-                <span className="font-serif italic text-[15px] leading-none text-stone-800 dark:text-stone-200 truncate">
-                  {dream.title}
-                </span>
-                {dream.prompt ? (
-                  <span className="font-mono text-[7px] leading-tight text-stone-400 dark:text-stone-500 truncate">
-                    &ldquo;{dream.prompt}&rdquo;
-                  </span>
-                ) : null}
-              </div>
-            </div>
+            />
           )
         })}
       </div>
