@@ -46,8 +46,16 @@ const COMMIT_SHARE_OF_WIDTH = 0.3
 // it's EDGE_SHARE of the room that's left that way (at least EDGE_MIN_PX).
 const EDGE_SHARE = 0.7
 const EDGE_MIN_PX = 24
-const FLICK_VELOCITY = 0.6 // px/ms
-const FLICK_MIN_PX = 30
+// A flick: at least FLICK_VELOCITY (px/ms) over the last VELOCITY_WINDOW_MS
+// of the drag, and FLICK_MIN_PX long. Measured over a window, not the
+// last two samples: a finger slows as it lifts, and that last sample
+// undersold a hard flick.
+const FLICK_VELOCITY = 0.4
+const FLICK_MIN_PX = 20
+const VELOCITY_WINDOW_MS = 80
+// A swap asked for while the last is still fading out or in (a quick
+// second flick) waits up to SWAP_QUEUE_MS for it, rather than being lost.
+const SWAP_QUEUE_MS = 450
 
 export function nearPolaroid(x: number, y: number, margin = NEAR_MARGIN) {
   const r = polaroidRect
@@ -103,9 +111,52 @@ export function dragPreview() {
 export function useSwapInput() {
   useEffect(() => {
     let start: { x: number; y: number; onPolaroid: boolean } | null = null
-    // The last two pointer samples, for the release velocity.
-    let last = { x: 0, time: 0 }
-    let velocity = 0
+    // The drag's recent pointer samples, for the release velocity.
+    let samples: { x: number; time: number }[] = []
+    const sample = (x: number, time: number) => {
+      samples.push({ x, time })
+      while (samples.length > 2 && time - samples[1].time > VELOCITY_WINDOW_MS)
+        samples.shift()
+    }
+
+    const velocity = () => {
+      if (samples.length < 2) return 0
+      const first = samples[0]
+      const last = samples[samples.length - 1]
+      const elapsed = last.time - first.time
+      return elapsed > 0 ? (last.x - first.x) / elapsed : 0
+    }
+
+
+    // A swap waiting for the last to finish (see SWAP_QUEUE_MS).
+    let queued: { direction: SwapDirection; until: number } | null = null
+    let queueFrame = 0
+    const tryQueued = () => {
+      queueFrame = 0
+      if (!queued) return
+      if (performance.now() > queued.until) {
+        queued = null
+        return
+      }
+
+      if (canSwap()) {
+        useStore.getState().requestSwap(queued.direction)
+        queued = null
+        return
+      }
+
+      queueFrame = requestAnimationFrame(tryQueued)
+    }
+
+    const swap = (direction: SwapDirection) => {
+      if (canSwap()) {
+        useStore.getState().requestSwap(direction)
+        return
+      }
+
+      queued = { direction, until: performance.now() + SWAP_QUEUE_MS }
+      if (!queueFrame) queueFrame = requestAnimationFrame(tryQueued)
+    }
 
     const handlePointerDown = (event: PointerEvent) => {
       if (event.pointerType === 'mouse' && event.button !== 0) return
@@ -121,25 +172,19 @@ export function useSwapInput() {
         y: event.clientY,
         onPolaroid: nearPolaroid(event.clientX, event.clientY, 0),
       }
-      last = { x: event.clientX, time: event.timeStamp }
-      velocity = 0
+      samples = [{ x: event.clientX, time: event.timeStamp }]
     }
 
-    const handlePointerMove = (event: PointerEvent) => {
+    // A pointer position in the drag: from a move, or the release itself
+    // (a hard flick can come with no move between press and release).
+    const track = (event: PointerEvent) => {
       if (!start) return
-      // A mouse released outside the window never sends pointerup here —
-      // a move with no button held means the press is long over.
-      if (event.pointerType === 'mouse' && event.buttons === 0) {
-        handlePointerCancel()
-        return
-      }
-
       // Not swappable yet: the drag's start follows the finger, so it
       // takes up from here, without a jump, the moment it is.
       if (!swapDrag.active && !canSwap()) {
         start.x = event.clientX
         start.y = event.clientY
-        last = { x: event.clientX, time: event.timeStamp }
+        samples = [{ x: event.clientX, time: event.timeStamp }]
         return
       }
 
@@ -154,18 +199,31 @@ export function useSwapInput() {
       }
 
       swapDrag.dx = dx
-      const elapsed = event.timeStamp - last.time
-      if (elapsed > 0) velocity = (event.clientX - last.x) / elapsed
-      last = { x: event.clientX, time: event.timeStamp }
+      sample(event.clientX, event.timeStamp)
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!start) return
+      // A mouse released outside the window never sends pointerup here —
+      // a move with no button held means the press is long over.
+      if (event.pointerType === 'mouse' && event.buttons === 0) {
+        handlePointerCancel()
+        return
+      }
+
+      track(event)
     }
 
     const handlePointerUp = (event: PointerEvent) => {
       if (!start) return
+      // The release counts as the drag's last move.
+      const pressedAt = samples[0]
+      track(event)
       const { onPolaroid } = start
       start = null
 
       if (!swapDrag.active) {
-        const moved = Math.abs(event.clientX - last.x)
+        const moved = Math.abs(event.clientX - (pressedAt?.x ?? event.clientX))
         if (onPolaroid && moved < TAP_DISTANCE && canSwap()) {
           useStore.getState().requestSwap(1)
         }
@@ -178,17 +236,14 @@ export function useSwapInput() {
       const needed = commitDistance()
       swapDrag.active = false
       const dx = swapDrag.dx
-      // A stale velocity (the pointer held still before letting go)
-      // shouldn't count as a flick.
-      const fresh = event.timeStamp - last.time < 100
+      // Over the window up to the release, so a pointer held still before
+      // letting go reads as no speed, not a flick.
+      const speed = velocity()
       const flicked =
-        fresh &&
-        Math.abs(velocity) >= FLICK_VELOCITY &&
+        Math.abs(speed) >= FLICK_VELOCITY &&
         Math.abs(dx) >= FLICK_MIN_PX &&
-        Math.sign(velocity) === Math.sign(dx)
-      if ((Math.abs(dx) >= needed || flicked) && canSwap()) {
-        useStore.getState().requestSwap(directionOf(dx))
-      }
+        Math.sign(speed) === Math.sign(dx)
+      if (Math.abs(dx) >= needed || flicked) swap(directionOf(dx))
     }
 
     const handlePointerCancel = () => {
@@ -216,6 +271,7 @@ export function useSwapInput() {
       window.removeEventListener('pointerup', handlePointerUp)
       window.removeEventListener('pointercancel', handlePointerCancel)
       window.removeEventListener('keydown', handleKeyDown)
+      cancelAnimationFrame(queueFrame)
     }
   }, [])
 }
