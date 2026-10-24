@@ -7,7 +7,7 @@ import {
 } from 'react'
 import { ThreeEvent, useFrame, useThree } from '@react-three/fiber'
 import { useScroll, useTexture } from '@react-three/drei'
-import { CanvasTexture, Group, Texture, VideoTexture } from 'three'
+import { CanvasTexture, Group, MathUtils, Texture, VideoTexture } from 'three'
 import DreamCard from '../dream-card'
 import { cursorHint } from '../../utils/cursor-hint'
 import { useStore } from '../../store'
@@ -60,10 +60,14 @@ const FLICK_MIN_PX = 16
 // Just past the edge of the pile (a card is ~0.37 wide), not off-screen.
 const THROW = 0.62
 const TUCK_MS = 380
-// Before tucking in, a tossed card drops behind the pile while still out
-// beside it, for BEHIND_MS, so it slides in underneath rather than across
-// the cards on top.
-const BEHIND_MS = 160
+// The tuck itself: one eased glide over TUCK_RETURN_MS from beside the
+// pile to its place at the bottom, sinking behind the pile in the first
+// part (TUCK_SINK of the way), while it's still out beside it, so it slides
+// in underneath rather than across the cards on top.
+const TUCK_RETURN_MS = 520
+const TUCK_SINK = 0.3
+const easeInOut = (t: number) =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
 // Each card's draw order: its place in the pile, from PILE_ORDER up (a
 // tossed card above them all, one dropping behind below them all). Set
 // on everything in the card, as a nested group's own order overrides its
@@ -273,8 +277,17 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
   // isn't one, if so).
   const pressMoved = useRef(false)
   // Cards mid-toss (out beside the pile, before tucking in under it):
-  // which way each went, and whether it's dropped behind the pile yet.
-  const tossed = useRef(new Map<number, { direction: number; behind: boolean }>())
+  // which way each went, and once it's tucking in, when that started and
+  // where from (the card's pose on the first frame of it).
+  const tossed = useRef(
+    new Map<
+      number,
+      {
+        direction: number
+        tuck?: { start: number; from?: { x: number; y: number; z: number; rz: number } }
+      }
+    >()
+  )
   const dark = useStore((state) => state.colorScheme === 'dark')
   const { size, viewport } = useThree()
   const scroll = useScroll()
@@ -336,15 +349,12 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
       // Under the pile straight away, so the next card's ready to grab;
       // it's shown tossed out beside the pile for a moment, then tucks in.
       const card = top
-      const toss = { direction: Math.sign(current.dx), behind: false }
+      const toss: { direction: number; tuck?: { start: number } } = {
+        direction: Math.sign(current.dx),
+      }
       tossed.current.set(card, toss)
       setOrder((previous) => [previous[previous.length - 1], ...previous.slice(0, -1)])
-      window.setTimeout(() => {
-        toss.behind = true
-        window.setTimeout(() => {
-          if (tossed.current.get(card) === toss) tossed.current.delete(card)
-        }, BEHIND_MS)
-      }, TUCK_MS)
+      window.setTimeout(() => (toss.tuck = { start: performance.now() }), TUCK_MS)
     }
 
     window.addEventListener('pointermove', handleMove)
@@ -389,14 +399,37 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
       }
 
       let z = depth * LAYER
-      let drawOrder = PILE_ORDER + depth
       const toss = tossed.current.get(index)
+      if (toss?.tuck) {
+        // Tucking in: one glide from where it was to its place, sinking
+        // behind the pile first. Drawn under the pile throughout.
+        const tuck = toss.tuck
+        tuck.from ??= {
+          x: card.position.x,
+          y: card.position.y,
+          z: card.position.z,
+          rz: card.rotation.z,
+        }
+        const progress = Math.min(1, (performance.now() - tuck.start) / TUCK_RETURN_MS)
+        const glide = easeInOut(progress)
+        const sink = MathUtils.smoothstep(progress, 0, TUCK_SINK)
+        const settle = MathUtils.smoothstep(progress, 1 - TUCK_SINK, 1)
+        card.position.x = MathUtils.lerp(tuck.from.x, x, glide)
+        card.position.y = MathUtils.lerp(tuck.from.y, place.y, glide)
+        card.position.z = MathUtils.lerp(MathUtils.lerp(tuck.from.z, -LAYER, sink), z, settle)
+        card.rotation.z = MathUtils.lerp(tuck.from.rz, rz, glide)
+        setCardOrder(card, PILE_ORDER - 1)
+        if (progress >= 1) tossed.current.delete(index)
+        return
+      }
+
+      let drawOrder = PILE_ORDER + depth
       if (toss) {
-        // Out beside the pile: above it, then behind it before tucking in.
+        // Out beside the pile, above it.
         x = toss.direction * THROW
         rz = -toss.direction * 0.6
-        z = toss.behind ? -LAYER : order.length * LAYER
-        drawOrder = toss.behind ? PILE_ORDER - 1 : PILE_ORDER + order.length
+        z = order.length * LAYER
+        drawOrder = PILE_ORDER + order.length
       }
 
       setCardOrder(card, drawOrder)
