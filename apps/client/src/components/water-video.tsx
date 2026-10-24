@@ -35,6 +35,8 @@ const HOVER_STRENGTH = 3.5
 const DIVE_STRENGTH = 7
 /** How long the dive takes, before the scene should replace this. */
 export const DIVE_MS = 900
+// How long the title takes to fade in once its video's first frame is in.
+const FADE_IN_MS = 700
 
 const vertexSource = /* glsl */ `#version 300 es
 in vec2 position;
@@ -141,6 +143,24 @@ function WaterVideo({
   const keyWhiteRef = useRef(keyWhite)
   keyWhiteRef.current = keyWhite
   const [diving, setDiving] = useState(false)
+  // No WebGL2, so the plain video's shown in the canvas's place.
+  const [plainVideo, setPlainVideo] = useState(false)
+  // The video's first frame is in: the title fades in, rather than the
+  // button waiting alone on a slow connection.
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    const vid = video.current
+    if (!vid) return
+    if (vid.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      setLoaded(true)
+      return
+    }
+
+    const show = () => setLoaded(true)
+    vid.addEventListener('loadeddata', show)
+    return () => vid.removeEventListener('loadeddata', show)
+  }, [])
 
   useEffect(() => {
     const el = canvas.current
@@ -149,8 +169,7 @@ function WaterVideo({
     const gl = el.getContext('webgl2', { premultipliedAlpha: false })
     // No WebGL2: show the plain video instead.
     if (!gl) {
-      vid.style.position = 'static'
-      vid.style.opacity = '1'
+      setPlainVideo(true)
       el.style.display = 'none'
       if (handle) handle.current = { hover: () => {}, dive: () => setDiving(true) }
       return
@@ -282,8 +301,13 @@ function WaterVideo({
       style={{ transitionDuration: `${DIVE_MS}ms` }}
     >
       <div
-        className={`transition-[filter] ease-in ${diving ? 'blur-md' : ''}`}
-        style={{ transitionDuration: `${DIVE_MS}ms` }}
+        className={`transition-[filter,opacity] ${diving ? 'blur-md' : ''} ${
+          loaded ? '' : 'opacity-0'
+        }`}
+        style={{
+          transitionDuration: `${DIVE_MS}ms, ${FADE_IN_MS}ms`,
+          transitionTimingFunction: 'ease-in, ease-out',
+        }}
       >
         {/* At most the screen's width (less a margin), staying square. */}
         <canvas
@@ -303,9 +327,10 @@ function WaterVideo({
         ref={video}
         className={mediaClassName}
         style={{
-          position: 'absolute',
+          position: plainVideo ? 'static' : 'absolute',
           top: 0,
-          opacity: 0,
+          opacity: plainVideo && loaded ? 1 : 0,
+          transition: `opacity ${FADE_IN_MS}ms ease-out`,
           pointerEvents: 'none',
           maxWidth: 'calc(100vw - 2rem)',
           height: 'auto',

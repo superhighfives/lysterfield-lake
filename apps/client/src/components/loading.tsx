@@ -38,7 +38,7 @@ const DEVELOP_AFTER = 400
 // developed pile holds before it falls away (ms).
 const DEVELOP_MS = 1600
 const HOLD_MS = 1000
-const LEAVE_MS = 600 + MAX_CARDS * LEAVE_STAGGER
+const LEAVE_MS = 1000 + MAX_CARDS * LEAVE_STAGGER
 
 // The photos the pile shows (one per dream, repeating), preloaded as it
 // mounts so a card can wait for its own.
