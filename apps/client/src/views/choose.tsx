@@ -41,7 +41,9 @@ const invertInk = (shader: { fragmentShader: string }) => {
 const CAROUSEL_FORWARD = 0.25
 // How far the pile sits up toward its heading ("Where are we going?"), in
 // viewport heights, leaving room below for the top card's title and prompt.
-const CAROUSEL_LIFT = 0.1
+// Much more and its back cards cover the heading once it's fully risen
+// into place.
+const CAROUSEL_LIFT = 0.04
 
 // Frames between nudges while arriving at the player (see useFrame).
 const NUDGE_EVERY = 4
@@ -51,7 +53,7 @@ const CAROUSEL_MIN_SCALE = 0.6
 // And never above CAROUSEL_MAX_SCALE: at full size, on a laptop-height
 // window, the top card grown on hover ran off the bottom, taking its
 // title and prompt with it.
-const CAROUSEL_MAX_SCALE = 0.9
+const CAROUSEL_MAX_SCALE = 0.85
 // On a tall, narrow screen (a phone upright), the camera zooms out to fit
 // the width but the pile still filled it and ran off the side, its lower
 // cards squeezed out of sight. Below CAROUSEL_NARROW_ASPECT (width over
