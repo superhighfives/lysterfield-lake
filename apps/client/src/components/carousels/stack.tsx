@@ -60,6 +60,24 @@ const FLICK_MIN_PX = 16
 // Just past the edge of the pile (a card is ~0.37 wide), not off-screen.
 const THROW = 0.62
 const TUCK_MS = 380
+// Before tucking in, a tossed card drops behind the pile while still out
+// beside it, for BEHIND_MS, so it slides in underneath rather than across
+// the cards on top.
+const BEHIND_MS = 160
+// Each card's draw order: its place in the pile, from PILE_ORDER up (a
+// tossed card above them all, one dropping behind below them all). Set
+// on everything in the card, as a nested group's own order overrides its
+// parent's. Sorting by distance instead went wrong on the tilted table: a
+// card low in the pile is nearer the camera, and could draw over the
+// shadow of the card above it (models/polaroid.tsx, whose shadows on
+// other cards ignore depth and rely on this order).
+const PILE_ORDER = 10
+const setCardOrder = (card: Group, order: number) => {
+  if (card.userData.order === order) return
+  card.userData.order = order
+  card.traverse((object) => (object.renderOrder = order))
+}
+
 const EASE = 0.14
 // The pile's size, relative to a card's own: it's the only thing on
 // screen, so it can be big.
@@ -254,9 +272,9 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
   // Whether the last press moved (the click that follows its release
   // isn't one, if so).
   const pressMoved = useRef(false)
-  // Cards mid-toss (out beside the pile, before tucking in under it), and
-  // which way each went.
-  const tossed = useRef(new Map<number, number>())
+  // Cards mid-toss (out beside the pile, before tucking in under it):
+  // which way each went, and whether it's dropped behind the pile yet.
+  const tossed = useRef(new Map<number, { direction: number; behind: boolean }>())
   const dark = useStore((state) => state.colorScheme === 'dark')
   const { size, viewport } = useThree()
   const scroll = useScroll()
@@ -318,9 +336,15 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
       // Under the pile straight away, so the next card's ready to grab;
       // it's shown tossed out beside the pile for a moment, then tucks in.
       const card = top
-      tossed.current.set(card, Math.sign(current.dx))
+      const toss = { direction: Math.sign(current.dx), behind: false }
+      tossed.current.set(card, toss)
       setOrder((previous) => [previous[previous.length - 1], ...previous.slice(0, -1)])
-      window.setTimeout(() => tossed.current.delete(card), TUCK_MS)
+      window.setTimeout(() => {
+        toss.behind = true
+        window.setTimeout(() => {
+          if (tossed.current.get(card) === toss) tossed.current.delete(card)
+        }, BEHIND_MS)
+      }, TUCK_MS)
     }
 
     window.addEventListener('pointermove', handleMove)
@@ -365,14 +389,17 @@ function Stack({ items, onSelect, presence }: CarouselProps) {
       }
 
       let z = depth * LAYER
-      const direction = tossed.current.get(index)
-      if (direction !== undefined) {
-        // Still above the pile while it's out beside it.
-        x = direction * THROW
-        rz = -direction * 0.6
-        z = order.length * LAYER
+      let drawOrder = PILE_ORDER + depth
+      const toss = tossed.current.get(index)
+      if (toss) {
+        // Out beside the pile: above it, then behind it before tucking in.
+        x = toss.direction * THROW
+        rz = -toss.direction * 0.6
+        z = toss.behind ? -LAYER : order.length * LAYER
+        drawOrder = toss.behind ? PILE_ORDER - 1 : PILE_ORDER + order.length
       }
 
+      setCardOrder(card, drawOrder)
       easeTo(card, { x, y: place.y, z, rz }, EASE)
     })
   })
