@@ -46,6 +46,11 @@ import { adjacentDream, fadeInAudio, fadeOutAudio } from '../utils/swap-dream'
 // shows its last frame, or nothing, until the dream catches up), or bring
 // a swapped polaroid back.
 const DREAM_READY_TIMEOUT_MS = 8000
+// A swapped-in dream that's ready holds as a blank print this much longer
+// before it develops in, so a swap queued behind it (quick flicks, see
+// utils/swap-gesture.ts) skips straight past instead of each one in
+// between flashing in.
+const SWAP_SETTLE_MS = 250
 // The song fades out going back to the choose screen (over about as long as
 // the scene takes to close), and back in as a dream starts.
 const AUDIO_HOME_FADE_MS = 900
@@ -247,11 +252,14 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       }
 
       let done = false
+      let settle = 0
       const finish = () => {
         if (done) return
         done = true
-        const { swapPhase, setSwapPhase } = useStore.getState()
-        if (swapPhase === 'loading') setSwapPhase('in')
+        settle = window.setTimeout(() => {
+          const { swapPhase, setSwapPhase } = useStore.getState()
+          if (swapPhase === 'loading') setSwapPhase('in')
+        }, SWAP_SETTLE_MS)
       }
 
       switchDream(dream, time).then((result) => {
@@ -284,7 +292,10 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
         warmDream(adjacentDream(useStore.getState().swapDirection))
       })
       const timeout = setTimeout(finish, DREAM_READY_TIMEOUT_MS)
-      return () => clearTimeout(timeout)
+      return () => {
+        clearTimeout(timeout)
+        window.clearTimeout(settle)
+      }
     }, [dream, ref])
 
     useEffect(() => {
