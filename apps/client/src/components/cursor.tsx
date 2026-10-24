@@ -444,7 +444,8 @@ function Cursor() {
             <span className="font-serif italic text-sm whitespace-nowrap text-stone-900 dark:text-white bg-white/85 dark:bg-stone-900/85 backdrop-blur-sm rounded-full px-2.5 py-0.5 shadow-sm">
               {preview.dream.title}
             </span>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-stone-700 dark:text-stone-300 bg-white/85 dark:bg-stone-900/85 backdrop-blur-sm rounded-full px-2 shadow-sm opacity-0 group-data-[ready=true]:opacity-100 transition-opacity">
+            {/* Inverted against the name above it: it's the call to act. */}
+            <span className="font-mono text-[10px] uppercase tracking-widest text-white dark:text-stone-900 bg-stone-900/90 dark:bg-white/90 backdrop-blur-sm rounded-full px-2 shadow-sm opacity-0 group-data-[ready=true]:opacity-100 transition-opacity">
               let go
             </span>
           </div>
