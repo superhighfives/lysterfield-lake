@@ -17,21 +17,21 @@ import dreams from '../dreams.json'
 // so it can leave rather than vanish. A card only drops once its photo has
 // loaded, so it lands ready to develop. Once the scene's mounted
 // (`sceneLoaded`) and every card's photo has developed, the pile holds
-// for HOLD_MS, then falls away together (the top card a touch ahead),
+// for HOLD_MS, then falls away card by card from the top,
 // while the scene fades in beneath it (`pileLeaving`, routes/root.tsx).
 
 // The most cards the pile holds (a card per asset drei's progress counts),
 // each card's jitter in the pile (px, degrees). The fall in and out are
 // tailwind.config.js's card-drop and card-leave. DROP_STAGGER: the delay between cards that arrive together
 // (ms), so a batch drops one after another rather than in a lump;
-// LEAVE_STAGGER: the delay between one card leaving and the next, a
-// little looseness in a pile that otherwise falls as one; LEAVE_MS: how
+// LEAVE_STAGGER: the delay between one card leaving and the next, so the
+// pile peels away from the top rather than falling as one; LEAVE_MS: how
 // long until the last has gone.
 const MAX_CARDS = 20
 const JITTER: [number, number] = [34, 18]
 const TWIST = 16
 const DROP_STAGGER = 70
-const LEAVE_STAGGER = 12
+const LEAVE_STAGGER = 45
 // How long after a card starts falling its photo starts developing (ms).
 const DEVELOP_AFTER = 400
 // The develop itself (tailwind.config.js's develop), then how long the

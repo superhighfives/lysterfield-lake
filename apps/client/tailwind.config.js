@@ -29,9 +29,9 @@ export default {
         // A loading polaroid's photo developing: milky and pale, then the
         // tones, then the colour.
         develop: 'develop 1.6s ease-out both',
-        // And sliding away off the bottom once the scene's in, easing in
-        // and out rather than dropping — the pile keeping its shape, as one.
-        'card-leave': 'card-leave 1s cubic-bezier(0.65, 0, 0.35, 1) both',
+        // And falling away off the bottom once the scene's in: slowly at
+        // first, then faster as it goes.
+        'card-leave': 'card-leave 1s cubic-bezier(0.32, 0, 0.67, 0) both',
       },
       keyframes: {
         'card-drop': {
