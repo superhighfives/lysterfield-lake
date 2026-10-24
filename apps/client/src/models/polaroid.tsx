@@ -229,22 +229,23 @@ const Polaroid = forwardRef<
           (3.66 x 4.47 units) to show at all — an earlier 3.5 x 3.6 sat
           entirely hidden behind its own card — and the alpha map's soft
           box only fills its middle ~60%, so it's sized well past that.
-          It's also nudged left, toward the neighbour behind (cards
-          further left sit further back).
+          On the player's polaroid it's nudged left; on the chooser's
+          pile it falls down and a little right, onto the card beneath,
+          as a card resting on the pile would shade it.
           `depthWrite={false}`: it's meant to be seen through, not to
           occlude anything. */}
-      <mesh position={[-0.35, -0.2, -0.3]}>
+      <mesh position={layered ? [0.12, -0.32, -0.3] : [-0.35, -0.2, -0.3]}>
         <planeGeometry args={[5.6, 6.6]} />
         <meshBasicMaterial
           color="black"
           alphaMap={shadowTexture}
           transparent
-          // Much stronger for carousel cards in dark mode, where it falls
-          // on charcoal cards and black-on-near-black barely registers at
-          // the light value. Not on the player's polaroid, where it has no
-          // card behind to land on and just reads as a dark smudge on the
-          // background.
-          opacity={dark ? (layered ? 0.8 : 0.28) : 0.16}
+          // Stronger on the pile's cards, where it falls on the card
+          // beneath: much stronger in dark mode, where black on charcoal
+          // barely registers otherwise. Faint on the player's polaroid,
+          // where it has no card behind to land on and just reads as a
+          // dark smudge on the background.
+          opacity={layered ? (dark ? 0.8 : 0.4) : dark ? 0.28 : 0.16}
           depthWrite={false}
         />
       </mesh>

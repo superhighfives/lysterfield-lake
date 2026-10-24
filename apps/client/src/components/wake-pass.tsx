@@ -69,10 +69,10 @@ const RING_WIDTH_PX = 80
 const RING_PUSH_PX = 9
 const RING_LIGHT = 0.05
 const RING_NOISE = 0.012
-const RING_CREST = 0.3
-const RING_TROUGH = 0.1
+const RING_CREST = 0.45
+const RING_TROUGH = 0.15
 // Overlapping swells add up; past this the ripple read as grey circles.
-const RING_SLOPE_MAX = 0.12
+const RING_SLOPE_MAX = 0.15
 const RING_TROUGH_TINT = [0.36, 0.42, 0.48]
 
 const vertexShader = /* glsl */ `
