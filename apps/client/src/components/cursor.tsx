@@ -76,7 +76,8 @@ function Cursor() {
   const [mode, setMode] = useState<Mode>('default')
   const [visible, setVisible] = useState(false)
   const [label, setLabel] = useState('')
-  // The label sits above the ring rather than under it (see tick).
+  // The label sits above the ring rather than under it: in the lower half
+  // of the window (see tick).
   const [above, setAbove] = useState(false)
   /** Waiting on video: the old dream going, the next one loading, or the
    *  player buffering. Not the new dream's reveal, which has its video. */
@@ -241,10 +242,11 @@ function Cursor() {
             )?.textContent ?? '')
       }
 
-      // Over the player's controls at the bottom, the label goes above the
-      // ring, where the window's edge and the pill don't hide it.
-      const nextAbove =
-        next === 'hover' && !!hovered?.closest(INTERACTIVE)?.closest('[data-playhead]')
+      // In the lower half of the window, the label goes above the ring, where
+      // the window's edge and the player's controls don't hide it. By where
+      // the pointer is, not what it's over, so it doesn't jump back under
+      // the ring as the pointer leaves a control (and its label fades).
+      const nextAbove = pointer.y > window.innerHeight / 2
       if (nextAbove !== currentAbove) {
         currentAbove = nextAbove
         setAbove(nextAbove)
