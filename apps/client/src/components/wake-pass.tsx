@@ -58,14 +58,20 @@ const WAKE_PX = 20
 // RING_PUSH_PX) — the polaroids are the meshes on WAKE_MASK_LAYER, drawn
 // into a small soft mask, MASK_SCALE of the screen — and in dark mode
 // they're a faint lift of light on the bare page (RING_LIGHT), dithered
-// by RING_NOISE so the faint gradient doesn't band. In light mode the
-// water is the bend alone: any shade or glow there read as dirt.
+// by RING_NOISE so the faint gradient doesn't band. In light mode a plain
+// shade or glow read as dirt, so each swell is a ripple instead: a bright
+// crest on its leading side (RING_CREST) and a faint cool trough on its
+// trailing side (RING_TROUGH, in RING_TROUGH_TINT), as light refracts
+// through a real one.
 const MASK_SCALE = 0.25
 const RING_SPEED_PX = 150
 const RING_WIDTH_PX = 80
 const RING_PUSH_PX = 9
 const RING_LIGHT = 0.05
 const RING_NOISE = 0.012
+const RING_CREST = 0.8
+const RING_TROUGH = 0.5
+const RING_TROUGH_TINT = [0.36, 0.42, 0.48]
 
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
@@ -129,6 +135,8 @@ const fragmentShader = /* glsl */ `
     // leading side and back in on its trailing side.
     vec2 here = vUv * uSize;
     float swell = 0.0;
+    // Which side of the bands this is: + leading (the crest), - trailing.
+    float slope = 0.0;
     vec2 push = vec2(0.0);
     for (int i = 0; i < ${MAX_DROPS}; i++) {
       vec4 drop = uDrops[i];
@@ -140,6 +148,7 @@ const fragmentShader = /* glsl */ `
       // Eases in over the first moment, and out over the rest.
       float fade = smoothstep(0.0, 0.08, life) * (1.0 - life) * (1.0 - life) * drop.w;
       swell += band * fade;
+      slope -= front * band * fade;
       push -= normalize(away + 1e-5) * front * band * fade * 1.4;
     }
     swell = min(swell, 1.0);
@@ -155,6 +164,17 @@ const fragmentShader = /* glsl */ `
       // Premultiplied: light adds white.
       float amount = max(0.0, behind * ${RING_LIGHT.toFixed(3)} + grain);
       color += vec4(vec3(amount), amount);
+    }
+
+    // Light mode: the swells' crest and trough on the bare page.
+    float bare = (1.0 - color.a) * (1.0 - uDark);
+    if (bare > 0.0005 && abs(slope) > 0.0005) {
+      float grain = (hash(gl_FragCoord.xy) - 0.5) * ${RING_NOISE.toFixed(3)} * smoothstep(0.0, 0.05, abs(slope));
+      float crest = max(0.0, max(slope, 0.0) * ${RING_CREST.toFixed(3)} * bare + grain);
+      float trough = max(0.0, max(-slope, 0.0) * ${RING_TROUGH.toFixed(3)} * bare + grain);
+      // Premultiplied: the crest adds white, the trough its tint.
+      color += vec4(vec3(crest), crest);
+      color += vec4(vec3(${RING_TROUGH_TINT.map((c) => c.toFixed(2)).join(', ')}) * trough, trough);
     }
 
     gl_FragColor = color;

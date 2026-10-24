@@ -129,7 +129,9 @@ function Loading() {
           return (
             <div
               key={i}
-              className={`absolute inset-0 rounded-[2px] bg-white dark:bg-[#2b2826] shadow-[0_6px_18px_rgba(0,0,0,0.18)] dark:shadow-[0_6px_18px_rgba(0,0,0,0.6)] p-[12px] pb-[46px] ${
+              // Paper with a faint fall of light across it, a fine edge, and
+              // two shadows: tight where it touches, soft around it.
+              className={`absolute inset-0 flex flex-col rounded-[3px] p-[11px] bg-[linear-gradient(165deg,#ffffff,#f1eee9)] dark:bg-[linear-gradient(165deg,#36322e,#252220)] ring-1 ring-black/5 dark:ring-white/5 shadow-[0_1px_2px_rgba(0,0,0,0.1),0_10px_24px_rgba(0,0,0,0.16)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.5),0_10px_24px_rgba(0,0,0,0.6)] ${
                 leaving
                   ? 'motion-safe:animate-card-leave motion-reduce:opacity-0'
                   : 'motion-safe:animate-card-drop'
@@ -152,7 +154,7 @@ function Loading() {
               {/* Greyed here rather than on the photo, whose develop
                   animates its own filter. */}
               <div
-                className={`w-full h-full bg-[#e7e3dc] dark:bg-[#d9d4cb] transition-[filter] duration-1000 ${
+                className={`relative aspect-square w-full overflow-hidden bg-[#e7e3dc] dark:bg-[#d9d4cb] transition-[filter] duration-1000 ${
                   newest ? '' : 'grayscale'
                 }`}
               >
@@ -167,6 +169,20 @@ function Loading() {
                     animationDelay: `${dropDelays.current[i] + DEVELOP_AFTER}ms`,
                   }}
                 />
+                {/* The print set into the frame, and a soft sheen. */}
+                <div className="absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08),inset_0_1px_4px_rgba(0,0,0,0.12)] bg-[linear-gradient(135deg,rgba(255,255,255,0.22),rgba(255,255,255,0)_45%)]" />
+              </div>
+              {/* The caption strip: the dream's name and prompt, as on the
+                  chooser's cards. */}
+              <div className="flex-1 min-h-0 flex flex-col justify-center gap-[2px] px-[3px] overflow-hidden">
+                <span className="font-serif italic text-[15px] leading-none text-stone-800 dark:text-stone-200 truncate">
+                  {dream.title}
+                </span>
+                {dream.prompt ? (
+                  <span className="font-mono text-[7px] leading-tight text-stone-400 dark:text-stone-500 truncate">
+                    &ldquo;{dream.prompt}&rdquo;
+                  </span>
+                ) : null}
               </div>
             </div>
           )

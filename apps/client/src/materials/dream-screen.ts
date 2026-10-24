@@ -39,8 +39,8 @@ const GREY_NEAR = 0.2
 const GREY_FAR = 0.65
 const FADE_START = 0.4
 const FADE_ROUNDNESS = 2.5
-export const SCREEN_OPACITY = { light: 0.3, dark: 0.4 }
-const LIGHT_LIFT = { light: 0.45, dark: 0 }
+export const SCREEN_OPACITY = { light: 0.45, dark: 0.25 }
+const LIGHT_LIFT = { light: 0.3, dark: 0 }
 
 // Straight to clip space: the quad covers the screen wherever its mesh is.
 const vertexShader = /* glsl */ `
