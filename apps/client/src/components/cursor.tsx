@@ -309,9 +309,15 @@ function Cursor() {
   // On touch, the ring's labels and the drag's preview go above it, clear
   // of the finger, and over the bottom controls (above); under it otherwise.
   const touch = !fine
-  const labelTop = touch || above
+  // Spaced from the hover (or busy) ring's size, not the current one's, so
+  // the label holds still as the ring grows and shrinks on and off a
+  // control (on touch, from the ring as it is: there, the drag's).
+  const labelRing = RING_SIZE[mode === 'hover' ? 'hover' : 'busy']
+  const labelTop = touch
     ? -size / 2 - 28
-    : RING_SIZE[mode === 'hover' ? 'hover' : 'busy'] / 2 + 10
+    : above
+      ? -labelRing / 2 - 28
+      : labelRing / 2 + 10
 
   return (
     <div
