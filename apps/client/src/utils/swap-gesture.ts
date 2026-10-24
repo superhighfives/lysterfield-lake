@@ -86,6 +86,15 @@ export function canSwap() {
   )
 }
 
+// A drag can take hold a little sooner than a swap can start: while the
+// last swap's new polaroid settles in, so a quick second flick moves it
+// (and its swap waits for that one to finish, see SWAP_QUEUE_MS). Not
+// while the photo is fading out.
+function canDrag() {
+  const state = useStore.getState()
+  return canSwap() || (state.pileLeaving && state.showPlayhead && state.swapPhase === 'in')
+}
+
 export function commitDistance() {
   const width = polaroidRect.right - polaroidRect.left
   const distance = Math.max(COMMIT_MIN_PX, width * COMMIT_SHARE_OF_WIDTH)
@@ -111,16 +120,7 @@ export function dragPreview() {
 
 export function useSwapInput() {
   useEffect(() => {
-    // The press: where the drag starts from (it follows the finger while a
-    // swap isn't on yet, see track), and where and when it actually began.
-    let start: {
-      x: number
-      y: number
-      onPolaroid: boolean
-      pressX: number
-      pressY: number
-      pressTime: number
-    } | null = null
+    let start: { x: number; y: number; onPolaroid: boolean } | null = null
     // The drag's recent pointer samples, for the release velocity.
     let samples: { x: number; time: number }[] = []
     const sample = (x: number, time: number) => {
@@ -187,9 +187,6 @@ export function useSwapInput() {
         x: event.clientX,
         y: event.clientY,
         onPolaroid: nearPolaroid(event.clientX, event.clientY, 0),
-        pressX: event.clientX,
-        pressY: event.clientY,
-        pressTime: event.timeStamp,
       }
       samples = [{ x: event.clientX, time: event.timeStamp }]
     }
@@ -198,9 +195,9 @@ export function useSwapInput() {
     // (a hard flick can come with no move between press and release).
     const track = (event: PointerEvent) => {
       if (!start) return
-      // Not swappable yet: the drag's start follows the finger, so it
+      // Not draggable yet: the drag's start follows the finger, so it
       // takes up from here, without a jump, the moment it is.
-      if (!swapDrag.active && !canSwap()) {
+      if (!swapDrag.active && !canDrag()) {
         start.x = event.clientX
         start.y = event.clientY
         samples = [{ x: event.clientX, time: event.timeStamp }]
@@ -241,29 +238,15 @@ export function useSwapInput() {
       // The release counts as the drag's last move.
       const pressedAt = samples[0]
       track(event)
-      const { onPolaroid, pressX, pressY, pressTime } = start
+      const { onPolaroid } = start
       start = null
 
       if (!swapDrag.active) {
         const moved = Math.abs(event.clientX - (pressedAt?.x ?? event.clientX))
         if (onPolaroid && moved < TAP_DISTANCE && canSwap()) {
           useStore.getState().requestSwap(1)
-          return
         }
 
-        // Dragged while the last swap was still under way, so it never
-        // became a drag (see track): judged on the whole gesture instead,
-        // from the press, and waits for that swap (see swap).
-        const total = event.clientX - pressX
-        const elapsed = event.timeStamp - pressTime
-        const sideways = Math.abs(total) > Math.abs(event.clientY - pressY)
-        const fast = elapsed > 0 && Math.abs(total) / elapsed >= FLICK_VELOCITY
-        if (
-          sideways &&
-          Math.abs(total) >= FLICK_MIN_PX &&
-          (fast || Math.abs(total) >= commitDistance())
-        )
-          swap(directionOf(total))
         return
       }
 
