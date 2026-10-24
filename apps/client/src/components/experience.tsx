@@ -34,7 +34,8 @@ function Experience({
           pileLeaving ? 'opacity-100' : 'opacity-0'
         }`}
       >
-        <Canvas shadows dpr={dpr}>
+        {/* A stencil buffer for the chooser pile's shadows (models/polaroid.tsx). */}
+        <Canvas shadows dpr={dpr} gl={{ stencil: true }}>
           <Suspense fallback={null}>
             <Preload all />
             <Scene video={video} />

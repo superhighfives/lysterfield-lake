@@ -5,10 +5,13 @@ import { GLTF } from 'three-stdlib'
 import {
   BufferGeometry,
   CanvasTexture,
+  EqualStencilFunc,
   Group,
   Material,
   Mesh,
   MeshStandardMaterial,
+  NotEqualStencilFunc,
+  ReplaceStencilOp,
   Vector2,
 } from 'three'
 import { TessellateModifier } from 'three/examples/jsm/modifiers/TessellateModifier.js'
@@ -40,35 +43,34 @@ const shadowTexture = (() => {
   return new CanvasTexture(canvas)
 })()
 
-// The chooser's pile casts a tighter shadow: about the card's own size,
-// with a short soft edge, so each card shades just the strip of the card
-// beneath that shows past its edge. The broad one above, twenty deep,
-// built up into a dark halo under the pile.
-const contactShadowTexture = (() => {
-  const size = 256
-  const inset = 10
-  const canvas = document.createElement('canvas')
-  canvas.width = canvas.height = size
-  const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = 'black'
-  ctx.fillRect(0, 0, size, size)
-  ctx.shadowColor = 'white'
-  ctx.shadowBlur = 7
-  ctx.shadowOffsetX = size * 4
-  ctx.fillStyle = 'white'
-  ctx.fillRect(inset - size * 4, inset, size - inset * 2, size - inset * 2)
-  return new CanvasTexture(canvas)
-})()
-// The frame is 3.66 x 4.47 units; the contact shadow's plane is a little
-// larger, so its solid middle matches the card. It sits just behind the
-// card, closer than the next card down (the pile's LAYER, 0.25 of these
-// units, components/carousels/stack.tsx), so it lands on that card rather
-// than behind it.
-const CONTACT_SHADOW = {
-  size: [3.95, 4.8] as [number, number],
-  offset: [0.16, -0.2, -0.12] as [number, number, number],
-  opacity: { light: 0.35, dark: 0.6 },
+// The chooser's pile: every card marks where it is in the stencil buffer
+// (an invisible, card-shaped marker, drawn with the opaque objects, so all
+// are marked before any shadow), and casts two shadows down and a little
+// right: a hard-edged, faint one drawn only where a card is marked — on the
+// cards beneath, a fine line like the one the player's polaroid casts as it
+// bends — and a soft one drawn only where none is, on the backdrop. The
+// hard one ignores depth, so a photo sitting a touch forward of its frame
+// doesn't cut it; the cards above it, drawn later, cover it. The frame is
+// 3.66 x 4.47 units; the canvas needs a stencil buffer
+// (components/experience.tsx), and so does the wake's render target
+// (components/wake-pass.tsx).
+const PILE_CARD_SIZE: [number, number] = [3.66, 4.47]
+// A short cast, so each card leaves a thin line along the edges of the
+// card beneath: a longer one overlapped its neighbours' into stripes.
+const PILE_SHADOW_OFFSET: [number, number, number] = [0.05, -0.07, -0.12]
+const PILE_SHADOW_OPACITY = {
+  hard: { light: 0.08, dark: 0.3 },
+  soft: { light: 0.08, dark: 0.25 },
 }
+const STENCIL_MARK = { stencilWrite: true, stencilRef: 1, stencilZPass: ReplaceStencilOp }
+// Ignoring depth too (see above).
+const ON_CARDS = {
+  depthTest: false,
+  stencilWrite: true,
+  stencilRef: 1,
+  stencilFunc: EqualStencilFunc,
+}
+const OFF_CARDS = { stencilWrite: true, stencilRef: 1, stencilFunc: NotEqualStencilFunc }
 
 type GLTFResult = GLTF & {
   nodes: {
@@ -259,24 +261,42 @@ const Polaroid = forwardRef<
           (3.66 x 4.47 units) to show at all — an earlier 3.5 x 3.6 sat
           entirely hidden behind its own card — and the alpha map's soft
           box only fills its middle ~60%, so it's sized well past that.
-          It's also nudged left. On the chooser's pile it's the tight
-          contact shadow instead (CONTACT_SHADOW), falling down and a
-          little right onto the card beneath.
+          It's also nudged left. On the chooser's pile it's the stencil
+          marker and its two shadows instead (PILE_SHADOW_OPACITY).
           `depthWrite={false}`: it's meant to be seen through, not to
           occlude anything. */}
       {layered ? (
-        <mesh position={CONTACT_SHADOW.offset}>
-          <planeGeometry args={CONTACT_SHADOW.size} />
-          <meshBasicMaterial
-            color="black"
-            alphaMap={contactShadowTexture}
-            transparent
-            // Stronger in dark mode, where black on charcoal barely
-            // registers otherwise.
-            opacity={CONTACT_SHADOW.opacity[dark ? 'dark' : 'light']}
-            depthWrite={false}
-          />
-        </mesh>
+        <>
+          <mesh>
+            <planeGeometry args={PILE_CARD_SIZE} />
+            <meshBasicMaterial
+              colorWrite={false}
+              depthWrite={false}
+              {...STENCIL_MARK}
+            />
+          </mesh>
+          <mesh position={PILE_SHADOW_OFFSET}>
+            <planeGeometry args={PILE_CARD_SIZE} />
+            <meshBasicMaterial
+              color="black"
+              transparent
+              opacity={PILE_SHADOW_OPACITY.hard[dark ? 'dark' : 'light']}
+              depthWrite={false}
+              {...ON_CARDS}
+            />
+          </mesh>
+          <mesh position={PILE_SHADOW_OFFSET}>
+            <planeGeometry args={[5.6, 6.6]} />
+            <meshBasicMaterial
+              color="black"
+              alphaMap={shadowTexture}
+              transparent
+              opacity={PILE_SHADOW_OPACITY.soft[dark ? 'dark' : 'light']}
+              depthWrite={false}
+              {...OFF_CARDS}
+            />
+          </mesh>
+        </>
       ) : (
         <mesh position={[-0.35, -0.2, -0.3]}>
           <planeGeometry args={[5.6, 6.6]} />

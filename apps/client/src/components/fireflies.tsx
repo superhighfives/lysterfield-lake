@@ -43,8 +43,8 @@ const SCATTER_RATE_INTRO = 1.2
 // little taller than the frame so the scroll-parallax wrap happens off it.
 const SPREAD_Y = 1.3
 
-const BACK_COUNT = 70
-const FRONT_COUNT = 12
+const BACK_COUNT = 40
+const FRONT_COUNT = 7
 // renderOrder for each layer: before anything else in the scene, and after
 // everything.
 const BACK_RENDER_ORDER = -1

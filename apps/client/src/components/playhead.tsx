@@ -170,12 +170,25 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
             console.warn(`Playback didn't start: ${error.name}`)
           }
         })
-      dreamReady.then(() => {
+      // Arriving straight at a dream (its URL), the song waits for the
+      // loading pile to start leaving, rather than starting under it.
+      let stopWaiting = () => {}
+
+      const pileLeft = new Promise<void>((resolve) => {
+        if (useStore.getState().pileLeaving) return resolve()
+        stopWaiting = useStore.subscribe((state) => {
+          if (!state.pileLeaving) return
+          stopWaiting()
+          resolve()
+        })
+      })
+      Promise.all([dreamReady, pileLeft]).then(() => {
         if (!cancelled && !failed) play(true)
       })
 
       return () => {
         cancelled = true
+        stopWaiting()
         el.removeEventListener('loadedmetadata', seek)
       }
       // Reloads only for a new main source; a dream change on the same one
@@ -517,7 +530,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
               ref={(el) => el?.setAttribute('noautohide', '')}
               className="flex flex-col xs:flex-row w-full h-full xs:space-x-3 items-center"
             >
-              <div className="flex flex-1 xs:flex-none self-stretch items-center justify-evenly xs:justify-center border-b xs:border-r xs:border-b-0 border-yellow-500">
+              <div className="flex flex-1 xs:flex-none self-stretch items-stretch justify-evenly xs:justify-center border-b xs:border-r xs:border-b-0 border-yellow-500">
                 <Footer />
                 <div className="group flex relative">
                   <MediaMuteButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 py-2 xs:px-2 xs:py-1">

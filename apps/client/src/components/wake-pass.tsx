@@ -189,7 +189,9 @@ function WakePass() {
   const size = useThree((state) => state.size)
 
   const target = useMemo(() => {
-    const renderTarget = new WebGLRenderTarget(1, 1)
+    // With a stencil buffer, as the canvas has, for the chooser pile's
+    // shadows (models/polaroid.tsx).
+    const renderTarget = new WebGLRenderTarget(1, 1, { stencilBuffer: true })
     renderTarget.texture.colorSpace = SRGBColorSpace
     // Plain RGBA8, not an sRGB format: the values written are already
     // sRGB-encoded (see the flag below), so the texture must store them as

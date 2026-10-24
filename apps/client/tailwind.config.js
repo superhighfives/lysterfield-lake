@@ -29,9 +29,10 @@ export default {
         // A loading polaroid's photo developing: milky and pale, then the
         // tones, then the colour.
         develop: 'develop 1.6s ease-out both',
-        // And falling away off the bottom once the scene's in: slowly at
+        // And scattering off the screen once the scene's in, each card its
+        // own way (--sx, --sy, --sr, components/loading.tsx): slowly at
         // first, then faster as it goes.
-        'card-leave': 'card-leave 1s cubic-bezier(0.32, 0, 0.67, 0) both',
+        'card-leave': 'card-leave 0.6s cubic-bezier(0.32, 0, 0.67, 0) both',
       },
       keyframes: {
         'card-drop': {
@@ -60,7 +61,7 @@ export default {
           },
           '100%': {
             transform:
-              'translate(var(--x), calc(var(--y) + 85vh)) rotate(calc(var(--r) - 10deg)) scale(0.94)',
+              'translate(calc(var(--x) + var(--sx)), calc(var(--y) + var(--sy))) rotate(calc(var(--r) + var(--sr)))',
           },
         },
         'fade-in': {

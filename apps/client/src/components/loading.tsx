@@ -17,7 +17,7 @@ import dreams from '../dreams.json'
 // so it can leave rather than vanish. A card only drops once its photo has
 // loaded, so it lands ready to develop. Once the scene's mounted
 // (`sceneLoaded`) and every card's photo has developed, the pile holds
-// for HOLD_MS, then falls away card by card from the top,
+// for HOLD_MS, then scatters card by card from the top,
 // while the scene fades in beneath it (`pileLeaving`, routes/root.tsx).
 
 // The most cards the pile holds (a card per asset drei's progress counts),
@@ -31,14 +31,29 @@ const MAX_CARDS = 20
 const JITTER: [number, number] = [34, 18]
 const TWIST = 16
 const DROP_STAGGER = 70
-const LEAVE_STAGGER = 45
+const LEAVE_STAGGER = 25
 // How long after a card starts falling its photo starts developing (ms).
 const DEVELOP_AFTER = 400
 // The develop itself (tailwind.config.js's develop), then how long the
 // developed pile holds before it falls away (ms).
 const DEVELOP_MS = 1600
 const HOLD_MS = 1000
-const LEAVE_MS = 1000 + MAX_CARDS * LEAVE_STAGGER
+const LEAVE_MS = 600 + MAX_CARDS * LEAVE_STAGGER
+
+// How the pile scatters as it leaves: each card flies off in its own
+// direction, SCATTER_DISTANCE (vmax, enough to clear the screen from the
+// middle) plus a little more for some, turning up to SCATTER_SPIN degrees.
+const SCATTER_DISTANCE = 75
+const SCATTER_SPIN = 140
+const scatter = (i: number) => {
+  const angle = seeded(i, 4) * Math.PI * 2
+  const distance = SCATTER_DISTANCE * (1 + seeded(i, 5) * 0.3)
+  return {
+    '--sx': `${Math.cos(angle) * distance}vmax`,
+    '--sy': `${Math.sin(angle) * distance}vmax`,
+    '--sr': `${(seeded(i, 6) - 0.5) * 2 * SCATTER_SPIN}deg`,
+  }
+}
 
 // The photos the pile shows (one per dream, repeating), preloaded as it
 // mounts so a card can wait for its own.
@@ -141,6 +156,9 @@ function Loading() {
                   '--x': `${(seeded(i, 1) - 0.5) * 2 * JITTER[0]}px`,
                   '--y': `${(seeded(i, 2) - 0.5) * 2 * JITTER[1]}px`,
                   '--r': `${(seeded(i, 3) - 0.5) * 2 * TWIST}deg`,
+                  // Where it scatters to as the pile leaves: its own
+                  // direction, far enough to clear the screen, with a spin.
+                  ...scatter(i),
                   // The top card leaves first.
                   animationDelay: `${
                     leaving
