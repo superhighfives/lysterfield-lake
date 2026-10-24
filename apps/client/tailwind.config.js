@@ -24,7 +24,7 @@ export default {
         background: 'background 30s linear infinite',
         'fade-in': 'fade-in 0.3s linear forwards',
         // Fading in from --from (px, sideways), easing to a stop.
-        'slide-in': 'slide-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both',
+        'slide-in': 'slide-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both',
         // A loading polaroid falling onto the pile from above the window
         // (components/loading.tsx), overshooting a touch as it lands.
         'card-drop': 'card-drop 0.55s cubic-bezier(0.3, 1.35, 0.5, 1) both',
