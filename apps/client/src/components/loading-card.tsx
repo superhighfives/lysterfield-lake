@@ -3,6 +3,20 @@ import type { Dream } from '../utils/types'
 
 export const heroUrl = (id: string) => `/assets/${id}/hero.jpg`
 
+// The loading pile spreads wide, as cards tossed down from all over: up
+// to SPREAD of the window's size each way (capped at SPREAD_MAX px). Here,
+// not in components/loading.tsx, so the pile's placeholder
+// (components/loading-shell.tsx) lays out the same, with the count below
+// it PILE_GAP clear of the spread.
+const SPREAD: [number, number] = [0.16, 0.12]
+const SPREAD_MAX: [number, number] = [170, 110]
+export const PILE_GAP = 40
+export const pileSpread = (axis: 0 | 1) =>
+  Math.min(
+    (axis === 0 ? window.innerWidth : window.innerHeight) * SPREAD[axis],
+    SPREAD_MAX[axis]
+  )
+
 // A polaroid in HTML, 180 x 220: the loading pile's cards
 // (components/loading.tsx), and the dream about to play on the title
 // screen (routes/root.tsx). Paper with a faint fall of light across it, a

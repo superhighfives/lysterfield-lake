@@ -2,7 +2,7 @@ import { CSSProperties, useEffect, useRef, useState } from 'react'
 import { useProgress } from '@react-three/drei'
 import { seeded } from './carousels/shared'
 import Spinner from './spinner'
-import LoadingCard, { heroUrl } from './loading-card'
+import LoadingCard, { heroUrl, PILE_GAP, pileSpread } from './loading-card'
 import { useStore } from '../store'
 import { dreamFromLocation } from '../utils/use-history-sync'
 import type { Dream } from '../utils/types'
@@ -24,15 +24,16 @@ import dreams from '../dreams.json'
 // while the scene fades in beneath it (`pileLeaving`, routes/root.tsx).
 
 // The most cards the pile holds (a card per asset drei's progress counts),
-// each card's jitter in the pile (px, degrees). The fall in and out are
+// how far the pile spreads (below). The fly in and out are
 // tailwind.config.js's card-drop and card-leave. DROP_STAGGER: the delay between cards that arrive together
 // (ms), so a batch drops one after another rather than in a lump;
 // LEAVE_STAGGER: the delay between one card leaving and the next, so the
 // pile peels away from the top rather than falling as one; LEAVE_MS: how
 // long until the last has gone.
 const MAX_CARDS = 20
-const JITTER: [number, number] = [34, 18]
-const TWIST = 16
+// Turned up to TWIST, and spread wide (pileSpread, loading-card.tsx).
+const TWIST = 24
+const spread = pileSpread
 const DROP_STAGGER = 70
 const LEAVE_STAGGER = 25
 // How long after a card starts falling its photo starts developing (ms).
@@ -151,7 +152,11 @@ function Loading() {
   if (gone) return null
 
   return (
-    <div className="fixed inset-0 z-10 flex flex-col items-center justify-center gap-10 pointer-events-none whitespace-nowrap">
+    <div
+      className="fixed inset-0 z-10 flex flex-col items-center justify-center pointer-events-none whitespace-nowrap"
+      // The count sits clear of the pile's spread.
+      style={{ gap: single ? PILE_GAP : PILE_GAP + spread(1) }}
+    >
       <div className="relative w-[180px] h-[220px]">
         {/* Behind the cards, which cover it as they land. Already faded in
             by components/loading-shell.tsx, which draws it here first. */}
@@ -181,8 +186,8 @@ function Loading() {
               }`}
               style={
                 {
-                  '--x': single ? '0px' : `${(seeded(i, 1) - 0.5) * 2 * JITTER[0]}px`,
-                  '--y': single ? '0px' : `${(seeded(i, 2) - 0.5) * 2 * JITTER[1]}px`,
+                  '--x': single ? '0px' : `${(seeded(i, 1) - 0.5) * 2 * spread(0)}px`,
+                  '--y': single ? '0px' : `${(seeded(i, 2) - 0.5) * 2 * spread(1)}px`,
                   '--r': single ? `${SINGLE_TWIST}deg` : `${(seeded(i, 3) - 0.5) * 2 * TWIST}deg`,
                   // Where it scatters to as the pile leaves: its own
                   // direction, far enough to clear the screen, with a spin.
