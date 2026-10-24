@@ -72,6 +72,19 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     // The controls and the name wait for the loading pile to leave
     // (components/loading.tsx), rather than showing over it.
     const pileLeaving = useStore((state) => state.pileLeaving)
+    // Where the name comes in from (px, sideways): after a swap, the side
+    // the polaroid was dragged toward (dragging left is direction 1); a
+    // dream chosen any other way, nowhere (it just fades in). Read as the
+    // dream changes, mid-swap, and used when it's announced (below), which
+    // restarts the entrance (announceKey) so it's seen, not over while
+    // the name was still hidden.
+    const swapEntrance = useRef(0)
+    useEffect(() => {
+      const { swapPhase, swapDirection } = useStore.getState()
+      swapEntrance.current = swapPhase === 'idle' ? 0 : -swapDirection * 24
+    }, [dream])
+    const [enterFrom, setEnterFrom] = useState(0)
+    const [announceKey, setAnnounceKey] = useState(0)
     // Arriving straight at a dream (its URL), its name isn't announced:
     // the title screen and the loading polaroid have already shown it.
     const arrivedAt = useRef(dreamFromLocation()?.id ?? null)
@@ -84,6 +97,8 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       }
 
       arrivedAt.current = null
+      setEnterFrom(swapEntrance.current)
+      setAnnounceKey((key) => key + 1)
       setAnnouncing(true)
       const timeout = setTimeout(() => setAnnouncing(false), ANNOUNCE_MS)
       return () => clearTimeout(timeout)
@@ -419,7 +434,11 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
           }`}
         >
           {dream ? (
-            <div key={dream.id} className="animate-fade-in flex flex-col items-center">
+            <div
+              key={`${dream.id}-${announceKey}`}
+              className="animate-slide-in flex flex-col items-center"
+              style={{ '--from': `${enterFrom}px` } as CSSProperties}
+            >
               <span className="font-serif italic text-xl text-stone-900 dark:text-stone-100">
                 {dream.title}
               </span>

@@ -68,6 +68,8 @@ export function canSwap() {
   const state = useStore.getState()
   const split = isSplit(state.dream)
   return (
+    // Not while the loading pile is still up (components/loading.tsx).
+    state.pileLeaving &&
     state.showPlayhead &&
     state.polaroidPillVisible &&
     (state.swapPhase === 'idle' || (split && state.swapPhase === 'loading')) &&
