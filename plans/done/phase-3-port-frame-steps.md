@@ -17,7 +17,7 @@ and get their own follow-up spec once this lands, since they depend on the
 Cog model push and Kling integration being wired up separately.
 
 This is phase 3 of
-[`rebuild-pipeline-as-replicate-cli.md`](../in-progress/rebuild-pipeline-as-replicate-cli.md)
+[`rebuild-pipeline-as-replicate-cli.md`](rebuild-pipeline-as-replicate-cli.md)
 — see that document for full architecture and the model inventory table.
 This spec only covers phase 3's own scope and the exact technical parameters
 extracted from the legacy scripts.

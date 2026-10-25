@@ -26,6 +26,8 @@ type Take = {
   notes?: string
   samples: number[]
   hasPreview: boolean
+  /** `compose-split` has made the take's whole-song dream video (`split/dream.mp4`). */
+  hasSong?: boolean
   /** The person check on the 15-second clip: undefined if there is no clip yet, null if it hasn't been checked. */
   clipCheck?: CheckSummary | null
   method?: 'flux-kontext' | 'deforum'
@@ -688,7 +690,14 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
             {reject}
           </>
         )}
-        {take.status === 'generated' && <span className="text-sm text-stone-600 dark:text-stone-400">Frames are in 7-dreams/{take.id}/frames. Publish it with the pipeline&apos;s compose command.</span>}
+        {take.status === 'generated' &&
+          (take.hasSong ? (
+            <a href={`/?preview=${job}/${take.id}/song`} target="_blank" rel="noreferrer" className={plain}>
+              Watch the song in the player
+            </a>
+          ) : (
+            <span className="text-sm text-stone-600 dark:text-stone-400">Frames are in 7-dreams/{take.id}/frames. Watch it here once the pipeline&apos;s compose and compose-split have run.</span>
+          ))}
         {take.status === 'rejected' && (
           <button type="button" onClick={() => onUpdate(take.id, { status: 'proposed' })} className="text-sm underline">
             Move back to review

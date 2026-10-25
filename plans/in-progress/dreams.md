@@ -2,7 +2,7 @@
 title: "Dreams: make, check, repair and publish panel 7 takes"
 status: In Progress
 created: 2026-10-12
-updated: 2026-10-21
+updated: 2026-10-25
 ---
 
 # Dreams: make, check, repair and publish panel 7 takes
@@ -134,6 +134,44 @@ review becomes "confirm the stretches the detector still flags" instead of
   take that leaks heavily is seen before the full song is paid for. The
   clip's leak rate is shown on the take card next to the cost of the song.
 
+### The check misses painted faces (2026-10-25)
+
+Sharp Edges was published with `dream-check` reporting "No person found in
+2578 frames", and its loop alone shows a painted face. A look through every
+published dream (60 frames each: its 20 highest scores and 40 spread through
+the song):
+
+| Dream | What's there |
+| --- | --- |
+| sharp-edges | A painted face or figure in about half the frames, all song |
+| charcoal | The figure throughout; clear faces after the cut |
+| ink-flight | Faces with eyes and mouths through the first half |
+| ghiblis-dream, mood-lighting, clouds-of-air | A head-and-shoulders silhouette; a red face in profile or the back of a head near the end |
+| paper-planes, horizon-storm | Mostly clean: possibly a hand, tiny figures on the water |
+| watercolour, dirty-palette, lush-and-light | Clean |
+
+Why the check passed them:
+
+- **The probe learned that painted faces are fine.** Its labels are the
+  2023 replacements, and the rule above calls the ink-wash bust the
+  intended look. A face painted onto the bust is the bust to the probe:
+  sharp-edges' face at job frames 145-153 scores 0.13 to 0.31, and
+  charcoal and ink-flight never pass 0.34. A lower threshold doesn't help,
+  because clean takes score as high (dirty-palette and paper-planes have
+  more frames over 0.1 than charcoal does).
+- **The reroll used the same probe and threshold.** `predict.py` keeps the
+  first attempt at or under 0.35, so sharp-edges is a search for faces the
+  probe misses: 187 of its frames score 0.30 to 0.35, and its highest is
+  0.34991. `dream-check` then runs that same probe, so it can't flag what
+  the reroll let through.
+
+What changes: a second check that doesn't share the probe's blind spot,
+for faces (a face detector or a vision model over the frames). It runs in
+`dream-check` and in the reroll, beside the probe, and a frame fails if
+either flags it. Then retrain the probe with the line redrawn: a silhouette
+is fine, a readable face isn't, bust or not (to confirm with the user).
+Contact sheets: `.jobs/spikes/face-audit/<dream>.jpg`.
+
 ### 6. Repair: re-render, never interpolate
 
 No RIFE (user, 2026-10-12): the interpolated morph loses the stop-motion
@@ -231,7 +269,7 @@ that name moved to `lysterfield-lake-archive`). The ten legacy dreams are there,
 under their readable ids. The old site's bucket and datestamp folders are
 left as they were.
 
-For a new take (the steps in detail: `ready/next-dream.md`):
+For a new take (the steps in detail: `in-progress/next-dream.md`):
 
 1. `compose --job .jobs/full-video --take <take> --id <client-id>` (local,
    25-38 minutes): the stills and loop into
@@ -333,6 +371,11 @@ Check and repair:
 - [x] `dream-check` (`models/person-check/`, `dream-check.ts`), trained
       and cross-validated on the 2023 keep/replace decisions
 - [ ] Feed a reviewed take's decisions back into `train.py`
+- [ ] A second, independent face check in `dream-check` and the reroll
+      (see "The check misses painted faces")
+- [ ] Retrain the probe with readable faces as bad, bust or not
+- [ ] Re-check all eleven published dreams with both, then repair or pull
+      what fails (sharp-edges, charcoal, ink-flight first)
 - [x] Reroll in the model, with `scores.json` (`predict.py`: up to two
       retries, a new seed and then repainting more)
 - [x] Measure the reroll on the walk-away stretch (see Results)
@@ -375,11 +418,13 @@ Fewer leaks:
 Make and publish:
 
 - [ ] Try the whole loop on one new take for `full-video` (a real clip, a
-      real full song, check, repair): `ready/next-dream.md`
+      real full song, check, repair): `in-progress/next-dream.md`
 - [x] Compose all ten legacy dreams (re-compose `lush-and-light`): done
       2026-10-16, 24 to 38 minutes each, about 5½ hours in all, one at a
-      time. Videos in `apps/client/dreams/<id>/` (gitignored, for R2);
-      stills, hero and loop in `public/assets/<id>/` (committed). The 2023
+      time. Videos in `apps/client/dreams/<id>/` (gitignored, for R2;
+      since 2026-10-25 they stay in the job and dev plays the bucket);
+      stills, hero and loop in `public/assets/<id>/` (committed; the
+      stills and `loop.webm` were unused and went on 2026-10-25). The 2023
       stills and loops that sat beside the videos, unused by the client,
       moved to `.jobs/spikes/legacy-client-dream-extras/` so the R2 sync
       doesn't upload them

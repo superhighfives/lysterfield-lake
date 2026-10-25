@@ -14,7 +14,7 @@ preview generation) into `apps/pipeline/src/compose.ts`, and have the CLI
 write its output directly into the shapes `apps/client` actually reads —
 retiring `scripts/generate-dreams.js`'s manual bookkeeping role. This is
 the fourth phase bullet in
-[`rebuild-pipeline-as-replicate-cli.md`](../in-progress/rebuild-pipeline-as-replicate-cli.md)
+[`rebuild-pipeline-as-replicate-cli.md`](rebuild-pipeline-as-replicate-cli.md)
 — see that document for full project architecture and the model inventory.
 This spec covers phase 4's own scope and the exact technical detail pulled
 from the legacy script and the live client source. Builds directly on

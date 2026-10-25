@@ -173,7 +173,7 @@ function load(slot: Slot, dream: Dream, time: number) {
   slot.settled = false
   slot.failed = false
   const el = slot.el
-  el.src = `${dreamsUrl}/${dream.id}/dream${small()}.${extension}`
+  el.src = `${dream.dreamSrc ?? `${dreamsUrl}/${dream.id}`}/dream${small()}.${extension}`
   el.load()
   slot.ready = new Promise<void>((done) => {
     const resolve = () => {

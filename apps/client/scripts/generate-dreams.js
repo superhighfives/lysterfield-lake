@@ -8,7 +8,9 @@ const getDirectories = (source) =>
     .filter((dirent) => dirent.isDirectory())
     .map((dirent) => dirent.name)
 
-const dreams = getDirectories('./dreams')
+// Every dream has its chooser assets (hero.jpg, loop.mov) committed in
+// public/assets/<id>/; its videos are in the bucket (VITE_APP_DREAMS).
+const ids = getDirectories('./public/assets')
 
 const existingDreamsData = fs.readFileSync('src/dreams.json', {
   encoding: 'utf8',
@@ -16,30 +18,26 @@ const existingDreamsData = fs.readFileSync('src/dreams.json', {
 
 const existingDreams = JSON.parse(existingDreamsData)
 
-if (dreams.length === 0 && existingDreams.length > 0) {
+if (ids.length === 0 && existingDreams.length > 0) {
   console.warn(
-    'dreams/ has no scene folders locally — leaving src/dreams.json untouched instead of wiping it. Sync dreams/ first if you want to regenerate.'
+    'public/assets/ has no dream folders — leaving src/dreams.json untouched instead of wiping it.'
   )
   process.exit(0)
 }
 
-// Not dreams: old takes, and the split layout's shared main video
-// (dreams/main/, see src/utils/dream-video.ts).
-const scenes = dreams.filter((dream) => dream != 'archive' && dream != 'main')
-
 // Order is the chooser's: the first dream is the newest, on top of the
 // stack (see src/routes/root.tsx). Known dreams keep their place, and a new
-// scene folder goes first.
+// one goes first.
 const dreamsOutput = [
-  ...scenes
-    .filter((dream) => !existingDreams.some((d) => d.id === dream))
-    .map((dream) => ({
-      id: dream,
+  ...ids
+    .filter((id) => !existingDreams.some((d) => d.id === id))
+    .map((id) => ({
+      id,
       title: 'TBA',
       link: '',
       prompt: '',
     })),
-  ...existingDreams.filter((d) => scenes.includes(d.id)),
+  ...existingDreams.filter((d) => ids.includes(d.id)),
 ]
 
 let data = JSON.stringify(dreamsOutput)

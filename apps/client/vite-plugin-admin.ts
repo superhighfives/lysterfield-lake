@@ -238,6 +238,7 @@ function jobDetail(job: string) {
             ...(readJson(path.join(take, 'take.json')) as object),
             samples: existsSync(samplesDir) ? readdirSync(samplesDir).filter((f) => f.endsWith('.jpg')).map((f) => Number(f.slice(0, 4))) : [],
             hasPreview: existsSync(path.join(take, 'preview', 'video.mov')),
+            hasSong: existsSync(path.join(take, 'split', 'dream.mp4')),
             clipCheck: checkSummary(path.join(take, 'preview', 'dream')),
             modified: statSync(path.join(take, 'take.json')).mtimeMs,
           }
@@ -435,12 +436,27 @@ function send(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body))
 }
 
-function serveFile(res: ServerResponse, job: string, rel: string) {
+function serveFile(req: IncomingMessage, res: ServerResponse, job: string, rel: string) {
   const dir = jobDir(job)
   const file = path.resolve(dir, rel)
   if (!file.startsWith(dir + path.sep) || !existsSync(file) || !statSync(file).isFile()) return send(res, 404, { error: 'not found' })
   res.setHeader('Content-Type', CONTENT_TYPES[path.extname(file)] ?? 'application/octet-stream')
   res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Accept-Ranges', 'bytes')
+  // Videos ask for byte ranges to seek (Safari won't play one without them).
+  const size = statSync(file).size
+  const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '')
+  if (range && (range[1] || range[2])) {
+    const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]))
+    const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1
+    if (start > end || start >= size) {
+      res.writeHead(416, { 'Content-Range': `bytes */${size}` })
+      return res.end()
+    }
+    res.writeHead(206, { 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': end - start + 1 })
+    return createReadStream(file, { start, end }).pipe(res)
+  }
+  res.setHeader('Content-Length', size)
   createReadStream(file).pipe(res)
 }
 
@@ -463,7 +479,7 @@ export default function adminPlugin(): Plugin {
             if (!origin || new URL(origin).host !== req.headers.host) return send(res, 403, { error: 'cross-origin request refused' })
           }
           const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent)
-          if (parts[0] === 'files' && parts.length > 2) return serveFile(res, parts[1], parts.slice(2).join('/'))
+          if (parts[0] === 'files' && parts.length > 2) return serveFile(req, res, parts[1], parts.slice(2).join('/'))
           if (parts[0] === 'colours' && parts[1]) {
             const file = path.join(COLOURS_DIR, path.basename(parts[1]))
             if (!existsSync(file)) return send(res, 404, { error: 'not found' })

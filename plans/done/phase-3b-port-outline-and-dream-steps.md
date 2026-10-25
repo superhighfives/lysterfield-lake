@@ -16,7 +16,7 @@ phase wires them into `apps/pipeline` the same way phase 3a wired the six
 already-on-Replicate steps.
 
 This is the second "Phase 3" bullet in
-[`rebuild-pipeline-as-replicate-cli.md`](../in-progress/rebuild-pipeline-as-replicate-cli.md)
+[`rebuild-pipeline-as-replicate-cli.md`](rebuild-pipeline-as-replicate-cli.md)
 — see that document and
 [`plans/done/phase-3-port-frame-steps.md`](../done/phase-3-port-frame-steps.md)
 for full architecture, the model inventory, and the infra (`replicate.ts`,
