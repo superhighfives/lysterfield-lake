@@ -101,7 +101,9 @@ export function restoreFromLocation() {
   }
 
   if (target.id === dream?.id) return
-  const time = savedTime(target.id) || target.start
+  // A take's test clip always starts at the clip, not wherever an earlier
+  // visit left off.
+  const time = target.start ?? savedTime(target.id)
   setResume(time ? { dreamId: target.id, time } : null)
   setDream(target)
 }
