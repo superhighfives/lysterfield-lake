@@ -501,6 +501,7 @@ async function composeAndPublish(
   take: string,
   opts: { id?: string; skipClient?: boolean; clientDir?: string }
 ): Promise<void> {
+  if (take === 'main') throw new Error('A take named "main" would overwrite the shared main video in the bucket')
   const id = opts.id ?? take
   // Panel 1 is free and local, so it's made here on first compose if `words` hasn't been run yet (skipped once its frames exist).
   const wordsResult = await words(job, frameDirFlag(job, '0-source/frames', 'source'))
@@ -517,7 +518,6 @@ async function composeAndPublish(
   console.log(JSON.stringify(result, null, 2))
   // The videos the player loads: the shared main video (made once per job) and this take's dream video, made
   // afresh since its panel was just compiled again. They stay in the job until scripts/upload-dreams.sh.
-  if (take === 'main') throw new Error('A take named "main" would overwrite the shared main video in the bucket')
   console.log(JSON.stringify(await composeSplit(job, [take], { fresh: true }), null, 2))
 
   if (!opts.skipClient) {
