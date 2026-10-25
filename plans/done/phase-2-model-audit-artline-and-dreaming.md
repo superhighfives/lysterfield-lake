@@ -17,7 +17,7 @@ the whole plan" — if a modern video model holds up visually, it collapses a
 whole messy manual lane into one Replicate call per scene.
 
 This is phase 2 of
-[`rebuild-pipeline-as-replicate-cli.md`](../in-progress/rebuild-pipeline-as-replicate-cli.md)
+[`rebuild-pipeline-as-replicate-cli.md`](rebuild-pipeline-as-replicate-cli.md)
 (currently in-progress) — see that document for full project context,
 architecture, and the model inventory table. Don't duplicate that context
 here; this spec only covers phase 2's own scope and execution detail.

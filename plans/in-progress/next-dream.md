@@ -1,8 +1,8 @@
 ---
 title: Make and publish an eleventh dream
-status: Ready
+status: In Progress
 created: 2026-10-21
-updated: 2026-10-21
+updated: 2026-10-25
 ---
 
 # Make and publish an eleventh dream
@@ -17,6 +17,16 @@ This is the "try the whole loop on one new take" task in
 `in-progress/dreams.md`, which holds the tooling and the person check. This
 plan is the run itself, plus the publishing steps that changed when the next
 app got its own bucket and automatic deploys.
+
+## Outcome so far (2026-10-25)
+
+The whole loop ran once: `sharp-edges` (the take of that name) went from
+samples to the next app, first in the chooser, on 2026-10-22, with 219
+repair stretches along the way. Then it failed review: it shows a painted
+face or figure in about half its frames, and `dream-check` passed every
+one. Why, and what changes, is in `in-progress/dreams.md` ("The check
+misses painted faces"). So the plan's goal, a take with no people in it,
+isn't met yet. The redo waits for the new face check.
 
 ## Context
 
@@ -52,17 +62,18 @@ and the in-model reroll to keep people out; `NO_PEOPLE_SUFFIX` only applies
 on the flux-kontext path. `dream-repair` is capped at `MAX_REPAIR_ROUNDS`
 (10).
 
-**What publishing writes:**
+**What publishing writes** (since 2026-10-25):
 
-- `compose` writes the 7-panel `apps/client/dreams/<id>/video{,-small}.{webm,mov}`
-  (gitignored), the stills `public/assets/<id>/{hero,00-03}.jpg` and the
-  `loop.{mov,webm}` (committed), and a `src/dreams.json` entry with title
-  `TBA`, an empty prompt and a placeholder link.
-- `compose-split` writes the dream-only `dreams/<id>/dream{,-small}.{mp4,webm}`
-  from the take's `video/panel.mov` (which `compose` makes), and rewrites the
-  shared `dreams/main/main*`.
-- The app plays only the split files. Its videos are in the
-  `lysterfield-lake-dreams` bucket, at dreams.lysterfieldlake.com.
+- `compose` writes the 7-panel `7-dreams/<take>/final/video*` and the
+  take's `video/panel.mov` in the job, and the chooser's
+  `public/assets/<id>/{hero.jpg,loop.mov}` (committed) plus a
+  `src/dreams.json` entry with title `TBA` and an empty prompt.
+- `compose-split` writes the dream-only `7-dreams/<take>/split/dream{,-small}.{mp4,webm}`
+  from `video/panel.mov`, and rewrites the shared `main/main*` in the job.
+- The app plays only the split files, from the `lysterfield-lake-dreams`
+  bucket at dreams.lysterfieldlake.com, in development too. Before
+  they're uploaded, `/admin`'s "Watch the song in the player"
+  (`?preview=<job>/<take>/song`) plays the take's split files from the job.
   The site deploys itself when `main` changes (`.github/workflows/deploy.yml`),
   building from the committed `dreams.json`.
 
@@ -87,8 +98,8 @@ on the next bucket already has the depth fix (`done/depth-walk-away-gaps.md`).
    `compose-split --takes <client-id>`. Fill in the `dreams.json` entry's
    title and prompt (the `link` is unused now: every dream links to the one
    YouTube video, `utils/youtube.ts`).
-6. **Upload** the dream's split files to the next bucket with
-   `apps/client/scripts/upload-dreams.sh <id>`: additive, skipping any
+6. **Upload** the dream's split files to the bucket with
+   `apps/client/scripts/upload-dreams.sh <id>` (from the job's `split/`): additive, skipping any
    already there at the same size. The player loads `dream{,-small}.mp4`
    (H.264 in every browser: `utils/dream-video.ts` says why). Check the URLs
    on dreams.lysterfieldlake.com before going on.
@@ -98,16 +109,28 @@ on the next bucket already has the depth fix (`done/depth-walk-away-gaps.md`).
 
 ## Tasks
 
-- [ ] Choose the take, its client id, title and prompt (user)
-- [ ] Clip, check, approve (user's go-ahead: ~$1.50)
-- [ ] Full song (user's go-ahead: ~$20)
-- [ ] Check, repair, one full watch
-- [ ] `compose`, `compose-split`, fill in `dreams.json`
+First run (`sharp-edges`):
+
+- [x] Choose the take, its client id, title and prompt (user)
+- [x] Clip, check, approve
+- [x] Full song
+- [x] Check, repair (219 stretches)
+- [ ] One full watch: not done before publishing, and it would have caught
+      the faces
+- [x] `compose`, `compose-split`, fill in `dreams.json`
 - [x] A small upload script for a dream's split files, so step 6 isn't
       typed by hand: `apps/client/scripts/upload-dreams.sh <id>`,
       skipping files already there at the same size
-- [ ] Upload, check the URLs, PR, merge
-- [ ] Play it on lysterfieldlake.com (desktop and phone)
+- [x] Upload, check the URLs, PR, merge
+- [ ] Play it on lysterfieldlake.com (desktop and phone): not recorded
+
+Redo:
+
+- [ ] Pull `sharp-edges` from the chooser while it shows faces (user)
+- [ ] The new face check (`in-progress/dreams.md`), then decide: repair
+      `sharp-edges` or make a new take
+- [ ] Check, repair, and one full watch of panel 7 before anything ships
+- [ ] Compose, split, upload, PR (user merges), play it
 
 ## Open questions
 

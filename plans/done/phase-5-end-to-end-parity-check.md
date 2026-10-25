@@ -35,7 +35,7 @@ CLI chain — `init` → `matte` → `background-plate` → `artwork` ×2 →
 `upscale` ×2 → `depth` → `outline` → `dream` → `compose` — and compare the
 result against an already-published `apps/client` scene for parity (visual
 + rough cost/time budget per scene). This is the fifth phase bullet in
-[`rebuild-pipeline-as-replicate-cli.md`](../in-progress/rebuild-pipeline-as-replicate-cli.md)
+[`rebuild-pipeline-as-replicate-cli.md`](rebuild-pipeline-as-replicate-cli.md)
 — see that document for full project architecture. Every step has already
 been individually smoke-tested (phase 3, 3b) and chain-tested against
 synthetic footage (phase 4); this phase is the first real, full-length,

@@ -2,7 +2,7 @@
 title: Add .jobs visuals to the charliegleason.com case study
 status: Ready
 created: 2026-10-23
-updated: 2026-10-23
+updated: 2026-10-25
 ---
 
 # Add .jobs visuals to the charliegleason.com case study
@@ -17,6 +17,16 @@ describe but the article can only talk about.
 
 Nothing here calls a model. Every asset comes from outputs that already
 exist, so it costs nothing.
+
+## Blocked (2026-10-25)
+
+Sharp Edges fails the no-people rule: it shows a painted face in about half
+its frames, and so do parts of Charcoal and Ink Flight (`in-progress/dreams.md`,
+"The check misses painted faces"). The article opens with Sharp Edges
+(`video-sharp-edges.mp4`), shows it in the dreams grid, and says the person
+check "catches 97%" of the frames to replace. Several assets below are
+Sharp Edges frames too. Hold this until the face check is fixed and Sharp
+Edges is repaired or pulled. Then revisit those lines and assets.
 
 ## Context
 
@@ -58,7 +68,7 @@ name. Check that each exists before using it.
 | Panel 3, the ghost arms at 1:24 and their fix | `spikes/full-video-panel3/review/panel3-bria-1m24-fix.mp4` and `out-c021.orig.mp4` | `done/phase-4e-full-video-source-prep.md` |
 | Outline, ArtLine vs coarse line art | `spikes/outline-bakeoff/`, `spikes/legacy-artline-outline/` | `done/phase-4g-outline-coarse-lineart.md` |
 | Depth on the walk-away (1:59-2:08), before and after fit-to-subject | `full-video/5-depth/frames` against the legacy depth frames | `done/depth-walk-away-gaps.md` |
-| Sharp Edges' five samples, clip and `take.json` | `full-video/7-dreams/sharp-edges/` | `ready/next-dream.md` |
+| Sharp Edges' five samples, clip and `take.json` | `full-video/7-dreams/sharp-edges/` | `in-progress/next-dream.md` |
 
 The five sample frames are job frames 1 (the wide intro), 2025 (fast arms),
 2901 (the walk-away), 4033 (the shouting close-up) and 4501 (after the cut).
