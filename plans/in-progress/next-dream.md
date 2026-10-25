@@ -126,7 +126,8 @@ First run (`sharp-edges`):
 
 Redo:
 
-- [ ] Pull `sharp-edges` from the chooser while it shows faces (user)
+- [ ] Pull `sharp-edges` from the chooser while it shows faces: kept live
+      for now (user, 2026-10-25)
 - [ ] The new face check (`in-progress/dreams.md`), then decide: repair
       `sharp-edges` or make a new take
 - [ ] Check, repair, and one full watch of panel 7 before anything ships

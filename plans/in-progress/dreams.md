@@ -175,7 +175,8 @@ verdict isn't simply read back. It is never used to reroll or to decide
 a re-render's rounds: a search against it would find the faces it misses.
 Repaired frames are face-scored afterwards, for the review. Still to do:
 retrain the probe with the line redrawn: a silhouette is fine, a readable
-face isn't, bust or not (to confirm with the user).
+face isn't, bust or not. Left for now (user, 2026-10-25): Charcoal and
+Ink Flight stay as published until that's decided.
 Contact sheets: `.jobs/spikes/face-audit/<dream>.jpg`.
 
 ### 6. Repair: re-render, never interpolate
