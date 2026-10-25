@@ -16,7 +16,7 @@ export interface Dream {
  * `scripts/generate-dreams.js`'s shape and find-and-preserve behavior (new
  * scenes get placeholder title/link/prompt for a human to fill in by hand).
  *
- * The playback videos stay in the job: `compose-split` writes them to
+ * The playback videos stay in the job: `compose` writes them to
  * `7-dreams/<take>/split/` and `main/`, `apps/client/scripts/upload-dreams.sh`
  * uploads them to R2, and the app reads them from there via `VITE_APP_DREAMS`.
  */

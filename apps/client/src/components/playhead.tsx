@@ -31,7 +31,6 @@ import Footer from '../views/footer'
 import { connectAudio } from '../utils/audio'
 import {
   followMain,
-  isSplit,
   mainVideoBase,
   shownDream,
   startDream,
@@ -124,10 +123,10 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     const setVideoState = useStore((state) => state.setVideoState)
     const setResume = useStore((state) => state.setResume)
 
-    // The main video's source. Split (utils/dream-video.ts), it's the same
-    // shared video for every dream, so it's loaded once on the way into the
+    // The main video's source: the same shared video for every dream
+    // (utils/dream-video.ts), so it's loaded once on the way into the
     // player and a dream change mid-song doesn't touch it (see the switch
-    // effect below); otherwise it's each dream's own 7-panel video.
+    // effect below).
     const mainBase = mainVideoBase(dream, isMobile || isTouch)
     const loadedDream = useRef<string | null>(null)
 
@@ -147,10 +146,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
 
       connectAudio(el)
       // Back up, after the fade out going back to the choose screen (below).
-      // Not mid-swap: a swap that reloads the video (one that isn't split)
-      // fades back in itself, once the new dream's playing (commitSwap).
-      if (useStore.getState().swapPhase === 'idle')
-        fadeInAudio(el, AUDIO_START_FADE_MS)
+      fadeInAudio(el, AUDIO_START_FADE_MS)
 
       let cancelled = false
 
@@ -159,22 +155,20 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       // actually happens, so StrictMode's double-run doesn't drop it.
       const resume = useStore.getState().resume
       const resumeTime = resume?.dreamId === dream.id ? resume.time : null
-      // Split, the dream video loads alongside, from the same time, and the
-      // main video waits for it — so the polaroid doesn't come in blank.
-      // If its video won't load, there's no dream to fall back to: back
-      // to the choose screen, as the home button does.
+      // The dream video loads alongside, from the same time, and the main
+      // video waits for it — so the polaroid doesn't come in blank. If its
+      // video won't load, there's no dream to fall back to: back to the
+      // choose screen, as the home button does.
       let failed = false
-      const dreamReady = isSplit(dream)
-        ? Promise.race([
-            // Then the next one warms behind it (the card peeking out).
-            startDream(dream, resumeTime ?? 0).then((ok) => {
-              if (ok) return warmDream(adjacentDream(1))
-              failed = true
-              if (!cancelled) useStore.getState().setResetting(true)
-            }),
-            new Promise((resolve) => setTimeout(resolve, DREAM_READY_TIMEOUT_MS)),
-          ])
-        : Promise.resolve()
+      const dreamReady = Promise.race([
+        // Then the next one warms behind it (the card peeking out).
+        startDream(dream, resumeTime ?? 0).then((ok) => {
+          if (ok) return warmDream(adjacentDream(1))
+          failed = true
+          if (!cancelled) useStore.getState().setResetting(true)
+        }),
+        new Promise((resolve) => setTimeout(resolve, DREAM_READY_TIMEOUT_MS)),
+      ])
       const seek = () => {
         if (resumeTime !== null && resumeTime < el.duration) {
           el.currentTime = resumeTime
@@ -228,14 +222,14 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       // is the switch below.
     }, [mainBase])
 
-    // A dream change on the same main video (split): a swap, or back/forward
+    // A dream change on the same main video: a swap, or back/forward
     // to another dream. Only the dream video changes: the next one loads at
     // the song's time — or, from history, at its saved time, which the main
     // video seeks to — and the polaroid crossfades to it. A swap waiting on
     // it moves on once it's there.
     useEffect(() => {
       const el = (ref as MutableRefObject<HTMLVideoElement>).current
-      if (!dream || !isSplit(dream) || loadedDream.current === dream.id) return
+      if (!dream || loadedDream.current === dream.id) return
       // The main video's own load (above) handles a fresh one.
       if (loadedDream.current === null) return
       loadedDream.current = dream.id
@@ -552,11 +546,10 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                 key={`${mainBase}-webm`}
               />
               {/* H.264 for browsers without VP9 (Safari): `.mp4` for the
-                  split layout's shared main video, which Cloudflare's edge
-                  caches (it doesn't cache `.mov`); the 7-panel files only
-                  have `.mov`. */}
+                  shared main video, which Cloudflare's edge caches (it
+                  doesn't cache `.mov`); the title video only has `.mov`. */}
               <source
-                src={`${mainBase}.${isSplit(dream) ? 'mp4' : 'mov'}`}
+                src={`${mainBase}.${dream ? 'mp4' : 'mov'}`}
                 type="video/mp4"
                 key={`${mainBase}-h264`}
               />

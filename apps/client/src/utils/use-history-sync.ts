@@ -55,21 +55,24 @@ function findDream(id: string | null) {
 }
 
 /**
- * Dev only: `?preview=<job>/<take>` plays a take's 15s test clip, and
- * `?preview=<job>/<take>/song` its whole song once `compose-split` has made
- * it, from the admin dev server (see vite-plugin-admin.ts) in the real
- * player, without it being in dreams.json or the bucket.
+ * Dev only: `?preview=<job>/<take>&t=<seconds>` plays a take's 15s test
+ * clip from where it starts in the song, and `?preview=<job>/<take>/song`
+ * its whole song once `compose` has made it, from the admin dev server (see
+ * vite-plugin-admin.ts) in the real player, without it being in
+ * dreams.json or the bucket. Both play against the shared main video like
+ * any dream: a clip's dream video holds still outside the clip.
  */
 function previewDream(): Dream | undefined {
   if (!import.meta.env.DEV) return undefined
-  const preview = new URLSearchParams(location.search).get('preview')
+  const params = new URLSearchParams(location.search)
+  const preview = params.get('preview')
   const match = preview?.match(/^([\w-]+)\/([\w-]+)(\/song)?$/)
   if (!match) return undefined
   const [, job, take, song] = match
   const files = `/__admin/files/${job}/7-dreams/${take}`
-  // The song plays split, like a published dream: the shared main video from VITE_APP_DREAMS, the dream from the job.
   if (song) return { id: `song-${take}`, title: `Song: ${take}`, link: '', prompt: '', dreamSrc: `${files}/split` }
-  return { id: `preview-${take}`, title: `Preview: ${take}`, link: '', prompt: '', src: `${files}/preview` }
+  const start = Number(params.get('t'))
+  return { id: `preview-${take}`, title: `Preview: ${take}`, link: '', prompt: '', dreamSrc: `${files}/preview`, ...(start > 0 && { start }) }
 }
 
 function savedTime(dreamId: string) {
@@ -98,7 +101,9 @@ export function restoreFromLocation() {
   }
 
   if (target.id === dream?.id) return
-  const time = savedTime(target.id)
+  // A take's test clip always starts at the clip, not wherever an earlier
+  // visit left off.
+  const time = target.start ?? savedTime(target.id)
   setResume(time ? { dreamId: target.id, time } : null)
   setDream(target)
 }

@@ -80,7 +80,7 @@ Run the app:
 bun run --cwd apps/client dev
 ```
 
-The videos aren't in the repo. The app reads them from `VITE_APP_DREAMS`, the `lysterfield-lake-dreams` bucket at dreams.lysterfieldlake.com, in development too. The pipeline's `compose-split` writes them into the job (`7-dreams/<id>/split/` and `main/`), `apps/client/scripts/upload-dreams.sh <id>` uploads them, and until then `/admin` plays a take's clip or whole song from the job (`?preview=<job>/<take>`, or `<job>/<take>/song`).
+The videos aren't in the repo. The app reads them from `VITE_APP_DREAMS`, the `lysterfield-lake-dreams` bucket at dreams.lysterfieldlake.com, in development too. The pipeline's `compose` writes them into the job (`7-dreams/<id>/split/` and `main/`), `apps/client/scripts/upload-dreams.sh <id>` uploads them, and until then `/admin` plays a take's clip or whole song from the job.
 
 Run a pipeline step (it needs `REPLICATE_API_TOKEN` in `apps/pipeline/.env`; see `apps/pipeline/.env.example`):
 

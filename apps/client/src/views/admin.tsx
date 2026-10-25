@@ -26,7 +26,9 @@ type Take = {
   notes?: string
   samples: number[]
   hasPreview: boolean
-  /** `compose-split` has made the take's whole-song dream video (`split/dream.mp4`). */
+  /** Where the test clip starts in the song, in seconds. */
+  clipStart?: number
+  /** `compose` has made the take's whole-song dream video (`split/dream.mp4`). */
   hasSong?: boolean
   /** The person check on the 15-second clip: undefined if there is no clip yet, null if it hasn't been checked. */
   clipCheck?: CheckSummary | null
@@ -512,7 +514,7 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
   const approve = 'rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800'
   const plain = 'rounded border border-stone-300 dark:border-stone-700 px-3 py-1.5 text-sm hover:bg-stone-100 dark:hover:bg-stone-800'
   const watchClip = take.hasPreview && (
-    <a href={`/?preview=${job}/${take.id}`} target="_blank" rel="noreferrer" className={plain}>
+    <a href={`/?preview=${job}/${take.id}&t=${take.clipStart ?? 0}`} target="_blank" rel="noreferrer" className={plain}>
       Watch the clip in the player
     </a>
   )
@@ -696,7 +698,7 @@ function TakeCard({ job, take, samples, presets, tasks, onGenerate, onRetry, onU
               Watch the song in the player
             </a>
           ) : (
-            <span className="text-sm text-stone-600 dark:text-stone-400">Frames are in 7-dreams/{take.id}/frames. Watch it here once the pipeline&apos;s compose and compose-split have run.</span>
+            <span className="text-sm text-stone-600 dark:text-stone-400">Frames are in 7-dreams/{take.id}/frames. Watch it here once the pipeline&apos;s compose has run.</span>
           ))}
         {take.status === 'rejected' && (
           <button type="button" onClick={() => onUpdate(take.id, { status: 'proposed' })} className="text-sm underline">
