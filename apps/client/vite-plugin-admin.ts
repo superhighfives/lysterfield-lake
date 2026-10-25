@@ -139,7 +139,16 @@ function checkDir(job: string, take: string, clip: boolean): string {
   return path.join(jobDir(job), '7-dreams', take, clip ? 'preview/dream' : '')
 }
 
-type CheckFile = { threshold: number; frames: number; flagged: number; stretches: { start: number; end: number; frames: number; peak: number }[]; scores: Record<string, number> }
+type CheckFile = {
+  threshold: number
+  faceThreshold?: number
+  frames: number
+  flagged: number
+  stretches: { start: number; end: number; frames: number; peak: number; facePeak?: number }[]
+  scores: Record<string, number>
+  /** Face scores (models/face-check), absent in checks from before it. */
+  faces?: Record<string, number>
+}
 type Review = { keep: number[] }
 
 function readReview(dir: string): Review {
@@ -186,9 +195,14 @@ function checkSummary(dir: string) {
   const open = check.stretches.filter((s) => !keep.has(s.start))
   // Frames flagged as a person that aren't morphs (a flagged morph is replaced with the morphs anyway), and the
   // stretches they're in. A stretch can hold both; the review marks each frame.
-  const people = Object.entries(check.scores)
-    .map(([frame, score]) => ({ frame: Number(frame), score }))
-    .filter(({ frame, score }) => score > check.threshold && !morphSet.has(frame) && open.some((s) => frame >= s.start && frame <= s.end))
+  // Flagged by either score, as in dream-check.ts's isFlagged. The client doesn't import from the pipeline, so
+  // the 0.5 fallback (for a check.json from before faceThreshold was stored) copies FACE_SCORE_THRESHOLD by hand.
+  const flagged = (key: string) => check.scores[key] > check.threshold || (check.faces?.[key] ?? 0) > (check.faceThreshold ?? 0.5)
+  const people = Object.keys(check.scores)
+    .filter(flagged)
+    .map(Number)
+    .filter((frame) => !morphSet.has(frame) && open.some((s) => frame >= s.start && frame <= s.end))
+    .map((frame) => ({ frame }))
   const peopleStretches = open.filter((s) => people.some(({ frame }) => frame >= s.start && frame <= s.end))
   return { frames: check.frames, flagged: people.length, stretches: peopleStretches.length, morphs: morphs.length, checked: true }
 }

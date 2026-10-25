@@ -9,6 +9,10 @@ machine with `uv`, so it is free and can be rerun at will. See
 ls /path/to/frames/*.jpg | uv run check.py --out scores.json
 ```
 
+It misses faces painted on a bust, which 2023's labels taught it were
+fine, so `dream-check` runs [`face-check`](../face-check) beside it and
+flags a frame when either score is over its threshold.
+
 ## Weights
 
 CLIP ViT-L/14 (`ViT-L-14.pt`, 890MB), not committed. `check.py` downloads
