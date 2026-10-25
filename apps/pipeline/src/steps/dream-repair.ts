@@ -279,7 +279,9 @@ async function updateCheck(checkPath: string, changes: { frame: number; score?: 
       if (check.faces) delete check.faces[name(frame)]
     } else {
       check.scores[name(frame)] = score
+      // A new picture: a face score from before it is stale, so one not scored this time is dropped.
       if (face !== undefined) (check.faces ??= {})[name(frame)] = face
+      else if (check.faces) delete check.faces[name(frame)]
     }
   }
   const scored = scoredFrames(check)

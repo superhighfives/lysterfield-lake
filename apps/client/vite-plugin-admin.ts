@@ -195,7 +195,8 @@ function checkSummary(dir: string) {
   const open = check.stretches.filter((s) => !keep.has(s.start))
   // Frames flagged as a person that aren't morphs (a flagged morph is replaced with the morphs anyway), and the
   // stretches they're in. A stretch can hold both; the review marks each frame.
-  // Flagged by either score, as in dream-check.ts's isFlagged.
+  // Flagged by either score, as in dream-check.ts's isFlagged. The client doesn't import from the pipeline, so
+  // the 0.5 fallback (for a check.json from before faceThreshold was stored) copies FACE_SCORE_THRESHOLD by hand.
   const flagged = (key: string) => check.scores[key] > check.threshold || (check.faces?.[key] ?? 0) > (check.faceThreshold ?? 0.5)
   const people = Object.keys(check.scores)
     .filter(flagged)

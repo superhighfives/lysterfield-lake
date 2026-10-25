@@ -8,7 +8,7 @@ import { useRunOn } from './admin-run-on.tsx'
 // frames. The pipeline's dream-check finds those frames; this is where they
 // are looked at and replaced, instead of going through every frame by hand.
 
-/** `flagged`/`stretches` count people only; `morphs` is the published dreams' 2023 RIFE morphs still to replace. `checked` false: morphs are known but the person check hasn't run. */
+/** `flagged`/`stretches` count frames flagged as a person or a face (not morphs); `morphs` is the published dreams' 2023 RIFE morphs still to replace. `checked` false: morphs are known but the person check hasn't run. */
 export type CheckSummary = { frames: number; flagged: number; stretches: number; morphs?: number; checked?: boolean }
 type Stretch = { start: number; end: number; frames: number; peak: number; facePeak?: number }
 type Detail = {
