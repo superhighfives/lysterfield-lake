@@ -10,7 +10,7 @@ Run these from the repo root with `bun run --cwd apps/client <script>`.
 | --- | --- |
 | `dev` | Runs Vite. `/admin`, the dream and polaroid tools, only exists here. |
 | `dev-external` | Runs Vite on your network, for testing tilt on a phone. |
-| `generate` | Writes `src/dreams.json` from the `dreams/` folder. |
+| `generate` | Writes `src/dreams.json` from the `public/assets/` folders. |
 | `build` | Builds the site for lysterfieldlake.com. |
 | `deploy` | Builds and deploys the Worker by hand. Merging to `main` does the same. |
 | `test` | Runs the tests with Vitest. |

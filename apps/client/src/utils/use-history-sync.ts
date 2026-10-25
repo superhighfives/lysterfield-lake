@@ -55,17 +55,21 @@ function findDream(id: string | null) {
 }
 
 /**
- * Dev only: `?preview=<job>/<take>` plays a take's 15s test clip from the
- * admin dev server (see vite-plugin-admin.ts) in the real player, without
- * it being in dreams.json.
+ * Dev only: `?preview=<job>/<take>` plays a take's 15s test clip, and
+ * `?preview=<job>/<take>/song` its whole song once `compose-split` has made
+ * it, from the admin dev server (see vite-plugin-admin.ts) in the real
+ * player, without it being in dreams.json or the bucket.
  */
 function previewDream(): Dream | undefined {
   if (!import.meta.env.DEV) return undefined
   const preview = new URLSearchParams(location.search).get('preview')
-  const match = preview?.match(/^([\w-]+)\/([\w-]+)$/)
+  const match = preview?.match(/^([\w-]+)\/([\w-]+)(\/song)?$/)
   if (!match) return undefined
-  const [, job, take] = match
-  return { id: `preview-${take}`, title: `Preview: ${take}`, link: '', prompt: '', src: `/__admin/files/${job}/7-dreams/${take}/preview` }
+  const [, job, take, song] = match
+  const files = `/__admin/files/${job}/7-dreams/${take}`
+  // The song plays split, like a published dream: the shared main video from VITE_APP_DREAMS, the dream from the job.
+  if (song) return { id: `song-${take}`, title: `Song: ${take}`, link: '', prompt: '', dreamSrc: `${files}/split` }
+  return { id: `preview-${take}`, title: `Preview: ${take}`, link: '', prompt: '', src: `${files}/preview` }
 }
 
 function savedTime(dreamId: string) {

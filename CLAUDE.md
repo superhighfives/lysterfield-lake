@@ -7,7 +7,7 @@ This file is the repo-specific part.
 
 Bun workspaces: `apps/client` (Vite/React/R3F player) and `apps/pipeline`
 (Node/TS CLI, Replicate-driven — see
-`plans/in-progress/rebuild-pipeline-as-replicate-cli.md`). Install and run
+`plans/done/rebuild-pipeline-as-replicate-cli.md`). Install and run
 workspace scripts from the repo root with `bun run --cwd apps/<name> <script>`.
 `bunfig.toml` pins the hoisted linker — bun's default isolated linker's
 node_modules layout breaks `eslint-import-resolver-typescript`'s module
@@ -15,11 +15,14 @@ resolution. Don't remove that setting without re-checking lint still passes.
 
 ## Generated assets — never commit
 
-Per-scene output (`apps/client/dreams/<id>/...`: composited videos, loop
-clips, preview JPGs) and any pipeline working directories (extracted frames,
-per-step Replicate outputs) are generated, not source. They're already
-gitignored in `apps/client`; keep the same rule for anything `apps/pipeline`
-writes.
+Per-scene output (composited videos, split dream videos, preview JPGs) and
+any pipeline working directories (extracted frames, per-step Replicate
+outputs) are generated, not source. They stay in the job under the
+gitignored `apps/pipeline/.jobs`; the app reads the videos from the bucket
+(`VITE_APP_DREAMS`, `apps/client/scripts/upload-dreams.sh`), in development
+too. The exception is each dream's chooser assets, `hero.jpg` and
+`loop.mov` in `apps/client/public/assets/<id>/`, which `compose` writes and
+are committed.
 
 `apps/pipeline/.jobs`, `apps/pipeline/.env` and
 `apps/pipeline/resources/colours` (/admin's colour and style images) are
@@ -61,13 +64,14 @@ them without asking.
 The client plays a shared **main video** of 6 panels side by side, in a
 fixed order — 1 = lyrics, 2 = portrait, 3 = portrait background,
 4 = matte, 5 = depth, 6 = outline — plus each dream's own **dream video**,
-panel 7 on its own (`compose-split`, `dreams/main/` and
-`dreams/<id>/dream*`). `apps/client/src/materials/video-material.tsx` reads
+panel 7 on its own (`compose-split`: `main/main*` and `<id>/dream*`, in the
+job and the bucket). `apps/client/src/materials/video-material.tsx` reads
 every panel through one `panel()` lookup (7 from the dream video, 1-6 from
 the main video at `uFrameTotal={6}`), and `apps/client/src/views/main.tsx`
-picks panels by those hardcoded indices. The older 7-panel files
-(`dreams/<id>/video*`, panel 7 last in the same atlas) still play with
-`?split=0` until the split path is checked on real devices. Don't reorder
+picks panels by those hardcoded indices. The older 7-panel layout (panel
+7 last in the same atlas) is what a take's 15-second clip preview plays
+(`7-dreams/<take>/preview/video*`); `?split=0` asks for it, but the bucket
+doesn't hold 7-panel files, so it only works for previews. Don't reorder
 or resize either layout without updating both those files to match.
 
 ## Dream panel (7) must never show a person

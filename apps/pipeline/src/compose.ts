@@ -3,7 +3,7 @@ import { access, rename, unlink } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
 import path from 'node:path'
-import { compileFramesToVideo, firstFrame, listFrames, videoPath, type Job } from './job.ts'
+import { compileFramesToVideo, firstFrame, videoPath, type Job } from './job.ts'
 import { AUDIO_PATH } from './resources.ts'
 
 const execFileAsync = promisify(execFile)
@@ -38,11 +38,8 @@ export interface ComposeResult {
   videoSmallWebmPath: string
   /** 5s loop clip cropped from the dream panel — apps/client's choose-screen asset. */
   loopPath: string
-  loopWebmPath: string
   /** apps/client's choose-screen thumbnail, from the dream panel's first frame. */
   heroImagePath: string
-  /** `00.jpg`-`03.jpg`: four dream stills spread through the take (the legacy pipeline picked four at random). */
-  stillPaths: string[]
 }
 
 /**
@@ -106,8 +103,6 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
     '+faststart',
     loopPath,
   ])
-  const loopWebmPath = await videoPath(job, `${final}/loop`, 'webm')
-  await compress(loopPath, loopWebmPath)
 
   // Sourced from the dream panel, not the (take-independent) portrait
   // panel — a job's takes can look completely different from each other
@@ -120,19 +115,6 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
     .jpeg({ quality: 85 })
     .toFile(heroImagePath)
 
-  // Four stills at 20/40/60/80% through the dream, so they're spread out and
-  // stable across re-composes (the legacy pipeline picked four at random).
-  const dreamFrames = await listFrames(input.dreamFramesDir)
-  const stillPaths: string[] = []
-  for (const [n, at] of [0.2, 0.4, 0.6, 0.8].entries()) {
-    const stillPath = await videoPath(job, `${final}/${String(n).padStart(2, '0')}`, 'jpg')
-    await sharp(path.join(input.dreamFramesDir, dreamFrames[Math.floor(dreamFrames.length * at)]))
-      .resize(PANEL_SIZE, PANEL_SIZE)
-      .jpeg({ quality: 85 })
-      .toFile(stillPath)
-    stillPaths.push(stillPath)
-  }
-
   return {
     compositeVideoPath,
     videoPath: finalVideoPath,
@@ -141,9 +123,7 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
     videoSmallWebmPath,
     finalDir: path.join(job.dir, final),
     loopPath,
-    loopWebmPath,
     heroImagePath,
-    stillPaths,
   }
 }
 
