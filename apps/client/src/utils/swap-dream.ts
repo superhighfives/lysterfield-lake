@@ -1,28 +1,17 @@
 import { useStore, SwapDirection } from '../store'
 import { HistoryState, urlFor } from './use-history-sync'
 import { fadeGain } from './audio'
-import { isSplit } from './dream-video'
 
 // Swapping to another dream without going back to the choose screen.
 //
-// Split (utils/dream-video.ts), only the dream's own small video changes:
+// Only the dream's own small video changes (utils/dream-video.ts):
 // Playhead loads it at the song's current time and crossfades to it, and
 // moves the swap on to `in` once it's there. The song never stops.
-//
-// Otherwise every dream is one composite video (all seven panels plus the
-// audio), so a swap really means loading another video and seeking it to
-// where this one was — the same resume path a history restore takes (see
-// Playhead). The polaroid's blank print (views/main.tsx) covers the load,
-// and the audio fades out and back in around the gap.
 
-// How long the audio takes to fade out (as the photo fades to blank) and
-// back in (as the next develops). The out fade should finish before the
-// photo's blank, or the load cuts the tail of it off.
+// How long the audio takes to fade out (going back to the choose screen)
+// and back in (as a dream starts).
 const FADE_OUT_MS = 300
 const FADE_IN_MS = 600
-// If the next video still hasn't started after this long, bring the
-// polaroid back anyway and let the normal buffering UI take over.
-const LOAD_TIMEOUT_MS = 10000
 
 export function adjacentDream(direction: SwapDirection) {
   const { collection, dream } = useStore.getState()
@@ -74,58 +63,22 @@ export function fadeInAudio(el: HTMLVideoElement, ms = FADE_IN_MS) {
   fadeVolume(el, restoreVolume ?? 1, ms, () => (restoreVolume = null))
 }
 
-/** Called once the polaroid's photo has faded to blank: loads the next
- *  dream at the current playback position, and moves the swap on to `in`
- *  once it's actually playing there. */
+/** Called once the polaroid's photo has faded to blank: switches to the
+ *  next dream, which Playhead loads at the current playback position and
+ *  moves the swap on to `in` once it's there. */
 export function commitSwap(el: HTMLVideoElement) {
-  const { swapDirection, setResume, setDream, setSwapPhase } =
-    useStore.getState()
+  const { swapDirection, setDream, setSwapPhase } = useStore.getState()
   const next = adjacentDream(swapDirection)
   if (!next) return setSwapPhase('idle')
-
-  const time = el.currentTime
-  const split = isSplit(next) && isSplit(useStore.getState().dream)
 
   // Replaced rather than pushed (use-history-sync only pushes when the URL
   // doesn't already match), so back still goes to the choose screen
   // instead of stepping through every polaroid swiped past.
   history.replaceState(
-    { dream: next.id, t: time } satisfies HistoryState,
+    { dream: next.id, t: el.currentTime } satisfies HistoryState,
     '',
     urlFor(next.id)
   )
-
-  if (split) {
-    setDream(next)
-    setSwapPhase('loading')
-    return
-  }
-
-  // Until Playhead calls load() for the new source, every readiness check
-  // below would pass on the old one — so nothing counts before `emptied`.
-  let emptied = false
-  const handleEmptied = () => (emptied = true)
-  const check = () => {
-    if (!emptied) return
-    if (el.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) return
-    if (Math.abs(el.currentTime - time) > 0.5) return
-    finish()
-  }
-
-  const finish = () => {
-    clearTimeout(timeout)
-    el.removeEventListener('emptied', handleEmptied)
-    events.forEach((event) => el.removeEventListener(event, check))
-    setSwapPhase('in')
-    fadeInAudio(el)
-  }
-
-  const events = ['playing', 'canplay', 'seeked']
-  el.addEventListener('emptied', handleEmptied)
-  events.forEach((event) => el.addEventListener(event, check))
-  const timeout = setTimeout(finish, LOAD_TIMEOUT_MS)
-
-  setResume({ dreamId: next.id, time })
   setDream(next)
   setSwapPhase('loading')
 }

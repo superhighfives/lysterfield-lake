@@ -91,7 +91,7 @@ after one frame.
 | 4. Full song | ~54 chained runs | ~$20 | confirm dialog |
 | 5. Check | Score every dream frame for a person | free | none |
 | 6. Repair | Re-render flagged stretches with Deforum | ~$0.008 a frame | user approves flagged stretches and the cost |
-| 7. Publish | `compose`, `compose-split`, `upload-dreams.sh`, a PR | free | user's go-ahead for R2 |
+| 7. Publish | `compose`, `upload-dreams.sh`, a PR | free | user's go-ahead for R2 |
 
 Stages 1-4 exist. Stages 5 and 6 are new and are what makes this
 manageable: most leaks are rerolled away as the frame is made, and the
@@ -279,15 +279,16 @@ left as they were.
 For a new take (the steps in detail: `in-progress/next-dream.md`):
 
 1. `compose --job .jobs/full-video --take <take> --id <client-id>` (local,
-   25-38 minutes): the stills and loop into
-   `apps/client/public/assets/<id>/`, a `dreams.json` entry to fill in.
-2. `compose-split --takes <client-id>`: the take's `dream{,-small}.{mp4,webm}`.
-   The shared `main*` is already made and doesn't change.
-3. Review: one full watch of panel 7.
-4. Upload the split files to the app's bucket with
+   free): the take's `split/dream{,-small}.{mp4,webm}`, the hero and loop
+   into `apps/client/public/assets/<id>/`, and a `dreams.json` entry to
+   fill in. The shared `main*` is already made and doesn't change. (Until
+   2026-10-25 this also made a 7-panel video, and `compose-split` was a
+   separate step.)
+2. Review: one full watch of panel 7.
+3. Upload the split files to the app's bucket with
    `apps/client/scripts/upload-dreams.sh <id>`,
    without deleting anything. **Needs the user's go-ahead.**
-5. A PR with the assets and `dreams.json`. Merging deploys it.
+4. A PR with the assets and `dreams.json`. Merging deploys it.
 
 ### Our own GPU (2026-10-14)
 

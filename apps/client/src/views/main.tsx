@@ -16,7 +16,7 @@ import {
 import { suspend } from 'suspend-react'
 import { useIntersect } from '@react-three/drei'
 import { SwapPhase, useStore } from '../store'
-import { adjacentDream, commitSwap, fadeOutAudio } from '../utils/swap-dream'
+import { adjacentDream, commitSwap } from '../utils/swap-dream'
 import { readPulse } from '../utils/audio'
 import DreamGlow from '../components/dream-glow'
 import { createWaterSim } from '../utils/water-sim'
@@ -25,7 +25,6 @@ import {
   dreamVideo,
   backSlot,
   frontReady,
-  isSplit,
   playback,
   shownDream,
   snapCrossfade,
@@ -195,17 +194,6 @@ function Main(
   // Update colorspace
   texture.colorSpace = LinearSRGBColorSpace
 
-  // The split layout (utils/dream-video.ts): `texture` is the shared main
-  // video, panels 1-6, and the dream (panel 7) comes from its own two
-  // videos, crossfaded as dreams switch. Otherwise `texture` is the dream's
-  // own 7-panel video, as before.
-  // The last dream's layout holds while the player leaves (the dream's
-  // cleared first): falling back to 7 panels mid-exit read a panel 7 off
-  // the 6-panel main video, and flashed its outline panel up full-screen.
-  const lastDream = useRef(dream)
-  if (dream) lastDream.current = dream
-  const split = isSplit(dream ?? lastDream.current)
-  const frameTotal = split ? 6 : 7
   const dreamTextures = useMemo(
     () =>
       dreamElements().map((el) => {
@@ -420,16 +408,13 @@ function Main(
     scaleApi.start({ scale: MathUtils.clamp(time / 8.0, 1.05, 1.125) })
 
     const { swapPhase, swapDirection, setSwapPhase } = useStore.getState()
-    // Split, a swap only changes the dream video: the song plays on, and
-    // the new dream crossfades in rather than developing from blank.
-    const splitNow = isSplit(useStore.getState().dream ?? lastDream.current)
     // Waiting on video: the first dream until it can play (a blank print,
     // developing once it's ready), or a swap.
     const currentDream = useStore.getState().dream
     if (!currentDream) startedRef.current = false
     else if (
       video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA &&
-      (!splitNow || frontReady())
+      frontReady()
     )
       startedRef.current = true
     const starting = !!currentDream && !startedRef.current
@@ -440,7 +425,7 @@ function Main(
     // there (DESATURATE_EASE per second).
     const loadingDream =
       playback.waiting ||
-      (splitNow && !!currentDream && shownDream() !== currentDream.id)
+      (!!currentDream && shownDream() !== currentDream.id)
     desaturateRef.current = MathUtils.damp(
       desaturateRef.current,
       loadingDream ? 1 : 0,
@@ -452,15 +437,14 @@ function Main(
     if (starting) developRef.current = 0
     // Mid-swap the photo's a blank print (uDevelop below), so the next
     // dream can just be there when it develops.
-    if (splitNow && swapPhase !== 'idle') snapCrossfade()
+    if (swapPhase !== 'idle') snapCrossfade()
     else stepCrossfade(delta)
     for (const material of [polaroidMaterial.current, lyricsMaterial.current])
       if (material) material.uDreamMix = dreamVideo.mix
     if (swapPhase !== swapPhaseRef.current) {
-      if (swapPhase === 'out' && !splitNow) fadeOutAudio(video)
       // The dream this swap brings, warm behind already if it's the one
       // the last swap's direction pointed to; otherwise it starts now.
-      if (swapPhase === 'out' && splitNow) warmDream(adjacentDream(swapDirection))
+      if (swapPhase === 'out') warmDream(adjacentDream(swapDirection))
 
       if (swapPhase === 'in') {
         developRef.current = 0
@@ -579,7 +563,7 @@ function Main(
 
     // Dragging toward the previous dream warms it instead of the next, so
     // either way the swap has it ready.
-    if (splitNow && swapDrag.active && Math.abs(swapDrag.dx) > 24 && swapPhase === 'idle') {
+    if (swapDrag.active && Math.abs(swapDrag.dx) > 24 && swapPhase === 'idle') {
       const target = adjacentDream(directionOf(swapDrag.dx))
       if (target && backSlot().id !== target.id) warmDream(target)
     }
@@ -751,9 +735,7 @@ function Main(
             turns the polaroid inside it. */}
         {/* The dream, filling the screen behind everything */}
         <DreamGlow
-          video={videoElement}
-          texture={texture}
-          dreamTextures={split ? dreamTextures : null}
+          dreamTextures={dreamTextures}
           fade={fadeRef}
           develop={developRef}
         />
@@ -770,9 +752,7 @@ function Main(
                 uTexture={texture}
                 uDream={dreamTextures[0]}
                 uDreamNext={dreamTextures[1]}
-                uSplit={split ? 1 : 0}
                 uFrameSelected={7}
-                uFrameTotal={frameTotal}
                 uFrameMask={3}
                 uOpacity={1}
                 uFrameOverlay={3}
@@ -799,7 +779,6 @@ function Main(
               uFrameSketch={6}
               uFrameMask={4}
               uFrameDepth={5}
-              uFrameTotal={frameTotal}
               uAvatar={1}
               uOpacity={1}
               uMaskIntensity={1}
@@ -822,11 +801,9 @@ function Main(
             uTexture={texture}
             uDream={dreamTextures[0]}
             uDreamNext={dreamTextures[1]}
-            uSplit={split ? 1 : 0}
             uFrameSelected={7}
             uFrameMask={1}
             uMaskIntensity={1}
-            uFrameTotal={frameTotal}
             uInvert={1}
             uOpacity={1}
             uBackgroundMix={0.5}

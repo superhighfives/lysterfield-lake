@@ -240,6 +240,9 @@ function checkDetail(job: string, take: string, clip: boolean) {
 
 function jobDetail(job: string) {
   const dir = jobDir(job)
+  const config = readJson(path.join(dir, 'job.json')) as { fps: number; clip?: { start: number } }
+  // Where the test clip starts in the song (s): the player starts a clip preview there.
+  const clipStart = config.clip ? (config.clip.start - 1) / config.fps : 0
   const dreams = path.join(dir, '7-dreams')
   const takes = existsSync(dreams)
     ? readdirSync(dreams, { withFileTypes: true })
@@ -251,7 +254,8 @@ function jobDetail(job: string) {
             id: d.name,
             ...(readJson(path.join(take, 'take.json')) as object),
             samples: existsSync(samplesDir) ? readdirSync(samplesDir).filter((f) => f.endsWith('.jpg')).map((f) => Number(f.slice(0, 4))) : [],
-            hasPreview: existsSync(path.join(take, 'preview', 'video.mov')),
+            hasPreview: existsSync(path.join(take, 'preview', 'dream.mp4')),
+            clipStart,
             hasSong: existsSync(path.join(take, 'split', 'dream.mp4')),
             clipCheck: checkSummary(path.join(take, 'preview', 'dream')),
             modified: statSync(path.join(take, 'take.json')).mtimeMs,
@@ -281,7 +285,7 @@ function jobDetail(job: string) {
           check: checkSummary(path.join(dreams, d.name)) ?? null,
         }))
     : []
-  return { name: job, config: readJson(path.join(dir, 'job.json')), takes, songs, directions }
+  return { name: job, config, takes, songs, directions }
 }
 
 /**

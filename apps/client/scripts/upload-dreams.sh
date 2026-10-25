@@ -2,7 +2,7 @@
 # Uploads dreams' split files from a pipeline job to the app's bucket
 # (lysterfield-lake-dreams, served at dreams.lysterfieldlake.com):
 # the files the player loads, `dream{,-small}.{mp4,webm}` per dream (from
-# the job's `7-dreams/<id>/split/`, which `compose-split` writes) and
+# the job's `7-dreams/<id>/split/`, which `compose` writes) and
 # `main{,-small}.{mp4,webm}` for main (from the job's `main/`). Additive:
 # nothing in the bucket is deleted, and a file already there at the same
 # size is skipped.

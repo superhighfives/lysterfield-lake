@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { access, rename, unlink } from 'node:fs/promises'
+import { access, rename, rm, unlink } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
 import path from 'node:path'
@@ -23,19 +23,11 @@ export interface ComposeInput {
   take: string
   /** dream.ts output — a per-take frames folder, same shape as every other panel. */
   dreamFramesDir: string
-  /** Overrides the real audio's duration for the final clip length — for a quick review render against a short test job's actual unique frame count, rather than looping/clipping to a full ~3.5min song. Real scenes should never set this. */
-  durationSeconds?: number
 }
 
 export interface ComposeResult {
-  /** The uncompressed 7-panel hstack + audio mux, before compression. */
-  compositeVideoPath: string
-  /** `7-dreams/<take>/final/` — every finished file for the take, in the legacy pipeline's `output/final/<id>/` format plus `hero.jpg`. */
+  /** `7-dreams/<take>/final/`: the chooser's assets for the take. */
   finalDir: string
-  videoPath: string
-  videoWebmPath: string
-  videoSmallPath: string
-  videoSmallWebmPath: string
   /** 5s loop clip cropped from the dream panel — apps/client's choose-screen asset. */
   loopPath: string
   /** apps/client's choose-screen thumbnail, from the dream panel's first frame. */
@@ -43,10 +35,9 @@ export interface ComposeResult {
 }
 
 /**
- * Ports generate-videos.sh: 7-panel hstack (words, portrait, background,
- * matte, depth, outline, dream — the exact order the client shader
- * expects) + audio mux, clipped to the audio's length, then the
- * video/video-small/loop/hero compression passes.
+ * Compiles each panel's frames into its panel video, which `composeSplit`
+ * stacks into the shared main video (panels 1-6) and each take's dream
+ * video (panel 7), plus the chooser's loop and hero image from the dream.
  *
  * Each panel's compiled video lives under that panel's own numbered folder
  * (`1-words/video/panel.mov`, etc.) — shared across every take for
@@ -56,34 +47,15 @@ export interface ComposeResult {
  * one thing that varies per take.
  */
 export async function compose(job: Job, input: ComposeInput): Promise<ComposeResult> {
-  const audioDuration = input.durationSeconds ?? (await probeDuration(AUDIO_PATH))
-
-  const wordsPanel = await normalizePanel(job, '1-words', input.wordsFramesDir, 'jpg')
-  const portraitPanel = await normalizePanel(job, '2-portrait', input.portraitFramesDir, 'jpg')
-  const backgroundPanel = await normalizePanel(job, '3-background', input.backgroundFramesDir, 'jpg')
-  const mattePanel = await normalizePanel(job, '4-matte', input.matteFramesDir, 'png')
-  const depthPanel = await normalizePanel(job, '5-depth', input.depthFramesDir, 'jpg')
-  const outlinePanel = await normalizePanel(job, '6-outline', input.outlineFramesDir, 'jpg')
+  await normalizePanel(job, '1-words', input.wordsFramesDir, 'jpg')
+  await normalizePanel(job, '2-portrait', input.portraitFramesDir, 'jpg')
+  await normalizePanel(job, '3-background', input.backgroundFramesDir, 'jpg')
+  await normalizePanel(job, '4-matte', input.matteFramesDir, 'png')
+  await normalizePanel(job, '5-depth', input.depthFramesDir, 'jpg')
+  await normalizePanel(job, '6-outline', input.outlineFramesDir, 'jpg')
   const dreamPanel = await normalizePanel(job, `7-dreams/${input.take}`, input.dreamFramesDir, 'jpg')
 
-  const compositeVideoPath = await videoPath(job, `7-dreams/${input.take}/composite`)
-  await hstackWithAudio(
-    [wordsPanel, portraitPanel, backgroundPanel, mattePanel, depthPanel, outlinePanel, dreamPanel],
-    compositeVideoPath,
-    { fps: job.fps, duration: audioDuration }
-  )
-
   const final = `7-dreams/${input.take}/final`
-  const finalVideoPath = await videoPath(job, `${final}/video`)
-  const videoWebmPath = await videoPath(job, `${final}/video`, 'webm')
-  await compress(compositeVideoPath, finalVideoPath)
-  await compress(compositeVideoPath, videoWebmPath)
-
-  const videoSmallPath = await videoPath(job, `${final}/video-small`)
-  const videoSmallWebmPath = await videoPath(job, `${final}/video-small`, 'webm')
-  await compress(compositeVideoPath, videoSmallPath, { half: true })
-  await compress(compositeVideoPath, videoSmallWebmPath, { half: true })
-
   const loopPath = await videoPath(job, `${final}/loop`)
   await execFileAsync('ffmpeg', [
     '-y',
@@ -116,11 +88,6 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
     .toFile(heroImagePath)
 
   return {
-    compositeVideoPath,
-    videoPath: finalVideoPath,
-    videoWebmPath,
-    videoSmallPath,
-    videoSmallWebmPath,
     finalDir: path.join(job.dir, final),
     loopPath,
     heroImagePath,
@@ -128,61 +95,61 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
 }
 
 export interface ComposePreviewResult {
-  /** `7-dreams/<take>/preview/` — `video.mov` and `video-small.mov`, the same names the player loads. */
+  /** `7-dreams/<take>/preview/`: `dream.mp4` and `dream-small.mp4`, the same names the player loads. */
   previewDir: string
-  videoPath: string
-  videoSmallPath: string
+  /** Where the clip starts in the song, in seconds: the player starts there. */
+  start: number
 }
 
 /**
- * A short test composite of one frame range (`dream-clip`), with the
- * matching slice of the song's audio, for reviewing a take in the real
- * player before paying for the full song
- * (plans/done/frame-preview-approval-tool.md). Same 7-panel order as
- * `compose`; everything lands in `7-dreams/<take>/preview/`, so the shared
- * panel videos and the take's real output are untouched.
+ * A take's test clip (`dream-clip`) as a dream video the player can play
+ * against the shared main video, for reviewing a take before paying for
+ * the full song (plans/done/frame-preview-approval-tool.md). The clip's
+ * dream frames are padded out to the whole song, holding the first frame
+ * before it and the last after, so it stays in step with the main video
+ * like any published dream; the player starts at the clip. Free and local;
+ * everything lands in `7-dreams/<take>/preview/`, so the take's real
+ * output is untouched.
  */
-export async function composePreview(
-  job: Job,
-  input: Omit<ComposeInput, 'durationSeconds'>,
-  range: { start: number; frames: number }
-): Promise<ComposePreviewResult> {
-  const previewDir = `7-dreams/${input.take}/preview`
-  const panelInputs: [string, string, 'png' | 'jpg'][] = [
-    ['1-words', input.wordsFramesDir, 'jpg'],
-    ['2-portrait', input.portraitFramesDir, 'jpg'],
-    ['3-background', input.backgroundFramesDir, 'jpg'],
-    ['4-matte', input.matteFramesDir, 'png'],
-    ['5-depth', input.depthFramesDir, 'jpg'],
-    ['6-outline', input.outlineFramesDir, 'jpg'],
-    ['7-dream', input.dreamFramesDir, 'jpg'],
-  ]
-  const panels: string[] = []
-  for (const [name, dir, ext] of panelInputs) {
-    const out = await videoPath(job, `${previewDir}/panels/${name}`)
-    await compileFramesToVideo(dir, out, {
-      fps: job.fps,
-      scale: `${PANEL_SIZE}:${PANEL_SIZE}`,
-      ext,
-      startNumber: range.start,
-      frameCount: range.frames,
-    })
-    panels.push(out)
-  }
-
-  const compositePath = await videoPath(job, `${previewDir}/composite`)
-  await hstackWithAudio(panels, compositePath, {
+export async function composePreview(job: Job, take: string, dreamFramesDir: string, range: { start: number; frames: number }): Promise<ComposePreviewResult> {
+  const previewDir = `7-dreams/${take}/preview`
+  const duration = await probeDuration(AUDIO_PATH)
+  const start = (range.start - 1) / job.fps
+  const clip = await videoPath(job, `${previewDir}/clip`)
+  await compileFramesToVideo(dreamFramesDir, clip, {
     fps: job.fps,
-    duration: range.frames / job.fps,
-    audioOffset: (range.start - 1) / job.fps,
+    scale: `${PANEL_SIZE}:${PANEL_SIZE}`,
+    ext: 'jpg',
+    startNumber: range.start,
+    frameCount: range.frames,
   })
-
-  const videoPathOut = await videoPath(job, `${previewDir}/video`)
-  const videoSmallPath = await videoPath(job, `${previewDir}/video-small`)
-  await compress(compositePath, videoPathOut)
-  await compress(compositePath, videoSmallPath, { half: true })
-
-  return { previewDir: path.join(job.dir, previewDir), videoPath: videoPathOut, videoSmallPath }
+  const padded = await videoPath(job, `${previewDir}/padded`)
+  const after = Math.max(0, duration - start - range.frames / job.fps)
+  await execFileAsync('ffmpeg', [
+    '-y',
+    '-i',
+    clip,
+    '-vf',
+    `tpad=start_duration=${start}:start_mode=clone:stop_duration=${after}:stop_mode=clone`,
+    '-t',
+    String(duration),
+    '-r',
+    String(job.fps),
+    '-an',
+    '-c:v',
+    'libx264',
+    '-pix_fmt',
+    'yuv420p',
+    '-crf',
+    '14',
+    padded,
+  ])
+  // H.264 only: the player loads a dream video as .mp4 in every browser (apps/client/src/utils/dream-video.ts).
+  await compress(padded, await videoPath(job, `${previewDir}/dream`, 'mp4'))
+  await compress(padded, await videoPath(job, `${previewDir}/dream-small`, 'mp4'), { half: true })
+  await unlink(padded)
+  await unlink(clip)
+  return { previewDir: path.join(job.dir, previewDir), start }
 }
 
 export interface ComposeSplitResult {
@@ -206,9 +173,11 @@ export interface ComposeSplitResult {
  * every browser (apps/client/src/utils/dream-video.ts says why).
  *
  * Built from the panel videos `compose` already compiled (`<panel>/video/panel.mov`),
- * so run `compose` on a take first. Anything already made is skipped.
+ * so run `compose` on a take first. Anything already made is skipped, except
+ * the takes' dream videos with `fresh` (`compose` passes it, having just
+ * compiled the dream panel again, after a repair perhaps).
  */
-export async function composeSplit(job: Job, takes: string[]): Promise<ComposeSplitResult> {
+export async function composeSplit(job: Job, takes: string[], opts: { fresh?: boolean } = {}): Promise<ComposeSplitResult> {
   const duration = await probeDuration(AUDIO_PATH)
   const panelVideo = async (dir: string) => {
     const p = path.join(job.dir, dir, 'video/panel.mov')
@@ -227,7 +196,8 @@ export async function composeSplit(job: Job, takes: string[]): Promise<ComposeSp
     const dir = `7-dreams/${take}/split`
     dreamDirs.push(path.join(job.dir, dir))
     const outputs = ['dream.mp4', 'dream.webm', 'dream-small.mp4', 'dream-small.webm'].map((f) => path.join(job.dir, dir, f))
-    if ((await Promise.all(outputs.map(exists))).every(Boolean)) continue
+    if (opts.fresh) await Promise.all(outputs.map((f) => rm(f, { force: true })))
+    else if ((await Promise.all(outputs.map(exists))).every(Boolean)) continue
 
     const dreamPanel = await panelVideo(`7-dreams/${take}`)
     // Trimmed to the song and resampled to the job's rate exactly as the main video is, without audio.
@@ -275,10 +245,9 @@ async function normalizePanel(job: Job, panelDir: string, framesDir: string, ext
 async function hstackWithAudio(
   panels: string[],
   outputPath: string,
-  opts: { fps: number; duration: number; audioOffset?: number }
+  opts: { fps: number; duration: number }
 ): Promise<void> {
   const inputArgs = panels.flatMap((p) => ['-i', p])
-  if (opts.audioOffset) inputArgs.push('-ss', String(opts.audioOffset))
   const labels = panels.map((_, i) => `[${i}:v]`).join('')
   const filter = `${labels}hstack=inputs=${panels.length}[v]`
 

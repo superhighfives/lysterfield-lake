@@ -287,7 +287,6 @@ switch (step) {
 
     if (flags['skip-client'] !== 'true') {
       await composeAndPublish(job, take, {
-        durationSeconds: flags.duration ? Number(flags.duration) : undefined,
         clientDir: flags['client-dir'] ? path.resolve(flags['client-dir']) : undefined,
       })
     }
@@ -362,7 +361,7 @@ switch (step) {
   }
 
   case 'dream-clip': {
-    // The 15s test clip: dream frames for job.json's "clip" range (kept for the full run), then a short composite.
+    // The 15s test clip: dream frames for job.json's "clip" range (kept for the full run), then a preview the player can play.
     const job = await loadJob(requireFlag('job'))
     const take = requireFlag('take')
     const saved = await loadTake(job, take)
@@ -385,22 +384,7 @@ switch (step) {
     } else {
       await dream(job, sourceFrames, { prompt: saved.prompt, take, stepFps: saved.stepFps, seed: saved.seed, concurrency, range: job.clip })
     }
-    const wordsResult = await words(job, sourceFrames)
-    const result = await composePreview(
-      job,
-      {
-        wordsFramesDir: wordsResult.framesDir,
-        portraitFramesDir: frameDirFlag(job, '2-portrait/upscaled', 'portrait'),
-        backgroundFramesDir: frameDirFlag(job, '3-background/frames', 'background'),
-        matteFramesDir: frameDirFlag(job, '4-matte/frames', 'matte'),
-        depthFramesDir: frameDirFlag(job, '5-depth/frames', 'depth'),
-        outlineFramesDir: frameDirFlag(job, '6-outline/frames', 'outline'),
-        take,
-        dreamFramesDir,
-      },
-      job.clip
-    )
-    console.log(JSON.stringify(result, null, 2))
+    console.log(JSON.stringify(await composePreview(job, take, dreamFramesDir, job.clip), null, 2))
     break
   }
 
@@ -412,6 +396,17 @@ switch (step) {
     if (status && !TAKE_STATUSES.includes(status)) throw new Error(`--status must be one of ${TAKE_STATUSES.join(', ')}`)
     const config = await saveTake(job, take, { ...(status && { status }), ...(flags.notes !== undefined && { notes: flags.notes }) })
     console.log(JSON.stringify(config, null, 2))
+    break
+  }
+
+  case 'clip-preview': {
+    // Makes a take's test clip playable in the player again from its dream frames, without rendering anything (free).
+    const job = await loadJob(requireFlag('job'))
+    const take = requireFlag('take')
+    if (!job.clip) throw new Error('job.json has no "clip" range ({ "start": <frame>, "frames": <count> }).')
+    const saved = await loadTake(job, take)
+    const dreamFramesDir = path.join(job.dir, `7-dreams/${take}`, saved?.method === 'deforum' ? 'preview/dream/frames' : 'frames')
+    console.log(JSON.stringify(await composePreview(job, take, dreamFramesDir, job.clip), null, 2))
     break
   }
 
@@ -467,7 +462,6 @@ switch (step) {
     const take = requireFlag('take')
     await composeAndPublish(job, take, {
       id: flags.id,
-      durationSeconds: flags.duration ? Number(flags.duration) : undefined,
       skipClient: flags['skip-client'] === 'true',
       clientDir: flags['client-dir'] ? path.resolve(flags['client-dir']) : undefined,
     })
@@ -490,7 +484,7 @@ switch (step) {
 
   default:
     console.error(
-      `Usage: bun run src/cli.ts <init|words|matte|portrait|upscale|background-plate|background-stabilize|background-video|depth|outline|dream-directions|dream-take|dream-samples|dream-clip|dream-check|dream-repair|take-status|dream|compose|compose-split> --job <dir> [options]`
+      `Usage: bun run src/cli.ts <init|words|matte|portrait|upscale|background-plate|background-stabilize|background-video|depth|outline|dream-directions|dream-take|dream-samples|dream-clip|clip-preview|dream-check|dream-repair|take-status|dream|compose|compose-split> --job <dir> [options]`
     )
     process.exit(1)
 }
@@ -505,7 +499,7 @@ switch (step) {
 async function composeAndPublish(
   job: Job,
   take: string,
-  opts: { id?: string; durationSeconds?: number; skipClient?: boolean; clientDir?: string }
+  opts: { id?: string; skipClient?: boolean; clientDir?: string }
 ): Promise<void> {
   const id = opts.id ?? take
   // Panel 1 is free and local, so it's made here on first compose if `words` hasn't been run yet (skipped once its frames exist).
@@ -519,9 +513,12 @@ async function composeAndPublish(
     outlineFramesDir: frameDirFlag(job, '6-outline/frames', 'outline'),
     take,
     dreamFramesDir: path.join(job.dir, `7-dreams/${take}/frames`),
-    durationSeconds: opts.durationSeconds,
   })
   console.log(JSON.stringify(result, null, 2))
+  // The videos the player loads: the shared main video (made once per job) and this take's dream video, made
+  // afresh since its panel was just compiled again. They stay in the job until scripts/upload-dreams.sh.
+  if (take === 'main') throw new Error('A take named "main" would overwrite the shared main video in the bucket')
+  console.log(JSON.stringify(await composeSplit(job, [take], { fresh: true }), null, 2))
 
   if (!opts.skipClient) {
     const clientDir = opts.clientDir ?? DEFAULT_CLIENT_DIR

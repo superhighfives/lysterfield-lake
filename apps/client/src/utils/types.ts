@@ -3,8 +3,8 @@ export type Dream = {
   title: string
   link: string
   prompt: string
-  /** Where this dream's videos live, if not `VITE_APP_DREAMS/<id>` — set only for dev previews of a take's test clip. */
-  src?: string
-  /** Where this dream's dream video lives, if not `VITE_APP_DREAMS/<id>` — set only for dev previews of a take's whole song. */
+  /** Where this dream's dream video lives, if not `VITE_APP_DREAMS/<id>` — set only for dev previews of a take. */
   dreamSrc?: string
+  /** Where in the song to start, in seconds, when there's no saved position — set only for a take's test clip. */
+  start?: number
 }

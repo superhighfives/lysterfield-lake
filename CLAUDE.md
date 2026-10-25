@@ -64,14 +64,11 @@ them without asking.
 The client plays a shared **main video** of 6 panels side by side, in a
 fixed order — 1 = lyrics, 2 = portrait, 3 = portrait background,
 4 = matte, 5 = depth, 6 = outline — plus each dream's own **dream video**,
-panel 7 on its own (`compose-split`: `main/main*` and `<id>/dream*`, in the
-job and the bucket). `apps/client/src/materials/video-material.tsx` reads
+panel 7 on its own (`compose`: `main/main*` and `<id>/dream*`, in the job
+and the bucket). There is no 7-panel video any more, previews included. `apps/client/src/materials/video-material.tsx` reads
 every panel through one `panel()` lookup (7 from the dream video, 1-6 from
-the main video at `uFrameTotal={6}`), and `apps/client/src/views/main.tsx`
-picks panels by those hardcoded indices. The older 7-panel layout (panel
-7 last in the same atlas) is what a take's 15-second clip preview plays
-(`7-dreams/<take>/preview/video*`); `?split=0` asks for it, but the bucket
-doesn't hold 7-panel files, so it only works for previews. Don't reorder
+the main video, `MAIN_PANELS` wide), and `apps/client/src/views/main.tsx`
+picks panels by those hardcoded indices. Don't reorder
 or resize either layout without updating both those files to match.
 
 ## Dream panel (7) must never show a person
@@ -91,7 +88,7 @@ per-take prompt alone wasn't a strong enough guarantee.
 A visitor's polaroid (`/admin/record` → `/admin/polaroid`, `plans/done/polaroid-admin-flow.md`) is a job
 with `"kind": "polaroid"` in `job.json`: 5 seconds, panels 2-6 only, no dream. Its atlas is its own
 5-panel layout (`apps/pipeline/src/steps/polaroid.ts`, `POLAROID_PANELS`), read by
-`apps/client/src/materials/polaroid-loop-material.tsx`. It isn't the player's 7-panel atlas, so the rule
+`apps/client/src/materials/polaroid-loop-material.tsx`. It isn't the player's main video, so the rule
 above doesn't apply to it, and changing one doesn't change the other.
 
 - Moderation lives in `job.json`'s `review`: `submitted` → `approved` (to make) → `shown` (to show), or
