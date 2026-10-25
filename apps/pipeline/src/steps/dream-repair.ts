@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { exists, type Job } from '../job.ts'
-import { assertFreeSpace, flaggedStretches, listDreamFrames, runCheck, type DreamCheck, type DreamFrame } from './dream-check.ts'
+import { assertFreeSpace, faceScores, flaggedStretches, listDreamFrames, runCheck, scoredFrames, type DreamCheck, type DreamFrame } from './dream-check.ts'
 import { deforumRun } from './dream-deforum.ts'
 import { loadTake, type TakeConfig } from './dream.ts'
 
@@ -197,14 +197,18 @@ export async function dreamRepair(
       }
       // The model's own verdict on each new frame (models/deforum/predict.py), in frame order.
       const scores = (await exists(scoresPath)) ? (Object.values(JSON.parse(await readFile(scoresPath, 'utf8'))) as { score: number; flagged: boolean }[]) : []
-      await updatingCheck(() => updateCheck(checkPath, targets.flatMap((t, i) => (scores[i] ? [{ frame: t.frame, score: scores[i].score }] : []))))
       const stillFlagged = targets.filter((_, i) => scores[i]?.flagged).map((t) => t.frame)
       // Still a person after the model's own retries: go again with new seeds, up to MAX_REPAIR_ROUNDS
       // rounds per request (user, 2026-10-14). Only for a round rendered just now, so retrying a task
       // that already finished never starts paying again.
-      if (stillFlagged.length === 0 || !renderedNow || pass + 1 >= MAX_REPAIR_ROUNDS) {
-        return { stretch, action: 'rerender', frames: targets.length, stillFlagged, rounds: pass + 1 }
-      }
+      const done = stillFlagged.length === 0 || !renderedNow || pass + 1 >= MAX_REPAIR_ROUNDS
+      await updatingCheck(async () => {
+        // The face check scores only the frames a request ends on, for the review, and never decides
+        // another round: rounds searched against it would find the faces it misses.
+        const faces = done ? await faceScores(targets.map((t) => t.file)) : {}
+        await updateCheck(checkPath, targets.flatMap((t, i) => (scores[i] ? [{ frame: t.frame, score: scores[i].score, face: faces[t.file] }] : [])))
+      })
+      if (done) return { stretch, action: 'rerender', frames: targets.length, stillFlagged, rounds: pass + 1 }
       console.log(`Stretch ${stretch.start}-${stretch.end} still shows a person after round ${round}; trying new seeds`)
       await rm(outDir, { recursive: true, force: true })
       round += 1
@@ -262,19 +266,24 @@ export async function dreamRepair(
 /**
  * Brings the take's check.json up to date after a repair, without scoring
  * the whole take again: held frames are no longer dream frames of their
- * own, and a re-rendered frame takes the score the model gave it as it was
- * made (the same classifier). A take that was never checked has nothing to
- * update.
+ * own, and a re-rendered frame takes the person score the model gave it as
+ * it was made (the same classifier) and a face score from the face check. A
+ * take that was never checked has nothing to update.
  */
-async function updateCheck(checkPath: string, changes: { frame: number; score?: number }[]): Promise<void> {
+async function updateCheck(checkPath: string, changes: { frame: number; score?: number; face?: number }[]): Promise<void> {
   if (!(await exists(checkPath))) return
   const check = JSON.parse(await readFile(checkPath, 'utf8')) as DreamCheck
-  for (const { frame, score } of changes) {
-    if (score === undefined) delete check.scores[name(frame)]
-    else check.scores[name(frame)] = score
+  for (const { frame, score, face } of changes) {
+    if (score === undefined) {
+      delete check.scores[name(frame)]
+      if (check.faces) delete check.faces[name(frame)]
+    } else {
+      check.scores[name(frame)] = score
+      if (face !== undefined) (check.faces ??= {})[name(frame)] = face
+    }
   }
-  const scored = Object.entries(check.scores).map(([frame, score]) => ({ frame: Number(frame), score })).sort((a, b) => a.frame - b.frame)
-  check.stretches = flaggedStretches(scored, check.threshold)
+  const scored = scoredFrames(check)
+  check.stretches = flaggedStretches(scored, check)
   check.frames = scored.length
   check.flagged = check.stretches.reduce((sum, s) => sum + s.frames, 0)
   await writeFile(checkPath, JSON.stringify(check, null, 2) + '\n')
@@ -319,7 +328,8 @@ export async function restoreFrames(opts: { takeDir: string; framesDir: string; 
   try {
     await runCheck(restored, path.join(workDir, 'scores.json'))
     const { scores } = JSON.parse(await readFile(path.join(workDir, 'scores.json'), 'utf8')) as { scores: Record<string, number> }
-    await updateCheck(path.join(opts.takeDir, 'check.json'), restored.map((file) => ({ frame: Number(path.basename(file).slice(0, 4)), score: scores[file] })))
+    const faces = await faceScores(restored)
+    await updateCheck(path.join(opts.takeDir, 'check.json'), restored.map((file) => ({ frame: Number(path.basename(file).slice(0, 4)), score: scores[file], face: faces[file] })))
   } finally {
     await rm(workDir, { recursive: true, force: true })
   }

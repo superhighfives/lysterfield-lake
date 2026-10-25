@@ -165,11 +165,17 @@ Why the check passed them:
   0.34991. `dream-check` then runs that same probe, so it can't flag what
   the reroll let through.
 
-What changes: a second check that doesn't share the probe's blind spot,
-for faces (a face detector or a vision model over the frames). It runs in
-`dream-check` and in the reroll, beside the probe, and a frame fails if
-either flags it. Then retrain the probe with the line redrawn: a silhouette
-is fine, a readable face isn't, bust or not (to confirm with the user).
+What changed (2026-10-25): a second, independent check for faces,
+`models/face-check` (adetailer's `face_yolov8m`, chosen against OWLv2, an
+anime face detector, COCO person and a local VLM on 327 hand-labelled
+frames; its README has the numbers). `dream-check` runs it beside the
+probe and flags a frame when the face score is over 0.5 or the person
+score is over 0.18, well under the reroll's 0.35, so the reroll's own
+verdict isn't simply read back. It is never used to reroll or to decide
+a re-render's rounds: a search against it would find the faces it misses.
+Repaired frames are face-scored afterwards, for the review. Still to do:
+retrain the probe with the line redrawn: a silhouette is fine, a readable
+face isn't, bust or not (to confirm with the user).
 Contact sheets: `.jobs/spikes/face-audit/<dream>.jpg`.
 
 ### 6. Repair: re-render, never interpolate
@@ -371,8 +377,9 @@ Check and repair:
 - [x] `dream-check` (`models/person-check/`, `dream-check.ts`), trained
       and cross-validated on the 2023 keep/replace decisions
 - [ ] Feed a reviewed take's decisions back into `train.py`
-- [ ] A second, independent face check in `dream-check` and the reroll
-      (see "The check misses painted faces")
+- [x] A second, independent face check in `dream-check`
+      (`models/face-check`; see "The check misses painted faces"). Kept
+      out of the reroll and repair rounds on purpose
 - [ ] Retrain the probe with readable faces as bad, bust or not
 - [ ] Re-check all eleven published dreams with both, then repair or pull
       what fails (sharp-edges, charcoal, ink-flight first)

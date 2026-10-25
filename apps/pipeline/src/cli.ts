@@ -420,7 +420,7 @@ switch (step) {
     const job = await loadJob(requireFlag('job'))
     const take = requireFlag('take')
     const dir = path.join(job.dir, '7-dreams', take, flags.clip === 'true' ? 'preview/dream' : '')
-    const { scores: _scores, ...summary } = await dreamCheck(path.join(dir, 'frames'), path.join(dir, 'check.json'))
+    const { scores: _scores, faces: _faces, ...summary } = await dreamCheck(path.join(dir, 'frames'), path.join(dir, 'check.json'))
     console.log(JSON.stringify(summary, null, 2))
     break
   }
