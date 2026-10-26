@@ -41,6 +41,20 @@ export function checkLabel(check: CheckSummary | null): { label: string; tone: s
   return { label: `${check.flagged} ${check.flagged === 1 ? 'frame shows' : 'frames show'} a person, in ${check.stretches} ${check.stretches === 1 ? 'stretch' : 'stretches'}`, tone: 'bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200' }
 }
 
+/**
+ * A dream's flagged stretches still to fix: not marked "keep", and not all 2023 morph (those are
+ * replaced with the morphs, so they're listed there, not as a person).
+ */
+function openStretches(detail: Detail): Stretch[] {
+  const morphs = new Set(detail.morphs)
+  const isAllMorph = (st: Stretch) => {
+    const frames = detail.frames.filter((f) => f >= st.start && f <= st.end)
+    return frames.length > 0 && frames.every((f) => morphs.has(f))
+  }
+
+  return detail.check?.stretches.filter((st) => !detail.keep.includes(st.start) && !isAllMorph(st)) ?? []
+}
+
 /** Groups frames into runs of neighbouring dream frames, as repair stretches. */
 function groupStretches(frames: number[], dreamFrames: number[]): { start: number; end: number; frames: number }[] {
   const index = new Map(dreamFrames.map((f, i) => [f, i]))
@@ -154,6 +168,109 @@ export function CheckAll({ job, takes, tasks, onChanged }: { job: string; takes:
   )
 }
 
+/**
+ * Re-renders every dream's open flagged stretches (`openStretches`) at once: one repair task per
+ * dream, as its own "Re-render the stretches that show a person" button would queue. Paid on
+ * Replicate, free on the 4090 (the run-on switch). Only dreams checked since the face check, with
+ * nothing queued or running; each can be left out before starting.
+ */
+export function FixAll({ job, songs, tasks, onChanged }: { job: string; songs: { id: string; title: string; check: CheckSummary | null }[]; tasks: Task[]; onChanged: () => void }) {
+  const runOn = useRunOn()
+  const [plan, setPlan] = useState<{ id: string; title: string; stretches: Stretch[]; frames: number }[] | null>(null)
+  const [left, setLeft] = useState<string[]>([])
+  const [error, setError] = useState('')
+  const busy = (id: string) => tasks.some((t) => t.take === id && active(t))
+  const ready = songs.filter((song) => song.check?.checked && song.check.faces !== false && song.check.flagged > 0 && !busy(song.id))
+  const stale = songs.filter((song) => !song.check?.checked || song.check.faces === false).length
+
+  const open = async () => {
+    setError('')
+    try {
+      const details = await Promise.all(ready.map((song) => api<Detail>(`/__admin/api/jobs/${job}/checks/${song.id}`)))
+      setPlan(
+        ready
+          .map((song, i) => {
+            // A stretch on a dream's first frame has no frame before it to continue from.
+            const stretches = openStretches(details[i]).filter((st) => st.start !== details[i].frames[0])
+            return { id: song.id, title: song.title, stretches, frames: stretches.reduce((sum, st) => sum + st.frames, 0) }
+          })
+          .filter((dream) => dream.frames > 0)
+      )
+      setLeft([])
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  const chosen = plan?.filter((dream) => !left.includes(dream.id)) ?? []
+  const frames = chosen.reduce((sum, dream) => sum + dream.frames, 0)
+  const cost = runOn === 'pc' ? 'free on the 4090' : dollars(frames)
+  const start = async () => {
+    setError('')
+    try {
+      for (const dream of chosen) {
+        const ranges = dream.stretches.map((st) => (st.start === st.end ? String(st.start) : `${st.start}-${st.end}`)).join(',')
+        await api(`/__admin/api/jobs/${job}/actions`, { action: 'rerender', take: dream.id, frames: ranges, again: true, on: runOn })
+        // Out of the plan once queued, so confirming again after a failure only covers the rest.
+        setPlan((current) => current?.filter((d) => d.id !== dream.id) ?? null)
+      }
+
+      setPlan(null)
+    } catch (e) {
+      setError((e as Error).message)
+    }
+
+    onChanged()
+  }
+
+  if (!plan) {
+    return (
+      <span className="flex flex-wrap items-center gap-2 text-sm">
+        <button
+          type="button"
+          disabled={ready.length === 0}
+          onClick={open}
+          className={plain}
+          title={ready.length === 0 ? (stale > 0 ? 'Check the dreams first' : 'Nothing flagged to fix, or every dream is busy') : undefined}
+        >
+          Fix every dream
+        </button>
+        {error && <span className="text-red-700 dark:text-red-400">{error}</span>}
+      </span>
+    )
+  }
+
+  return (
+    <div className="mb-3 w-full rounded border border-stone-300 dark:border-stone-700 p-3 text-sm">
+      <p className="mb-2 text-stone-600 dark:text-stone-400">
+        Re-renders every flagged stretch not marked keep, one dream after another, each from the frame before it. A re-render is final.
+        {stale > 0 && ` ${stale} ${stale === 1 ? 'dream was' : 'dreams were'} checked before the face check and ${stale === 1 ? 'is' : 'are'} left out: check ${stale === 1 ? 'it' : 'them'} first.`}
+      </p>
+      {plan.length === 0 ? (
+        <p className="mb-2">Nothing to fix.</p>
+      ) : (
+        <ul className="mb-3 grid gap-1 sm:grid-cols-2">
+          {plan.map((dream) => (
+            <li key={dream.id}>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={!left.includes(dream.id)} onChange={(e) => setLeft(e.target.checked ? left.filter((id) => id !== dream.id) : [...left, dream.id])} />
+                {dream.title}: {dream.frames} {dream.frames === 1 ? 'frame' : 'frames'} in {dream.stretches.length} {dream.stretches.length === 1 ? 'stretch' : 'stretches'}
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      <span className="flex flex-wrap items-center gap-2">
+        {frames > 0 && <Paid label={`Re-render ${frames} frames in ${chosen.length} ${chosen.length === 1 ? 'dream' : 'dreams'}`} cost={cost} onConfirm={start} />}
+        <button type="button" onClick={() => setPlan(null)} className={plain}>
+          Cancel
+        </button>
+        {error && <span className="text-red-700 dark:text-red-400">{error}</span>}
+      </span>
+    </div>
+  )
+}
+
 export function PersonCheck({ job, take, title, clip = false, summary, tasks, onChanged }: {
   job: string
   take: string
@@ -260,13 +377,8 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
   const status = checkLabel(summary)
   // A flagged stretch that is all 2023 morph gets replaced with the morphs, so it's listed there, not as a person.
   const isMorph = (frame: number) => detail?.morphs.includes(frame) ?? false
-  const inStretch = (st: { start: number; end: number }) => detail?.frames.filter((f) => f >= st.start && f <= st.end) ?? []
-  const isAllMorph = (st: { start: number; end: number }) => {
-    const frames = inStretch(st)
-    return frames.length > 0 && frames.every(isMorph)
-  }
 
-  const stretches = detail?.check?.stretches.filter((st) => !detail.keep.includes(st.start) && !isAllMorph(st)) ?? []
+  const stretches = detail ? openStretches(detail) : []
   const kept = detail?.check?.stretches.filter((st) => detail.keep.includes(st.start)) ?? []
   const flaggedFrames = stretches.reduce((sum, st) => sum + st.frames, 0)
   const morphStretches = detail ? groupStretches(detail.morphs, detail.frames) : []
