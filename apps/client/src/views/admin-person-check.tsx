@@ -9,7 +9,7 @@ import { useRunOn } from './admin-run-on.tsx'
 // are looked at and replaced, instead of going through every frame by hand.
 
 /** `flagged`/`stretches` count frames flagged as a person or a face (not morphs); `morphs` is the published dreams' 2023 RIFE morphs still to replace. `checked` false: morphs are known but the person check hasn't run. */
-export type CheckSummary = { frames: number; flagged: number; stretches: number; morphs?: number; checked?: boolean }
+export type CheckSummary = { frames: number; flagged: number; stretches: number; morphs?: number; checked?: boolean; /** false: checked before the face check, so painted faces were missed. */ faces?: boolean }
 type Stretch = { start: number; end: number; frames: number; peak: number; facePeak?: number }
 type Detail = {
   /** Dream frames, by the job frame each first appears at. */
@@ -36,6 +36,7 @@ const primary = 'rounded bg-stone-900 dark:bg-stone-100 px-2.5 py-1 text-sm font
 
 export function checkLabel(check: CheckSummary | null): { label: string; tone: string } {
   if (!check || check.checked === false) return { label: 'Not checked for people', tone: 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300' }
+  if (check.faces === false) return { label: 'Checked before the face check: check again', tone: 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300' }
   if (check.flagged === 0) return { label: `No person found in ${check.frames} frames`, tone: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-200' }
   return { label: `${check.flagged} ${check.flagged === 1 ? 'frame shows' : 'frames show'} a person, in ${check.stretches} ${check.stretches === 1 ? 'stretch' : 'stretches'}`, tone: 'bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200' }
 }
@@ -104,6 +105,51 @@ function Paid({ label, cost, disabled, onConfirm }: { label: string; cost: strin
       <button type="button" onClick={() => setStep('idle')} className={plain}>
         Cancel
       </button>
+    </span>
+  )
+}
+
+/**
+ * Queues a full-song check of every dream at once, for when the check itself changes (the face check,
+ * 2026-10-25). The queue runs one check at a time, so this is about 8 minutes a dream; a dream with
+ * anything already queued or running is left out, as its own "Check again" would be.
+ */
+export function CheckAll({ job, takes, tasks, onChanged }: { job: string; takes: string[]; tasks: Task[]; onChanged: () => void }) {
+  const [confirming, setConfirming] = useState(false)
+  const [error, setError] = useState('')
+  const free = takes.filter((take) => !tasks.some((t) => t.take === take && active(t)))
+  const run = async () => {
+    setConfirming(false)
+    setError('')
+    try {
+      for (const take of free) await api(`/__admin/api/jobs/${job}/actions`, { action: 'check', take })
+    } catch (e) {
+      setError((e as Error).message)
+    }
+
+    onChanged()
+  }
+
+  return (
+    <span className="flex flex-wrap items-center gap-2 text-sm">
+      {confirming ? (
+        <>
+          <span className="text-stone-600 dark:text-stone-400">
+            Checks {free.length} {free.length === 1 ? 'dream' : 'dreams'} one after another, about {free.length * 8} minutes on this machine. Free.
+          </span>
+          <button type="button" onClick={run} className={plain}>
+            Check them all
+          </button>
+          <button type="button" onClick={() => setConfirming(false)} className={plain}>
+            Cancel
+          </button>
+        </>
+      ) : (
+        <button type="button" disabled={free.length === 0} onClick={() => setConfirming(true)} className={plain} title={free.length === 0 ? 'Every dream already has something queued or running' : undefined}>
+          Check every dream
+        </button>
+      )}
+      {error && <span className="text-red-700 dark:text-red-400">{error}</span>}
     </span>
   )
 }

@@ -204,7 +204,8 @@ function checkSummary(dir: string) {
     .filter((frame) => !morphSet.has(frame) && open.some((s) => frame >= s.start && frame <= s.end))
     .map((frame) => ({ frame }))
   const peopleStretches = open.filter((s) => people.some(({ frame }) => frame >= s.start && frame <= s.end))
-  return { frames: check.frames, flagged: people.length, stretches: peopleStretches.length, morphs: morphs.length, checked: true }
+  // A check from before the face check (no `faces`) missed painted faces, so its result is out of date.
+  return { frames: check.frames, flagged: people.length, stretches: peopleStretches.length, morphs: morphs.length, checked: true, faces: !!check.faces }
 }
 
 /** Everything the review needs for one take: its dream frames (each with the job frames holding it), scores, and flagged stretches. */

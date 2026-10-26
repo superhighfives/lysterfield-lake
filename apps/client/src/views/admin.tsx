@@ -9,7 +9,7 @@ import { active, api, jobFile, pad, reason, runAction, type Task } from './admin
 import { priced, RunOnContext, RunOnSwitch, useRunOn, useRunOnChoice } from './admin-run-on.tsx'
 import { PaletteSwatch } from './admin-palette.tsx'
 import { Tasks } from './admin-tasks.tsx'
-import { PersonCheck, type CheckSummary } from './admin-person-check.tsx'
+import { CheckAll, PersonCheck, type CheckSummary } from './admin-person-check.tsx'
 
 // Dev-only page for making and reviewing new dreams (panel 7), and for
 // checking any dream for people: plans/in-progress/dreams.md. Talks to the /__admin API that
@@ -902,10 +902,13 @@ export default function Admin() {
 
         {(detail?.songs.length ?? 0) > 0 && (
           <section className="mb-10">
-            <h2 className="mb-1 font-serif text-2xl">People check</h2>
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-serif text-2xl">People check</h2>
+              <CheckAll job={job} takes={detail!.songs.map((song) => song.id)} tasks={tasks} onChanged={() => loadTasks().catch(fail)} />
+            </div>
             <p className="mb-3 text-sm text-stone-600 dark:text-stone-400">
-              Every dream with a full song, published ones included. The check is free and runs on this machine. It flags a literal person, hands, or a cut-out of the subject; a shape that only looks like a person is the
-              intended look and is left alone. A flagged frame is re-rendered from the frame before it, which replaces it for good, or that frame is held, which can be undone.
+              Every dream with a full song, published ones included. The check is free and runs on this machine. It flags a literal person, hands, a cut-out of the subject, or a face, painted or not; a shape that only looks
+              like a person is the intended look and is left alone. A flagged frame is re-rendered from the frame before it, which replaces it for good, or that frame is held, which can be undone.
             </p>
             <div className="rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4">
               {detail!.songs.map((song) => (
