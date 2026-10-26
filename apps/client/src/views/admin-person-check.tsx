@@ -30,6 +30,8 @@ const COST_PER_FRAME = 0.008
 const WORKING: Record<string, string> = { check: 'Checking every frame for people and faces (about 8 minutes for a full song)…', rerender: 'Re-rendering…', hold: 'Holding the frame before…', restore: 'Putting the originals back…' }
 /** A re-render runs up to this many rounds (each with the model's own two retries) while a frame still shows a person: dream-repair.ts's MAX_REPAIR_ROUNDS. */
 const MAX_ROUNDS = 10
+/** The face check's threshold for a check.json from before faceThreshold was stored: dream-check.ts's FACE_SCORE_THRESHOLD, copied by hand (the client doesn't import from the pipeline). */
+const FACE_THRESHOLD = 0.5
 const dollars = (frames: number) => `about $${Math.max(0.05, frames * COST_PER_FRAME).toFixed(2)}, up to $${(frames * COST_PER_FRAME * 3 * MAX_ROUNDS).toFixed(2)}`
 const plain = 'rounded border border-stone-300 dark:border-stone-700 px-2.5 py-1 text-sm hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-40'
 const primary = 'rounded bg-stone-900 dark:bg-stone-100 px-2.5 py-1 text-sm font-medium text-white dark:text-stone-900 disabled:opacity-40'
@@ -68,7 +70,7 @@ function stuckOnFace(detail: Detail, st: { start: number; end: number }): boolea
     frames.length > 0 &&
     frames.every(
       (f) =>
-        detail.rerendered.includes(f) && (check.scores[pad(f)] ?? 0) <= check.threshold && (check.faces?.[pad(f)] ?? 0) > (check.faceThreshold ?? 0.5)
+        detail.rerendered.includes(f) && (check.scores[pad(f)] ?? 0) <= check.threshold && (check.faces?.[pad(f)] ?? 0) > (check.faceThreshold ?? FACE_THRESHOLD)
     )
   )
 }
@@ -419,7 +421,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
           // Flagged by the face check alone: the person score is under its threshold.
           const faceOnly =
             kind === 'person' &&
-            inside.every((frame) => (score(frame) ?? 0) <= (detail.check?.threshold ?? 0) && (face(frame) ?? 0) > (detail.check?.faceThreshold ?? 0.5))
+            inside.every((frame) => (score(frame) ?? 0) <= (detail.check?.threshold ?? 0) && (face(frame) ?? 0) > (detail.check?.faceThreshold ?? FACE_THRESHOLD))
           const stuck = kind === 'person' && stuckOnFace(detail, s)
           return (
             <div key={s.start} className="mb-3 rounded border border-stone-200 dark:border-stone-800 p-2">
