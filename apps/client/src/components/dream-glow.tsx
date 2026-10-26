@@ -1,6 +1,6 @@
 import { MutableRefObject, useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Color, Texture, VideoTexture } from 'three'
+import { Color, VideoTexture } from 'three'
 import { dreamVideo } from '../utils/dream-video'
 import { useStore } from '../store'
 import {
@@ -12,7 +12,7 @@ import {
 // The dream behind everything, like a cinema screen: the dream panel
 // filling the whole screen (materials/dream-screen.ts). And its
 // colour pooling faintly in the page's bowl (see --dream-tint in
-// index.css): the dream panel (7 of the composite video) is drawn into a
+// index.css): the front dream video (utils/dream-video.ts) is drawn into a
 // tiny canvas a few times a second and averaged, and the tint eases toward
 // that, so it drifts with the video rather than flickering.
 
@@ -32,28 +32,19 @@ const TINT_ALPHA = { light: 0.15, dark: 0.1 }
 const PRESENCE_EASE = 0.02
 const PRESENCE_LEAVE = 0.08
 const SETTLE_MS = 400
-// The composite video's panel count, and the dream panel (1-based).
-const PANELS = 7
-const DREAM_PANEL = 7
 
 // Scratch objects for the per-frame tint maths.
 const scratchHsl = { h: 0, s: 0, l: 0 }
 const scratchColor = new Color()
 
 function DreamGlow({
-  video,
-  texture,
   dreamTextures,
   fade,
   develop,
 }: {
-  video: HTMLVideoElement
-  /** The composite video's texture, for the spill. */
-  texture: Texture
-  /** Split (utils/dream-video.ts): the two dream videos' textures, of
-   *  which the screen shows whichever is in front — whole frames, not a
-   *  panel of `texture`. */
-  dreamTextures: VideoTexture[] | null
+  /** The two dream videos' textures (utils/dream-video.ts), of which the
+   *  screen shows whichever is in front. */
+  dreamTextures: VideoTexture[]
   /** 0-1: how present the avatar is (main.tsx's fadeRef), so
    *  the spill fades as the polaroid's dragged, and is gone through a
    *  swap, with them. Followed directly, not through the slow presence
@@ -64,7 +55,6 @@ function DreamGlow({
   develop: MutableRefObject<number>
 }) {
   const scheme = useStore((state) => state.colorScheme)
-  const split = !!dreamTextures
   const dream = useStore((state) => state.dream)
 
   const sampler = useMemo(() => {
@@ -82,16 +72,13 @@ function DreamGlow({
   const dreamSince = useRef(0)
   const hasSample = useRef(false)
   const presenceRef = useRef(0)
-  // The composite video's dream panel, as the screen behind everything
-  // (materials/dream-screen.ts).
-  // Its scheme from the start (see createDreamScreen); later changes
-  // below.
-  const screen = useMemo(() => {
-    const scheme = useStore.getState().colorScheme
-    return split
-      ? createDreamScreen(null, { scheme })
-      : createDreamScreen(texture, { panels: PANELS, panel: DREAM_PANEL, scheme })
-  }, [split, texture])
+  // The front dream video, as the screen behind everything
+  // (materials/dream-screen.ts). Its scheme from the start (see
+  // createDreamScreen); later changes below.
+  const screen = useMemo(
+    () => createDreamScreen(null, { scheme: useStore.getState().colorScheme }),
+    []
+  )
   const { material } = screen
   useEffect(
     () => () => {
@@ -111,12 +98,10 @@ function DreamGlow({
 
   useFrame((state) => {
     material.uniforms.uAspect.value = state.size.width / state.size.height
-    // The video the colour's sampled from, and how its frame's laid out.
-    const front = dreamTextures?.[dreamVideo.front]
-    if (front) material.uniforms.uTexture.value = front
-    const source = (front?.image as HTMLVideoElement | undefined) ?? video
-    const panels = front ? 1 : PANELS
-    const panelIndex = front ? 1 : DREAM_PANEL
+    // The video the colour's sampled from.
+    const front = dreamTextures[dreamVideo.front]
+    material.uniforms.uTexture.value = front
+    const source = front.image as HTMLVideoElement
     const now = performance.now()
     if ((dream?.id ?? null) !== sampledFor.current) {
       sampledFor.current = dream?.id ?? null
@@ -133,19 +118,8 @@ function DreamGlow({
       source.videoWidth
     ) {
       lastSample.current = now
-      const panel = source.videoWidth / panels
       try {
-        sampler.drawImage(
-          source,
-          panel * (panelIndex - 1),
-          0,
-          panel,
-          source.videoHeight,
-          0,
-          0,
-          8,
-          8
-        )
+        sampler.drawImage(source, 0, 0, 8, 8)
         const data = sampler.getImageData(0, 0, 8, 8).data
         let r = 0
         let g = 0

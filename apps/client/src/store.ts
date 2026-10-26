@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { Dream } from './utils/types'
 // Circular (dream-video imports this store), and safe: neither uses the
 // other until called.
-import { isSplit } from './utils/dream-video'
 import {
   ColorScheme,
   ThemePreference,
@@ -176,7 +175,7 @@ export const useStore = create<AppState>()((set) => ({
     set(() => ({ themePreference })),
   setColorScheme: (colorScheme: ColorScheme) => set(() => ({ colorScheme })),
   setResume: (resume: Resume | null) => set(() => ({ resume })),
-  // While the next dream's still loading (split), a swap re-targets: the
+  // While the next dream's still loading, a swap re-targets: the
   // print's already blank, so `out` is over at once (views/main.tsx) and
   // the one after loads in its place (utils/dream-video.ts's load drops
   // the one skipped).
@@ -184,8 +183,7 @@ export const useStore = create<AppState>()((set) => ({
     set((state) =>
       state.dream &&
       !state.resetting &&
-      (state.swapPhase === 'idle' ||
-        (state.swapPhase === 'loading' && isSplit(state.dream)))
+      (state.swapPhase === 'idle' || state.swapPhase === 'loading')
         ? { swapPhase: 'out', swapDirection }
         : {}
     ),

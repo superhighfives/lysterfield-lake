@@ -139,7 +139,16 @@ function checkDir(job: string, take: string, clip: boolean): string {
   return path.join(jobDir(job), '7-dreams', take, clip ? 'preview/dream' : '')
 }
 
-type CheckFile = { threshold: number; frames: number; flagged: number; stretches: { start: number; end: number; frames: number; peak: number }[]; scores: Record<string, number> }
+type CheckFile = {
+  threshold: number
+  faceThreshold?: number
+  frames: number
+  flagged: number
+  stretches: { start: number; end: number; frames: number; peak: number; facePeak?: number }[]
+  scores: Record<string, number>
+  /** Face scores (models/face-check), absent in checks from before it. */
+  faces?: Record<string, number>
+}
 type Review = { keep: number[] }
 
 function readReview(dir: string): Review {
@@ -186,9 +195,14 @@ function checkSummary(dir: string) {
   const open = check.stretches.filter((s) => !keep.has(s.start))
   // Frames flagged as a person that aren't morphs (a flagged morph is replaced with the morphs anyway), and the
   // stretches they're in. A stretch can hold both; the review marks each frame.
-  const people = Object.entries(check.scores)
-    .map(([frame, score]) => ({ frame: Number(frame), score }))
-    .filter(({ frame, score }) => score > check.threshold && !morphSet.has(frame) && open.some((s) => frame >= s.start && frame <= s.end))
+  // Flagged by either score, as in dream-check.ts's isFlagged. The client doesn't import from the pipeline, so
+  // the 0.5 fallback (for a check.json from before faceThreshold was stored) copies FACE_SCORE_THRESHOLD by hand.
+  const flagged = (key: string) => check.scores[key] > check.threshold || (check.faces?.[key] ?? 0) > (check.faceThreshold ?? 0.5)
+  const people = Object.keys(check.scores)
+    .filter(flagged)
+    .map(Number)
+    .filter((frame) => !morphSet.has(frame) && open.some((s) => frame >= s.start && frame <= s.end))
+    .map((frame) => ({ frame }))
   const peopleStretches = open.filter((s) => people.some(({ frame }) => frame >= s.start && frame <= s.end))
   return { frames: check.frames, flagged: people.length, stretches: peopleStretches.length, morphs: morphs.length, checked: true }
 }
@@ -226,6 +240,9 @@ function checkDetail(job: string, take: string, clip: boolean) {
 
 function jobDetail(job: string) {
   const dir = jobDir(job)
+  const config = readJson(path.join(dir, 'job.json')) as { fps: number; clip?: { start: number } }
+  // Where the test clip starts in the song (s): the player starts a clip preview there.
+  const clipStart = config.clip ? (config.clip.start - 1) / config.fps : 0
   const dreams = path.join(dir, '7-dreams')
   const takes = existsSync(dreams)
     ? readdirSync(dreams, { withFileTypes: true })
@@ -237,7 +254,8 @@ function jobDetail(job: string) {
             id: d.name,
             ...(readJson(path.join(take, 'take.json')) as object),
             samples: existsSync(samplesDir) ? readdirSync(samplesDir).filter((f) => f.endsWith('.jpg')).map((f) => Number(f.slice(0, 4))) : [],
-            hasPreview: existsSync(path.join(take, 'preview', 'video.mov')),
+            hasPreview: existsSync(path.join(take, 'preview', 'dream.mp4')),
+            clipStart,
             hasSong: existsSync(path.join(take, 'split', 'dream.mp4')),
             clipCheck: checkSummary(path.join(take, 'preview', 'dream')),
             modified: statSync(path.join(take, 'take.json')).mtimeMs,
@@ -267,7 +285,7 @@ function jobDetail(job: string) {
           check: checkSummary(path.join(dreams, d.name)) ?? null,
         }))
     : []
-  return { name: job, config: readJson(path.join(dir, 'job.json')), takes, songs, directions }
+  return { name: job, config, takes, songs, directions }
 }
 
 /**

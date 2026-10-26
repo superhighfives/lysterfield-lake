@@ -16,27 +16,18 @@ import type { Dream } from './types'
 // switch to a dream that isn't warm (back/forward) loads it into the back
 // slot first, and the polaroid crossfades to it (`mix`).
 
-/** The split layout, unless `?split=0` asks for the 7-panel one — the
- *  fallback while it's checked on real devices. Dev previews of a take
- *  (`dream.src`) only have 7-panel files. */
-const SPLIT_ENABLED = new URLSearchParams(location.search).get('split') !== '0'
-export const isSplit = (dream: Dream | null) =>
-  SPLIT_ENABLED && !!dream && !dream.src
-
 const dreamsUrl = import.meta.env.VITE_APP_DREAMS
 const small = () => {
   const { isMobile, isTouch } = useStore.getState()
   return isMobile || isTouch ? '-small' : ''
 }
 
-/** The main video's URL, without its extension: the shared main video in
- *  the split layout, or the dream's own 7-panel video — half size on
- *  `smallVideo` devices (mobile and touch). */
+/** The main video's URL, without its extension: the shared main video —
+ *  half size on `smallVideo` devices (mobile and touch) — or, before a
+ *  dream's chosen, the title video. */
 export function mainVideoBase(dream: Dream | null, smallVideo: boolean) {
   if (!dream) return '/video/title'
-  const suffix = smallVideo ? '-small' : ''
-  if (isSplit(dream)) return `${dreamsUrl}/main/main${suffix}`
-  return `${dream.src ?? `${dreamsUrl}/${dream.id}`}/video${suffix}`
+  return `${dreamsUrl}/main/main${smallVideo ? '-small' : ''}`
 }
 
 // Drift between the two clocks (s): under IN_SYNC it's left alone; up to

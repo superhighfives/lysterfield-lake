@@ -91,7 +91,7 @@ after one frame.
 | 4. Full song | ~54 chained runs | ~$20 | confirm dialog |
 | 5. Check | Score every dream frame for a person | free | none |
 | 6. Repair | Re-render flagged stretches with Deforum | ~$0.008 a frame | user approves flagged stretches and the cost |
-| 7. Publish | `compose`, `compose-split`, `upload-dreams.sh`, a PR | free | user's go-ahead for R2 |
+| 7. Publish | `compose`, `upload-dreams.sh`, a PR | free | user's go-ahead for R2 |
 
 Stages 1-4 exist. Stages 5 and 6 are new and are what makes this
 manageable: most leaks are rerolled away as the frame is made, and the
@@ -165,11 +165,18 @@ Why the check passed them:
   0.34991. `dream-check` then runs that same probe, so it can't flag what
   the reroll let through.
 
-What changes: a second check that doesn't share the probe's blind spot,
-for faces (a face detector or a vision model over the frames). It runs in
-`dream-check` and in the reroll, beside the probe, and a frame fails if
-either flags it. Then retrain the probe with the line redrawn: a silhouette
-is fine, a readable face isn't, bust or not (to confirm with the user).
+What changed (2026-10-25): a second, independent check for faces,
+`models/face-check` (adetailer's `face_yolov8m`, chosen against OWLv2, an
+anime face detector, COCO person and a local VLM on 327 hand-labelled
+frames; its README has the numbers). `dream-check` runs it beside the
+probe and flags a frame when the face score is over 0.5 or the person
+score is over 0.18, well under the reroll's 0.35, so the reroll's own
+verdict isn't simply read back. It is never used to reroll or to decide
+a re-render's rounds: a search against it would find the faces it misses.
+Repaired frames are face-scored afterwards, for the review. Still to do:
+retrain the probe with the line redrawn: a silhouette is fine, a readable
+face isn't, bust or not. Left for now (user, 2026-10-25): Charcoal and
+Ink Flight stay as published until that's decided.
 Contact sheets: `.jobs/spikes/face-audit/<dream>.jpg`.
 
 ### 6. Repair: re-render, never interpolate
@@ -272,15 +279,16 @@ left as they were.
 For a new take (the steps in detail: `in-progress/next-dream.md`):
 
 1. `compose --job .jobs/full-video --take <take> --id <client-id>` (local,
-   25-38 minutes): the stills and loop into
-   `apps/client/public/assets/<id>/`, a `dreams.json` entry to fill in.
-2. `compose-split --takes <client-id>`: the take's `dream{,-small}.{mp4,webm}`.
-   The shared `main*` is already made and doesn't change.
-3. Review: one full watch of panel 7.
-4. Upload the split files to the app's bucket with
+   free): the take's `split/dream{,-small}.{mp4,webm}`, the hero and loop
+   into `apps/client/public/assets/<id>/`, and a `dreams.json` entry to
+   fill in. The shared `main*` is already made and doesn't change. (Until
+   2026-10-25 this also made a 7-panel video, and `compose-split` was a
+   separate step.)
+2. Review: one full watch of panel 7.
+3. Upload the split files to the app's bucket with
    `apps/client/scripts/upload-dreams.sh <id>`,
    without deleting anything. **Needs the user's go-ahead.**
-5. A PR with the assets and `dreams.json`. Merging deploys it.
+4. A PR with the assets and `dreams.json`. Merging deploys it.
 
 ### Our own GPU (2026-10-14)
 
@@ -371,8 +379,9 @@ Check and repair:
 - [x] `dream-check` (`models/person-check/`, `dream-check.ts`), trained
       and cross-validated on the 2023 keep/replace decisions
 - [ ] Feed a reviewed take's decisions back into `train.py`
-- [ ] A second, independent face check in `dream-check` and the reroll
-      (see "The check misses painted faces")
+- [x] A second, independent face check in `dream-check`
+      (`models/face-check`; see "The check misses painted faces"). Kept
+      out of the reroll and repair rounds on purpose
 - [ ] Retrain the probe with readable faces as bad, bust or not
 - [ ] Re-check all eleven published dreams with both, then repair or pull
       what fails (sharp-edges, charcoal, ink-flight first)

@@ -52,8 +52,7 @@ straight to its 15-second clip.
 | Full song | `dream` (`/admin` adds `--skip-client true`) | ~$20 | ~6 h, 2,580 frames in restartable 48-frame chains |
 | Check | `dream-check` | free | ~6 min |
 | Repair | `dream-repair --frames … --action rerender\|hold --confirm true` | ~$0.008 a frame | minutes |
-| Compose | `compose --take <id> --id <client-id>` | free | 25-38 min |
-| Split | `compose-split --takes <client-id>` | free | minutes |
+| Compose | `compose --take <id> --id <client-id>` | free | minutes (it no longer makes a 7-panel video) |
 
 About $22 for a take that goes through, more if the clip shows it needs a
 second try. Every paid stage needs the user's go-ahead (CLAUDE.md:
@@ -64,12 +63,10 @@ on the flux-kontext path. `dream-repair` is capped at `MAX_REPAIR_ROUNDS`
 
 **What publishing writes** (since 2026-10-25):
 
-- `compose` writes the 7-panel `7-dreams/<take>/final/video*` and the
-  take's `video/panel.mov` in the job, and the chooser's
-  `public/assets/<id>/{hero.jpg,loop.mov}` (committed) plus a
+- `compose` writes the take's dream-only `7-dreams/<take>/split/dream{,-small}.{mp4,webm}`
+  in the job (and the shared `main/main*`, if it isn't there yet), and the
+  chooser's `public/assets/<id>/{hero.jpg,loop.mov}` (committed) plus a
   `src/dreams.json` entry with title `TBA` and an empty prompt.
-- `compose-split` writes the dream-only `7-dreams/<take>/split/dream{,-small}.{mp4,webm}`
-  from `video/panel.mov`, and rewrites the shared `main/main*` in the job.
 - The app plays only the split files, from the `lysterfield-lake-dreams`
   bucket at dreams.lysterfieldlake.com, in development too. Before
   they're uploaded, `/admin`'s "Watch the song in the player"
@@ -79,7 +76,7 @@ on the flux-kontext path. `dream-repair` is capped at `MAX_REPAIR_ROUNDS`
 
 **The shared main video stays as it is.** Panels 1-6 are the same for
 every dream, so a new dream only adds its own `dream*` files.
-`compose-split` skips `main/` while its outputs exist, and the main video
+`compose` skips `main/` while its outputs exist, and the main video
 on the next bucket already has the depth fix (`done/depth-walk-away-gaps.md`).
 
 ## Approach
@@ -94,8 +91,7 @@ on the next bucket already has the depth fix (`done/depth-walk-away-gaps.md`).
 4. **Check and repair.** `dream-check`, then go through the flagged stretches
    in `/admin#check-<take>`: re-render, hold or keep. Then one watch of the
    whole of panel 7.
-5. **Compose.** `compose --take <take> --id <client-id>`, then
-   `compose-split --takes <client-id>`. Fill in the `dreams.json` entry's
+5. **Compose.** `compose --take <take> --id <client-id>`. Fill in the `dreams.json` entry's
    title and prompt (the `link` is unused now: every dream links to the one
    YouTube video, `utils/youtube.ts`).
 6. **Upload** the dream's split files to the bucket with
@@ -117,7 +113,7 @@ First run (`sharp-edges`):
 - [x] Check, repair (219 stretches)
 - [ ] One full watch: not done before publishing, and it would have caught
       the faces
-- [x] `compose`, `compose-split`, fill in `dreams.json`
+- [x] `compose`, `compose-split` (one step since), fill in `dreams.json`
 - [x] A small upload script for a dream's split files, so step 6 isn't
       typed by hand: `apps/client/scripts/upload-dreams.sh <id>`,
       skipping files already there at the same size
@@ -126,7 +122,8 @@ First run (`sharp-edges`):
 
 Redo:
 
-- [ ] Pull `sharp-edges` from the chooser while it shows faces (user)
+- [ ] Pull `sharp-edges` from the chooser while it shows faces: kept live
+      for now (user, 2026-10-25)
 - [ ] The new face check (`in-progress/dreams.md`), then decide: repair
       `sharp-edges` or make a new take
 - [ ] Check, repair, and one full watch of panel 7 before anything ships

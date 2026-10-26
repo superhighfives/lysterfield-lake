@@ -5,21 +5,18 @@ import { ShaderMaterial, Texture, Vector2, Vector3 } from 'three'
 const uniforms = {
   uOpacity: 0,
   uTexture: new Texture(),
-  // The split layout (plans/done/split-dream-video-client.md): uTexture
-  // is the shared main video, panels 1-6 (uFrameTotal 6), and panel 7, the
-  // dream, comes from its own videos — uDream and uDreamNext, crossfaded
-  // by uDreamMix (0 = uDream). uSplit 0 is the 7-panel layout, panel 7
-  // read from uTexture like the rest.
+  // uTexture is the shared main video, panels 1-6 side by side
+  // (MAIN_PANELS), and panel 7, the dream, comes from its own videos —
+  // uDream and uDreamNext, crossfaded by uDreamMix (0 = uDream)
+  // (plans/done/split-dream-video-client.md).
   // Null, not an empty Texture, when unset (the avatar never reads panel
   // 7): drei clones default uniforms, and a cloned empty Texture is flagged
   // for upload with no image, which three.js warns about every frame.
   uDream: null as Texture | null,
   uDreamNext: null as Texture | null,
   uDreamMix: 0,
-  uSplit: 0,
   uFrameSelected: 0,
   uFrameMask: 0,
-  uFrameTotal: 0,
   uMaskIntensity: 0,
   uInvert: 0,
   uFrameDepth: 0,
@@ -100,7 +97,8 @@ export const VideoMaterial = shaderMaterial(
     uniform float uFrameSelected;
     uniform float uFrameDepth;
     uniform float uFrameMask;
-    uniform float uFrameTotal;
+    // The main video's panels, side by side: 1 lyrics to 6 outline (CLAUDE.md).
+    const float MAIN_PANELS = 6.0;
     uniform float uOpacity;
     uniform float uFrameOverlay;
     uniform vec2 uPointerPos;
@@ -114,13 +112,12 @@ export const VideoMaterial = shaderMaterial(
     // Half the polaroid model's width and height, to normalise the bend.
     const vec2 BEND_EXTENT = vec2(1.83, 2.3);
 
-    // Samples one panel of the atlas (uFrameTotal panels: 7, or the split
-    // layout's main video, 6 — only the matte and depth are read here, both
-    // in the main video), clamped (like the fragment shader's localX) so a
+    // Samples one panel of the main video (only the matte and depth are
+    // read here), clamped (like the fragment shader's localX) so a
     // lookup never bleeds into the neighbouring panel.
     float samplePanel(float panel, vec2 uv) {
       float x = clamp(uv.x, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
-      return texture2D(uTexture, vec2((x + (panel - 1.0)) / uFrameTotal, clamp(uv.y, 0.0, 1.0))).r;
+      return texture2D(uTexture, vec2((x + (panel - 1.0)) / MAIN_PANELS, clamp(uv.y, 0.0, 1.0))).r;
     }
 
     // A panel's average over a 5x5 neighbourhood spanning +/-radius.
@@ -184,10 +181,10 @@ export const VideoMaterial = shaderMaterial(
     uniform sampler2D uDream;
     uniform sampler2D uDreamNext;
     uniform float uDreamMix;
-    uniform float uSplit;
     uniform float uOpacity;
     uniform float uFrameSelected;
-    uniform float uFrameTotal;
+    // The main video's panels, side by side: 1 lyrics to 6 outline (CLAUDE.md).
+    const float MAIN_PANELS = 6.0;
     uniform float uFrameMask;
     uniform float uFrameSketch;
     uniform float uMaskIntensity;
@@ -283,13 +280,13 @@ export const VideoMaterial = shaderMaterial(
     // The ordered-dither threshold (0-1) for this pixel's cell.
     // One panel's colour at a panel-local uv (x already kept a texel inside
     // the panel, see localX). Every fragment lookup goes through this, so
-    // the dream panel can come from its own videos in the split layout.
+    // the dream panel comes from its own videos.
     vec4 panel(float p, vec2 uv) {
-      if (uSplit > 0.5 && p == 7.0) {
+      if (p == 7.0) {
         vec2 d = clamp(uv, 0.0, 1.0);
         return mix(texture2D(uDream, d), texture2D(uDreamNext, d), uDreamMix);
       }
-      return texture2D(uTexture, vec2((uv.x + (p - 1.0)) / uFrameTotal, uv.y));
+      return texture2D(uTexture, vec2((uv.x + (p - 1.0)) / MAIN_PANELS, uv.y));
     }
 
     // Smooth value noise, 0-1, for the blank print's drifting emulsion.
@@ -377,7 +374,7 @@ export const VideoMaterial = shaderMaterial(
       // is soft at source — stylised, then VP9-compressed — so this
       // recovers some edge definition rather than adding real detail.
       if(uSharpen != 0.0) {
-        vec2 uv = vec2((localX + (uFrameSelected - 1.0)) / uFrameTotal, st.y - offsetY);
+        vec2 uv = vec2((localX + (uFrameSelected - 1.0)) / MAIN_PANELS, st.y - offsetY);
         vec2 texel = SHARPEN_TEXELS / vec2(textureSize(uTexture, 0));
         vec3 blur = (
           texture2D(uTexture, uv + vec2(texel.x, 0.0)).rgb +

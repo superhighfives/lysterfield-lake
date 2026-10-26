@@ -9,7 +9,7 @@ const execFileAsync = promisify(execFile)
 
 /**
  * The polaroid's panels, in atlas order (plans/in-progress/polaroids.md). Its own layout, not the music
- * video's 7-panel one (CLAUDE.md): no words, no dream. The client's polaroid-loop-material.tsx reads these
+ * video's main video and dream (CLAUDE.md): no words, no dream. The client's polaroid-loop-material.tsx reads these
  * indices, 1-based like the player's.
  */
 export const POLAROID_PANELS = ['2-portrait/upscaled', '3-background/frames', '4-matte/frames', '5-depth/frames', '6-outline/frames'] as const

@@ -8,13 +8,13 @@ import { useRunOn } from './admin-run-on.tsx'
 // frames. The pipeline's dream-check finds those frames; this is where they
 // are looked at and replaced, instead of going through every frame by hand.
 
-/** `flagged`/`stretches` count people only; `morphs` is the published dreams' 2023 RIFE morphs still to replace. `checked` false: morphs are known but the person check hasn't run. */
+/** `flagged`/`stretches` count frames flagged as a person or a face (not morphs); `morphs` is the published dreams' 2023 RIFE morphs still to replace. `checked` false: morphs are known but the person check hasn't run. */
 export type CheckSummary = { frames: number; flagged: number; stretches: number; morphs?: number; checked?: boolean }
-type Stretch = { start: number; end: number; frames: number; peak: number }
+type Stretch = { start: number; end: number; frames: number; peak: number; facePeak?: number }
 type Detail = {
   /** Dream frames, by the job frame each first appears at. */
   frames: number[]
-  check: { threshold: number; stretches: Stretch[]; scores: Record<string, number> } | null
+  check: { threshold: number; stretches: Stretch[]; scores: Record<string, number>; faces?: Record<string, number> } | null
   keep: number[]
   /** 2023 RIFE morphs still to replace (published dreams only): interpolated in 2023, so they lose the stop-motion look. */
   morphs: number[]
@@ -27,7 +27,7 @@ type Detail = {
 /** Rough Replicate cost of re-rendering one dream frame (L40S with xformers, ~8s at ~$0.000975/s), before rerolls: a frame still scored as a person is re-rendered up to twice more. */
 const COST_PER_FRAME = 0.008
 /** What a check or repair task is doing, for the row's status line. */
-const WORKING: Record<string, string> = { check: 'Checking every frame (about 6 minutes for a full song)…', rerender: 'Re-rendering…', hold: 'Holding the frame before…', restore: 'Putting the originals back…' }
+const WORKING: Record<string, string> = { check: 'Checking every frame for people and faces (about 8 minutes for a full song)…', rerender: 'Re-rendering…', hold: 'Holding the frame before…', restore: 'Putting the originals back…' }
 /** A re-render runs up to this many rounds (each with the model's own two retries) while a frame still shows a person: dream-repair.ts's MAX_REPAIR_ROUNDS. */
 const MAX_ROUNDS = 10
 const dollars = (frames: number) => `about $${Math.max(0.05, frames * COST_PER_FRAME).toFixed(2)}, up to $${(frames * COST_PER_FRAME * 3 * MAX_ROUNDS).toFixed(2)}`
@@ -129,7 +129,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
   /** Bumped after every change, so replaced frames aren't shown from the browser's cache. */
   const [version, setVersion] = useState(0)
   const [cursor, setCursor] = useState(0)
-  /** "Check again" asks once before starting: a full song's check ties up this machine's GPU for 6 minutes or more. */
+  /** "Check again" asks once before starting: a full song's check ties up this machine's GPU for 8 minutes or more. */
   const [confirmingCheck, setConfirmingCheck] = useState(false)
 
   const dir = `7-dreams/${take}/${clip ? 'preview/dream/' : ''}`
@@ -226,6 +226,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
   const morphStretches = detail ? groupStretches(detail.morphs, detail.frames) : []
   const [showMorphs, setShowMorphs] = useState(false)
   const score = (frame: number) => detail?.check?.scores[pad(frame)]
+  const face = (frame: number) => detail?.check?.faces?.[pad(frame)]
   const current = detail?.frames[Math.min(cursor, (detail?.frames.length ?? 1) - 1)]
 
   const renderStretch = (s: { start: number; end: number; frames: number }, kind: 'person' | 'morph') => {
@@ -243,10 +244,10 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
                 {before !== undefined && <img src={frameUrl(before)} alt="" title={`Frame ${before}, before`} className="h-28 w-28 shrink-0 rounded object-cover opacity-60" />}
                 {shown.map((frame) => (
                   <div key={frame} className="relative shrink-0">
-                    <img src={frameUrl(frame)} alt="" className={`h-28 w-28 rounded object-cover ring-2 ${isMorph(frame) ? 'ring-sky-500' : 'ring-amber-500'}`} title={isMorph(frame) ? '2023 morph' : 'Flagged as a person'} />
+                    <img src={frameUrl(frame)} alt="" className={`h-28 w-28 rounded object-cover ring-2 ${isMorph(frame) ? 'ring-sky-500' : 'ring-amber-500'}`} title={isMorph(frame) ? '2023 morph' : 'Flagged as a person or a face'} />
                     <img src={sourceUrl(frame)} alt="" title="The footage at this moment" className="absolute bottom-1 right-1 w-9 rounded border border-white" />
                     <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">
-                      {frame}{score(frame) !== undefined ? ` · ${score(frame)!.toFixed(2)}` : ''}{isMorph(frame) ? ' · morph' : ''}
+                      {frame}{score(frame) !== undefined ? ` · ${score(frame)!.toFixed(2)}` : ''}{face(frame) ? ` · face ${face(frame)!.toFixed(2)}` : ''}{isMorph(frame) ? ' · morph' : ''}
                     </span>
                   </div>
                 ))}
@@ -293,7 +294,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
         <span className="ml-auto flex gap-2">
           {confirmingCheck ? (
             <span className="flex items-center gap-2 text-sm">
-              <span className="text-stone-600 dark:text-stone-400">{clip ? 'Checks every frame of the clip, under a minute.' : 'Checks every frame, 6 minutes or more.'}</span>
+              <span className="text-stone-600 dark:text-stone-400">{clip ? 'Checks every frame of the clip, under a minute.' : 'Checks every frame, 8 minutes or more.'}</span>
               <button
                 type="button"
                 disabled={busy}
@@ -398,6 +399,7 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
                     <span className="text-stone-600 dark:text-stone-400">
                       Frame {current}
                       {score(current) !== undefined ? `, person score ${score(current)!.toFixed(2)}` : ''}
+                      {face(current) !== undefined ? `, face score ${face(current)!.toFixed(2)}` : ''}
                       {detail.replaced.includes(current) ? ', replaced' : ''}
                     </span>
                   </div>
