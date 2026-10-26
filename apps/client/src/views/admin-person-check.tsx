@@ -211,6 +211,8 @@ export function FixAll({ job, songs, tasks, onChanged }: { job: string; songs: {
       for (const dream of chosen) {
         const ranges = dream.stretches.map((st) => (st.start === st.end ? String(st.start) : `${st.start}-${st.end}`)).join(',')
         await api(`/__admin/api/jobs/${job}/actions`, { action: 'rerender', take: dream.id, frames: ranges, again: true, on: runOn })
+        // Out of the plan once queued, so confirming again after a failure only covers the rest.
+        setPlan((current) => current?.filter((d) => d.id !== dream.id) ?? null)
       }
 
       setPlan(null)
