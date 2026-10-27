@@ -339,6 +339,16 @@ for this model. One GPU, so one run at a time.
 
 ### Style reference (IP-Adapter, 2026-10-16)
 
+**Never a face in a style image** (user, 2026-10-26). Sharp Edges used
+`13.png`, a portrait of a woman, at strength 1.0, and her face came through
+in about half the song: "look only" still carries a face when the image is
+mostly face, and every repair re-renders with the same style image, so new
+seeds paint her again. Check a style image by eye before making a take (the
+face check's box rule misses a face that fills the image). A face-free frame
+from a dream with the look you want works well: `sharp-edges-0001.png` and
+`sharp-edges-3009.png` in `resources/colours` are Sharp Edges frames with no
+figure, for a redo.
+
 The colour reference only matches each frame's palette. A style reference
 carries over an image's look and imagery too: IP-Adapter's SD 1.5 weights,
 ported onto Deforum 0.7.1's ldm UNet (`models/deforum/ip_adapter.py`). Its
