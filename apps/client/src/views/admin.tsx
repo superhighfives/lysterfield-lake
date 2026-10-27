@@ -905,7 +905,7 @@ export default function Admin() {
         )}
 
         {/* Takes in review and finished ones sit under the people check, closed until asked for: the Tasks panel
-            above shows what's generating. In review opens by default when a take is waiting on your approval. */}
+            above shows what's generating. In review opens by default whenever it has takes (waiting on approval or still generating). */}
         <details className="mb-10" open={inReview.length > 0}>
           <summary className="cursor-pointer font-serif text-2xl">In review ({inReview.length})</summary>
           <p className="mb-4 mt-1 text-sm text-stone-600 dark:text-stone-400">
