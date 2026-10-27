@@ -29,8 +29,8 @@ for id in "$@"; do
     if [ "$remote" = "$size" ]; then echo "same $id/$file"; continue; fi
     type=$([ "${file##*.}" = webm ] && echo video/webm || echo video/mp4)
     echo "put  $id/$file ($size bytes)"
-    # The object path goes first: wrangler 3 has no --remote (it writes to the bucket by default) and
-    # takes an unknown flag's next word as its value, which swallowed the path. Wrangler 4 needs --remote.
+    # Wrangler 4 (bun.lock) writes to local storage without --remote. Wrangler 3 rejects --remote, so if
+    # this fails with "Unknown argument: remote", node_modules is stale: run bun install.
     $dry || bunx wrangler r2 object put "$BUCKET/$id/$file" --remote --file "$local_path" \
       --content-type "$type" --cache-control "public, max-age=604800" >/dev/null
   done
