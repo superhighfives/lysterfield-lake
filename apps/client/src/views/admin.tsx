@@ -883,23 +883,6 @@ export default function Admin() {
 
         <NewDream options={options} existing={detail?.takes.map((t) => t.id) ?? []} onCreate={create} onUploaded={loadOptions} />
 
-        <section className="mb-10">
-          <h2 className="mb-1 font-serif text-2xl">In review</h2>
-          <p className="mb-4 text-sm text-stone-600 dark:text-stone-400">
-            {inReview.length > 0
-              ? 'Each dream moves through samples, a 15-second clip, then the full song, and needs your approval before each paid step. Several dreams can generate at once. In the samples, the small inset is the footage at that moment.'
-              : 'Nothing to review. Generate samples above to start.'}
-          </p>
-          {inReview.map(card)}
-        </section>
-
-        {finished.length > 0 && (
-          <section className="mb-10">
-            <h2 className="mb-4 font-serif text-2xl">Finished</h2>
-            {finished.map(card)}
-          </section>
-        )}
-
         {(detail?.songs.length ?? 0) > 0 && (
           <section className="mb-10">
             <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
@@ -919,6 +902,25 @@ export default function Admin() {
               ))}
             </div>
           </section>
+        )}
+
+        {/* Takes in review and finished ones sit under the people check, closed until asked for: the Tasks panel
+            above shows what's generating. In review opens by default whenever it has takes (waiting on approval or still generating). */}
+        <details className="mb-10" open={inReview.length > 0}>
+          <summary className="cursor-pointer font-serif text-2xl">In review ({inReview.length})</summary>
+          <p className="mb-4 mt-1 text-sm text-stone-600 dark:text-stone-400">
+            {inReview.length > 0
+              ? 'Each dream moves through samples, a 15-second clip, then the full song, and needs your approval before each paid step. Several dreams can generate at once. In the samples, the small inset is the footage at that moment.'
+              : 'Nothing to review. Generate samples above to start.'}
+          </p>
+          {inReview.map(card)}
+        </details>
+
+        {finished.length > 0 && (
+          <details className="mb-10">
+            <summary className="cursor-pointer font-serif text-2xl">Finished ({finished.length})</summary>
+            <div className="mt-4">{finished.map(card)}</div>
+          </details>
         )}
 
         {rejected.length > 0 && (
