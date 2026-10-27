@@ -454,6 +454,8 @@ switch (step) {
     const again = flags.again === undefined ? undefined : Number(flags.again)
     if (again !== undefined && !Number.isFinite(again)) throw new Error('--again takes the time the re-render was asked for, in ms (e.g. Date.now()).')
     // --style <file in resources/colours | none> and --prompt "<text>": this request only, take.json unchanged.
+    // A flag given without a value would otherwise be ignored, and the paid re-render would use the take's saved settings.
+    if (('style' in flags && !flags.style) || ('prompt' in flags && !flags.prompt?.trim())) throw new Error('--style and --prompt need a value.')
     const style = flags.style === undefined ? undefined : flags.style === 'none' ? null : flags.style
     if (style && style !== path.basename(style)) throw new Error('--style takes a file name in resources/colours, or none')
     const results = await dreamRepair(job, take, { takeDir, framesDir, stretches, action, again, style, prompt: flags.prompt })
