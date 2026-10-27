@@ -29,7 +29,9 @@ for id in "$@"; do
     if [ "$remote" = "$size" ]; then echo "same $id/$file"; continue; fi
     type=$([ "${file##*.}" = webm ] && echo video/webm || echo video/mp4)
     echo "put  $id/$file ($size bytes)"
-    $dry || bunx wrangler r2 object put --remote "$BUCKET/$id/$file" --file "$local_path" \
+    # The object path goes first: wrangler 3 has no --remote (it writes to the bucket by default) and
+    # takes an unknown flag's next word as its value, which swallowed the path. Wrangler 4 needs --remote.
+    $dry || bunx wrangler r2 object put "$BUCKET/$id/$file" --remote --file "$local_path" \
       --content-type "$type" --cache-control "public, max-age=604800" >/dev/null
   done
 done
