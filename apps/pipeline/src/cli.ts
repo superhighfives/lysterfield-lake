@@ -423,6 +423,7 @@ switch (step) {
   case 'dream-repair': {
     // Replaces dream frames that show a person: --frames 1735,934-936 (dream frames, by job frame), or --flagged true for
     // every stretch in check.json. --action rerender (default; a paid Deforum run per stretch, needs --confirm true), hold (free), or restore (free: undo, putting the originals back).
+    // A re-render can swap the style image (--style <file> or none) or the prompt (--prompt) for that request only.
     const job = await loadJob(requireFlag('job'))
     const take = requireFlag('take')
     const takeDir = path.join(job.dir, '7-dreams', take, flags.clip === 'true' ? 'preview/dream' : '')
@@ -452,7 +453,10 @@ switch (step) {
     // --again <ms>: re-render stretches that were re-rendered before that time (their result still shows a person).
     const again = flags.again === undefined ? undefined : Number(flags.again)
     if (again !== undefined && !Number.isFinite(again)) throw new Error('--again takes the time the re-render was asked for, in ms (e.g. Date.now()).')
-    const results = await dreamRepair(job, take, { takeDir, framesDir, stretches, action, again })
+    // --style <file in resources/colours | none> and --prompt "<text>": this request only, take.json unchanged.
+    const style = flags.style === undefined ? undefined : flags.style === 'none' ? null : flags.style
+    if (style && style !== path.basename(style)) throw new Error('--style takes a file name in resources/colours, or none')
+    const results = await dreamRepair(job, take, { takeDir, framesDir, stretches, action, again, style, prompt: flags.prompt })
     console.log(JSON.stringify(results, null, 2))
     break
   }
