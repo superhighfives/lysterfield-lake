@@ -14,7 +14,7 @@ type Stretch = { start: number; end: number; frames: number; peak: number; faceP
 type Detail = {
   /** Dream frames, by the job frame each first appears at. */
   frames: number[]
-  check: { threshold: number; stretches: Stretch[]; scores: Record<string, number>; faces?: Record<string, number> } | null
+  check: { threshold: number; faceThreshold?: number; stretches: Stretch[]; scores: Record<string, number>; faces?: Record<string, number> } | null
   keep: number[]
   /** 2023 RIFE morphs still to replace (published dreams only): interpolated in 2023, so they lose the stop-motion look. */
   morphs: number[]
@@ -30,6 +30,8 @@ const COST_PER_FRAME = 0.008
 const WORKING: Record<string, string> = { check: 'Checking every frame for people and faces (about 8 minutes for a full song)…', rerender: 'Re-rendering…', hold: 'Holding the frame before…', restore: 'Putting the originals back…' }
 /** A re-render runs up to this many rounds (each with the model's own two retries) while a frame still shows a person: dream-repair.ts's MAX_REPAIR_ROUNDS. */
 const MAX_ROUNDS = 10
+/** The face check's threshold for a check.json from before faceThreshold was stored: dream-check.ts's FACE_SCORE_THRESHOLD, copied by hand (the client doesn't import from the pipeline). */
+const FACE_THRESHOLD = 0.5
 const dollars = (frames: number) => `about $${Math.max(0.05, frames * COST_PER_FRAME).toFixed(2)}, up to $${(frames * COST_PER_FRAME * 3 * MAX_ROUNDS).toFixed(2)}`
 const plain = 'rounded border border-stone-300 dark:border-stone-700 px-2.5 py-1 text-sm hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-40'
 const primary = 'rounded bg-stone-900 dark:bg-stone-100 px-2.5 py-1 text-sm font-medium text-white dark:text-stone-900 disabled:opacity-40'
@@ -53,6 +55,24 @@ function openStretches(detail: Detail): Stretch[] {
   }
 
   return detail.check?.stretches.filter((st) => !detail.keep.includes(st.start) && !isAllMorph(st)) ?? []
+}
+
+/**
+ * Re-rendered already, and still flagged by the face check alone (every frame's person score is under
+ * its threshold). A re-render's rounds end once the model's own person check passes, which doesn't look
+ * for faces, so another re-render rarely clears it: it needs a person to keep or hold it.
+ */
+function stuckOnFace(detail: Detail, st: { start: number; end: number }): boolean {
+  const check = detail.check
+  if (!check) return false
+  const frames = detail.frames.filter((f) => f >= st.start && f <= st.end)
+  return (
+    frames.length > 0 &&
+    frames.every(
+      (f) =>
+        detail.rerendered.includes(f) && (check.scores[pad(f)] ?? 0) <= check.threshold && (check.faces?.[pad(f)] ?? 0) > (check.faceThreshold ?? FACE_THRESHOLD)
+    )
+  )
 }
 
 /** Groups frames into runs of neighbouring dream frames, as repair stretches. */
@@ -191,7 +211,7 @@ export function FixAll({ job, songs, tasks, onChanged }: { job: string; songs: {
         ready
           .map((song, i) => {
             // A stretch on a dream's first frame has no frame before it to continue from.
-            const stretches = openStretches(details[i]).filter((st) => st.start !== details[i].frames[0])
+            const stretches = openStretches(details[i]).filter((st) => st.start !== details[i].frames[0] && !stuckOnFace(details[i], st))
             return { id: song.id, title: song.title, stretches, frames: stretches.reduce((sum, st) => sum + st.frames, 0) }
           })
           .filter((dream) => dream.frames > 0)
@@ -379,8 +399,10 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
   const isMorph = (frame: number) => detail?.morphs.includes(frame) ?? false
 
   const stretches = detail ? openStretches(detail) : []
+  // The bulk re-render leaves out stretches a re-render already failed to clear of a face (stuckOnFace).
+  const rerenderable = detail ? stretches.filter((st) => !stuckOnFace(detail, st)) : []
+  const rerenderableFrames = rerenderable.reduce((sum, st) => sum + st.frames, 0)
   const kept = detail?.check?.stretches.filter((st) => detail.keep.includes(st.start)) ?? []
-  const flaggedFrames = stretches.reduce((sum, st) => sum + st.frames, 0)
   const morphStretches = detail ? groupStretches(detail.morphs, detail.frames) : []
   const [showMorphs, setShowMorphs] = useState(false)
   const score = (frame: number) => detail?.check?.scores[pad(frame)]
@@ -395,14 +417,22 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
           const shown = inside.slice(0, 6)
           const before = detail.frames[from - 1]
           const after = detail.frames[to + 1]
+          const rerendered = inside.every((frame) => detail.rerendered.includes(frame))
+          // Flagged by the face check alone: the person score is under its threshold.
+          const faceOnly =
+            kind === 'person' &&
+            inside.every((frame) => (score(frame) ?? 0) <= (detail.check?.threshold ?? 0) && (face(frame) ?? 0) > (detail.check?.faceThreshold ?? FACE_THRESHOLD))
+          const stuck = kind === 'person' && stuckOnFace(detail, s)
           return (
             <div key={s.start} className="mb-3 rounded border border-stone-200 dark:border-stone-800 p-2">
-              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">{kind === 'morph' ? '2023 morph' : inside.some(isMorph) ? 'Person, with 2023 morphs (blue)' : 'Person'}</p>
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">{kind === 'morph' ? '2023 morph' : inside.some(isMorph) ? 'Person, with 2023 morphs (blue)' : faceOnly ? 'Face' : 'Person'}</p>
               <div className="flex gap-1 overflow-x-auto">
                 {before !== undefined && <img src={frameUrl(before)} alt="" title={`Frame ${before}, before`} className="h-28 w-28 shrink-0 rounded object-cover opacity-60" />}
                 {shown.map((frame) => (
                   <div key={frame} className="relative shrink-0">
-                    <img src={frameUrl(frame)} alt="" className={`h-28 w-28 rounded object-cover ring-2 ${isMorph(frame) ? 'ring-sky-500' : 'ring-amber-500'}`} title={isMorph(frame) ? '2023 morph' : 'Flagged as a person or a face'} />
+                    <a href={frameUrl(frame)} target="_blank" rel="noreferrer" title="Open the full frame">
+                      <img src={frameUrl(frame)} alt="" className={`h-28 w-28 rounded object-cover ring-2 ${isMorph(frame) ? 'ring-sky-500' : 'ring-amber-500'}`} />
+                    </a>
                     <img src={sourceUrl(frame)} alt="" title="The footage at this moment" className="absolute bottom-1 right-1 w-9 rounded border border-white" />
                     <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">
                       {frame}{score(frame) !== undefined ? ` · ${score(frame)!.toFixed(2)}` : ''}{face(frame) ? ` · face ${face(frame)!.toFixed(2)}` : ''}{isMorph(frame) ? ' · morph' : ''}
@@ -412,11 +442,20 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
                 {inside.length > shown.length && <div className="flex h-28 w-20 shrink-0 items-center justify-center text-xs text-stone-500 dark:text-stone-400">+{inside.length - shown.length} more</div>}
                 {after !== undefined && <img src={frameUrl(after)} alt="" title={`Frame ${after}, after`} className="h-28 w-28 shrink-0 rounded object-cover opacity-60" />}
               </div>
-              {inside.every((frame) => detail.rerendered.includes(frame)) && (
-                <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">Re-rendered, with up to ten rounds of new seeds, and it still shows a person. Hold the frame before, or try ten more rounds.</p>
+              {stuck ? (
+                <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">
+                  Re-rendered, and the face check still sees a face. Re-rendering again rarely helps: a round ends as soon as the model&apos;s own person check passes, and that doesn&apos;t look for
+                  faces. Keep it if it&apos;s a false alarm (click a frame to see it full size), or hold the frame before.
+                </p>
+              ) : (
+                rerendered && (
+                  <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">Re-rendered, with up to ten rounds of new seeds, and it still shows a person. Hold the frame before, or try ten more rounds.</p>
+                )
               )}
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Paid label={(inside.every((frame) => detail.rerendered.includes(frame)) ? 'Ten more rounds' : 'Re-render') + (s.frames === 1 ? '' : ` ${s.frames} frames`)} cost={cost(s.frames)} disabled={pending([s]) || from === 0} onConfirm={() => repair('rerender', [s])} />
+                {!stuck && (
+                  <Paid label={(rerendered ? 'Ten more rounds' : 'Re-render') + (s.frames === 1 ? '' : ` ${s.frames} frames`)} cost={cost(s.frames)} disabled={pending([s]) || from === 0} onConfirm={() => repair('rerender', [s])} />
+                )}
                 {kind === 'person' && s.frames <= 2 && (
                   <button type="button" disabled={pending([s]) || from === 0} onClick={() => repair('hold', [s])} className={plain} title="Free: the frame before is held a little longer">
                     Hold the frame before (free)
@@ -503,9 +542,14 @@ export function PersonCheck({ job, take, title, clip = false, summary, tasks, on
           {!detail.check && <p className="text-sm text-stone-600 dark:text-stone-400">Not checked yet. You can still go through the frames below and replace any by hand.</p>}
           {detail.check && stretches.length === 0 && <p className="text-sm text-stone-600 dark:text-stone-400">No person flagged. {detail.replaced.length > 0 ? `${detail.replaced.length} frames have been replaced; the originals are in the take's replaced folder.` : ''}</p>}
 
-          {stretches.length > 1 && (
+          {rerenderable.length > 1 && (
             <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-              <Paid label={`Re-render the ${stretches.length} stretches that show a person (${flaggedFrames} frames)`} cost={cost(flaggedFrames)} disabled={pending(stretches)} onConfirm={() => repair('rerender', stretches)} />
+              <Paid
+                label={`Re-render the ${rerenderable.length} stretches that show a person (${rerenderableFrames} frames)`}
+                cost={cost(rerenderableFrames)}
+                disabled={pending(rerenderable)}
+                onConfirm={() => repair('rerender', rerenderable)}
+              />
               <span className="text-stone-500 dark:text-stone-400">{runOn === 'pc' ? 'They take turns on the 4090.' : 'Each stretch is its own Replicate run, all side by side.'} One that still shows a person goes again with new seeds, up to ten rounds.</span>
             </div>
           )}
