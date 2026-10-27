@@ -125,10 +125,22 @@ export async function dreamRepair(
      * retried task, which passes the same time, skips one it already finished rather than paying twice.
      */
     again?: number
+    /**
+     * For this request only, re-render with another style image (a file in resources/colours), or none
+     * (null), and/or another prompt. take.json is left as it is. For a stretch the take's own settings
+     * keep painting back: Sharp Edges' style image is a portrait, so its re-renders kept her face.
+     */
+    style?: string | null
+    prompt?: string
   }
 ): Promise<RepairResult[]> {
   await assertFreeSpace('A repair', [os.tmpdir(), opts.takeDir])
-  const config = opts.action === 'rerender' ? await repairConfig(job, take) : undefined
+  const saved = opts.action === 'rerender' ? await repairConfig(job, take) : undefined
+  const config = saved && {
+    ...saved,
+    ...(opts.style !== undefined && { style: opts.style ?? undefined }),
+    ...(opts.prompt !== undefined && { prompt: opts.prompt }),
+  }
   const checkPath = path.join(opts.takeDir, 'check.json')
   const replacedDir = path.join(opts.takeDir, 'replaced')
   await mkdir(replacedDir, { recursive: true })
