@@ -19,6 +19,11 @@ dry=false
 [ "${1:-}" = --dry-run ] && { dry=true; shift; }
 [ $# -gt 0 ] || { echo "usage: $0 [--dry-run] <id>..." >&2; exit 1; }
 
+# Wrangler 4 writes to local storage unless told --remote; wrangler 3 writes to the bucket by default and
+# rejects --remote as an unknown argument. So --remote only for 4 and later.
+major=$(bunx wrangler --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 | cut -d. -f1)
+remote_flag=$([ "${major:-0}" -ge 4 ] && echo --remote || true)
+
 for id in "$@"; do
   if [ "$id" = main ]; then base=main dir="$JOB/main"; else base=dream dir="$JOB/7-dreams/$id/split"; fi
   for file in "$base.mp4" "$base-small.mp4" "$base.webm" "$base-small.webm"; do
@@ -29,9 +34,7 @@ for id in "$@"; do
     if [ "$remote" = "$size" ]; then echo "same $id/$file"; continue; fi
     type=$([ "${file##*.}" = webm ] && echo video/webm || echo video/mp4)
     echo "put  $id/$file ($size bytes)"
-    # The object path goes first: wrangler 3 has no --remote (it writes to the bucket by default) and
-    # takes an unknown flag's next word as its value, which swallowed the path. Wrangler 4 needs --remote.
-    $dry || bunx wrangler r2 object put "$BUCKET/$id/$file" --remote --file "$local_path" \
+    $dry || bunx wrangler r2 object put "$BUCKET/$id/$file" $remote_flag --file "$local_path" \
       --content-type "$type" --cache-control "public, max-age=604800" >/dev/null
   done
 done
