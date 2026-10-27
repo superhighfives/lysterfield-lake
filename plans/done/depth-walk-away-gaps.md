@@ -1,8 +1,8 @@
 ---
 title: Redo the depth panel where the walk-away goes black
-status: Done
+status: Complete
 created: 2026-10-17
-updated: 2026-10-21
+updated: 2026-10-27
 ---
 
 # Redo the depth panel where the walk-away goes black
@@ -74,12 +74,24 @@ under 8 while the matte is over 128 (both on a 64×64 thumbnail) marks a
 blank depth panel with a person present. It takes about 15 minutes over
 the whole song, mostly reading the 2160px matte PNGs.
 
-## Done (2026-10-18)
+## Overview
 
-- `depth --frames <ranges> --fit-to-subject true` (`depth.ts`): redoes just
-  those frames, moving the old ones to `5-depth/replaced/` first, and keeps
-  ZoeDepth's raw output in `5-depth/raw/` so the post-processing can be
-  re-tuned for free.
+Shipped 2026-10-18 (commits `70af0ff`, `8591ca7`). Panel 5 no longer goes
+black when the subject is far from the camera. The affected frames of
+`full-video` were re-run through ZoeDepth and scaled to the subject's own
+depth instead of the fixed 235-255 band, then the split main video was
+re-composed with them. 325 frames were redone, more than the 132 black ones,
+because the whole walk-away flickered.
+
+## Architecture
+
+- `depth --frames <ranges> --fit-to-subject true` (`depth.ts`, wired up in
+  `cli.ts`): redoes just those frames, moving the old ones to
+  `5-depth/replaced/` first, and keeps ZoeDepth's raw output in
+  `5-depth/raw/` so the post-processing can be re-tuned for free. A second
+  `--frames` run deletes the earlier redo rather than skipping it (the first
+  original stays in `replaced/`). `parseFrameRanges` rejects empty parts and
+  frame 0, and has a test in `depth.test.ts`.
 - Fitting: each frame is shifted so the subject's nearest point (99.5th
   percentile under the matte) sits at 255, then cut to a 14-level band rather
   than the fixed 20. A far subject spans fewer levels, and 20 left it a flat
@@ -91,14 +103,20 @@ the whole song, mostly reading the 2160px matte PNGs.
   band, so the whole stretch was redone, and it is now steady (8-10% of the
   frame lit throughout). The short windows are the subject entering or
   leaving the frame, where only an arm or shoulder shows.
-- The joins with the 2023 frames either side show a small change in
-  character (the 2023 torso is brighter and blurrier); the 2023 frames just
-  before 2846 already flickered.
+- Deviation: the plan's fallback of easing the rescale in over a wider
+  window wasn't needed. The joins with the 2023 frames either side show a
+  small change in character (the 2023 torso is brighter and blurrier); the
+  2023 frames just before 2846 already flickered.
+- Later reuse: the post-processing half is exported as `maskDepth`, which
+  the polaroid flow runs over the raw depth the polaroid model writes to the
+  same `5-depth/raw/` layout (commit `36e25d2`).
 
 The split main video was made after the redone frames (2026-10-18 00:20,
 the frames 2026-10-17 23:36), and has them: at frames 2900 and 2920 its
 panel 5 matches the redone frames (checked 2026-10-21). That's the file on
 the next bucket (`main/main.webm`, the same size byte for byte), so the next
 app plays the fix. The artist watched the walk-away (1:52-2:16) in the new
-composite on 2026-10-18. Only the live site's old 7-panel videos still have
-the black frames, and they go when the domain moves over.
+composite on 2026-10-18. Only the live site's old 7-panel videos still had
+the black frames when this was written; the 7-panel video has since been
+dropped altogether (PR #62, 2026-10-25), so nothing the app plays now has
+them.

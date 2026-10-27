@@ -1,8 +1,8 @@
 ---
 title: Play the dream as its own video beside a shared 6-panel main video
-status: Done
+status: Complete
 created: 2026-10-18
-updated: 2026-10-21
+updated: 2026-10-27
 ---
 
 # Play the dream as its own video beside a shared 6-panel main video
@@ -249,3 +249,60 @@ song's drift on an iPhone. Worth a pass before the domain moves over.
 - **Sizes:** `main.mov` and `.webm` are 6144 wide. Check that the target
   phones decode `main-small` (3072×512) in hardware, as they do today's
   3584-wide `video-small`.
+
+## Overview
+
+Shipped in PR #41 (merged 2026-10-19, "Split dream video, the snap swap and
+the stack"). The player plays one shared main video, panels 1-6 with the
+song, and beside it a small silent dream video for panel 7 that follows
+the main video's clock. Changing dream swaps only the dream video, so the
+song, lyrics and avatar carry on. It shipped first as a separate app,
+`lysterfield-lake-next`, which took over lysterfieldlake.com on
+2026-10-23.
+
+## Architecture
+
+- **Shader.** `materials/video-material.tsx` reads every panel through one
+  `panel()` lookup: panel 7 from the dream texture, panels 1-6 from the
+  main texture at `uFrameTotal` 6. `views/main.tsx` keeps its panel
+  numbers. The CLAUDE.md panel-order section was updated to match.
+- **Two videos, one clock.** `components/playhead.tsx` owns the main
+  `<video>` (audio, controls, history, `ended`), loaded once on the way
+  into the player. `utils/dream-video.ts` runs two muted dream videos that
+  mirror its play, pause, seeks and rate. A sync loop nudges the rate for
+  small drift and seeks for large drift, aiming ahead by however long the
+  last seek took. A seek stuck for 4s reloads once. The next dream is kept
+  warm in the back slot.
+- **History.** A popstate to another dream is a switch plus a seek, in
+  `playhead.tsx`; `use-history-sync.ts` needed no change.
+
+Deviations, with reasons:
+
+- **No crossfade.** The swap became the snap swap from the same PR: the
+  polaroid springs back and the photo fades to a blank print while the next
+  dream loads, then develops in. That covers the load, so step 3's
+  crossfade uniforms weren't needed.
+- **Hosting.** Rather than adding the split files beside the 7-panel ones
+  in the live bucket, the split client shipped as a separate Pages app with
+  its own bucket (PRs #42 and #43), leaving the live site alone until the
+  domain moved over.
+
+Superseded since:
+
+- **The 7-panel video is gone** (PR #62, 2026-10-25). `?split=0`, the
+  full-reload swap and the 7-panel shader path were removed, so step 6's
+  `uSplit` fallback no longer exists. Every dream plays split, previews
+  included: a take's test clip is now a dream video padded to the song,
+  played against the shared main video from where the clip starts.
+  `compose` makes a take's split files itself, so `compose-split` is no
+  longer the only way to make them.
+- **No `apps/client/dreams/`** (PR #60). Dev reads the videos from the
+  bucket (`VITE_APP_DREAMS`, dreams.lysterfieldlake.com) like production,
+  `compose` and `compose-split` no longer copy videos into the client, and
+  `apps/client/scripts/upload-dreams.sh` uploads from the job's `main/` and
+  `split/` folders to `lysterfield-lake-dreams`. Sections 5 and the
+  publishing task above describe the old copy into `apps/client/dreams/`.
+- The untested list above (Android, desktop Safari and Firefox, Low Power
+  Mode, the back/forward cache, drift on an iPhone) has no record of being
+  done.
+

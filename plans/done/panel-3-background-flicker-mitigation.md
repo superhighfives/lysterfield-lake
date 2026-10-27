@@ -1,8 +1,8 @@
 ---
 title: "Panel 3 (background) flicker mitigation on real footage"
-status: Done
+status: Complete
 created: 2026-09-17
-updated: 2026-09-24
+updated: 2026-10-27
 ---
 
 # Panel 3 (background) flicker mitigation on real footage
@@ -451,3 +451,57 @@ zone/stepped experiments' source data stays intact).
   (option 2) measurably reduces per-frame noise everywhere except right
   at genuine content-reveal moments, but doesn't remove the need for the
   masked-stepped technique to handle those moments cleanly.
+
+## Overview
+
+Shipped 2026-09-18 (commit `3d79189`), with the contact shadow dropped on
+2026-09-24. Panel 3's flicker on real footage came mostly from running the
+DiffusionCLIP style over flux-fill-pro's generated fill, so the fill now
+runs after the style. The residual flicker is handled by a softer,
+watercolour-like fill prompt plus a new `background-stabilize` step that
+holds the fill at 6fps and moves the mask with motion-compensated
+interpolation. A free local skin-tone check catches fills that bring the
+person back. The record above keeps every approach tried, including the
+rejected ones. The song itself later took panel 3 from a different model
+(see below).
+
+## Architecture
+
+- `apps/pipeline/src/steps/background-plate.ts`: erases and fills the
+  person on panel 2's styled output, with the softer `FILL_PROMPT` and
+  `guidance` 35.
+- `apps/pipeline/src/steps/background-stabilize.ts`: the held fill and the
+  motion-compensated mask, giving panel 3's final frames. Keyframes are
+  picked by its own arithmetic rather than ffmpeg's `fps=` selection, which
+  fixed the off-by-one repairs and the 361→353 frame drift.
+- `apps/pipeline/src/leak-detection.ts`: the head-zone skin-tone check.
+  `background-stabilize` runs it on just the keyframes that show and
+  repairs a leaked one from its nearest clean neighbour.
+- `apps/pipeline/src/mask.ts`: the mask reshaping shared by both steps.
+
+Deviations from the record above:
+
+- "Line in the sand" left the choice between zone-based (#2) and
+  masked-stepped (#5) open. It was settled later in this plan: masked-stepped
+  with a motion-compensated mask, on the soft fill. Zone-based was never
+  made a real step.
+- The WebGL contact shadow was built, then removed from
+  `video-material.tsx` after a live check showed the shot type has no feet
+  on visible ground to shadow. `steps/shadow.ts`, the depth-based halo,
+  was dropped in the same commit as the shadow was added, so neither
+  survives.
+
+Superseded since:
+
+- Commit `0e8e246` (2026-10-04) cut the cost further: `background-plate`
+  fills only the `stepFps` keyframes, `background-stabilize` uses panel 2
+  outside the mask, the plate mask covers each keyframe's whole hold
+  window, and each fill is leak-checked as it lands and regenerated at most
+  once with a bumped seed.
+- For the full song, `full-video`'s panel 3 is Bria video erase in 5s
+  crossfaded chunks, not this path (`done/phase-4e-full-video-source-prep.md`).
+  `steps/background-video.ts` (2026-10-16) brought that into the pipeline,
+  and polaroid jobs use it too. `background-plate` and
+  `background-stabilize` remain in the CLI; `compose` reads whatever is in
+  `3-background/frames`.
+

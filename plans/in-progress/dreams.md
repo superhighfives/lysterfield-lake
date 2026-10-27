@@ -2,7 +2,7 @@
 title: "Dreams: make, check, repair and publish panel 7 takes"
 status: In Progress
 created: 2026-10-12
-updated: 2026-10-25
+updated: 2026-10-27
 ---
 
 # Dreams: make, check, repair and publish panel 7 takes
@@ -179,6 +179,33 @@ face isn't, bust or not. Left for now (user, 2026-10-25): Charcoal and
 Ink Flight stay as published until that's decided.
 Contact sheets: `.jobs/spikes/face-audit/<dream>.jpg`.
 
+### All eleven checked and fixed (2026-10-26 to 27)
+
+"Check every dream" ran both checks over all eleven. The user went through
+every flagged stretch in `/admin` (re-render, hold or keep), then all ten
+older dreams were composed again and uploaded. Charcoal's 83 stretches were
+all kept: its faceless bust is the intended look (the user's call, which
+settles the bust question for Charcoal). Sharp Edges was kept too, with
+faces left in places through the song ("I don't mind some faces"), but not
+in its chooser loop.
+
+What the review turned up, and what changed for it:
+
+- **A face-only stretch can't be re-rendered away.** A re-render's rounds
+  end when the model's own person check passes, and that check doesn't
+  look for faces. So "ten more rounds" bought one round that changed
+  nothing. `/admin` now labels such a stretch Face, offers only hold and
+  keep, and leaves it out of the bulk re-renders.
+- **Sharp Edges' style image, `13.png`, is a portrait of a woman.** Every
+  re-render reused it at full strength and painted her back. Rule (user,
+  2026-10-26): never a face in a style image. `dream-repair --style
+  <file|none>` and `--prompt` now change one request's settings without
+  touching take.json; the two faces in Sharp Edges' loop (frames 141 and
+  143) came back as the faceless bust with `--style sharp-edges-0001.png`,
+  a face-free Sharp Edges frame, in one round.
+- **"Fix every dream" and "Check every dream"** in `/admin`, plus full-size
+  frames in the review.
+
 ### 6. Repair: re-render, never interpolate
 
 No RIFE (user, 2026-10-12): the interpolated morph loses the stop-motion
@@ -276,7 +303,7 @@ that name moved to `lysterfield-lake-archive`). The ten legacy dreams are there,
 under their readable ids. The old site's bucket and datestamp folders are
 left as they were.
 
-For a new take (the steps in detail: `in-progress/next-dream.md`):
+For a new take (the steps in detail: `done/next-dream.md`):
 
 1. `compose --job .jobs/full-video --take <take> --id <client-id>` (local,
    free): the take's `split/dream{,-small}.{mp4,webm}`, the hero and loop
@@ -392,9 +419,11 @@ Check and repair:
 - [x] A second, independent face check in `dream-check`
       (`models/face-check`; see "The check misses painted faces"). Kept
       out of the reroll and repair rounds on purpose
-- [ ] Retrain the probe with readable faces as bad, bust or not
-- [ ] Re-check all eleven published dreams with both, then repair or pull
-      what fails (sharp-edges, charcoal, ink-flight first)
+- [ ] Retrain the probe with readable faces as bad, bust or not. Less
+      urgent with the face check beside it, and the user kept Charcoal's bust
+- [x] Re-check all eleven published dreams with both, then repair or keep
+      what fails: all eleven reviewed, composed again and uploaded
+      (2026-10-26 to 27)
 - [x] Reroll in the model, with `scores.json` (`predict.py`: up to two
       retries, a new seed and then repainting more)
 - [x] Measure the reroll on the walk-away stretch (see Results)
@@ -421,13 +450,13 @@ Existing dreams:
 - [x] Legacy-timing init and mask for a repair run (a run now takes an
       explicit list of source frames)
 - [x] First repair: `lush-and-light` frame 1735 (see Results)
-- [ ] Repair the Ghibli landscape dream's 8 frames
+- [x] Repair the Ghibli landscape dream's 8 frames (in the 2026-10-26 pass)
 - [x] Tell people and 2023 morphs apart (`scripts/legacy-morphs.ts` writes
       each published dream's `morphs.json`: legacy frames filled in after the
       run, found by file date and mapped to job frames as the import did, and
       checked against the pixels). /admin counts them separately and has a
       button to re-render a dream's morphs
-- [ ] Repair the other nine, with the user's go-ahead on cost
+- [x] Repair the other nine, with the user's go-ahead on cost (2026-10-26)
 
 Fewer leaks:
 
@@ -436,8 +465,9 @@ Fewer leaks:
 
 Make and publish:
 
-- [ ] Try the whole loop on one new take for `full-video` (a real clip, a
-      real full song, check, repair): `in-progress/next-dream.md`
+- [x] Try the whole loop on one new take for `full-video` (a real clip, a
+      real full song, check, repair): Sharp Edges, then Oil Slick
+      (`done/next-dream.md`)
 - [x] Compose all ten legacy dreams (re-compose `lush-and-light`): done
       2026-10-16, 24 to 38 minutes each, about 5½ hours in all, one at a
       time. Videos in `apps/client/dreams/<id>/` (gitignored, for R2;

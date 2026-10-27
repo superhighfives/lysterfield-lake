@@ -2,7 +2,7 @@
 title: Our own Deforum dream model, rebuilt from the legacy setup
 status: Complete
 created: 2026-10-11
-updated: 2026-10-12
+updated: 2026-10-27
 ---
 
 # Our own Deforum dream model, rebuilt from the legacy setup
@@ -219,3 +219,50 @@ takes with colours "from the footage" could not have run.
 - Keep the 60fps init (legacy) or feed 24fps with a matching frame skip? The
   legacy frame timing is already mapped, so 60fps keeps new takes identical
   in timing to the old ones.
+
+## Architecture
+
+- **The model.** `models/deforum/` is a Cog model: `fetch.sh` pins the
+  legacy base `40f5c2e` and applies the user's `render.py` and
+  `conditioning.py` edits; `predict.py` takes Cog inputs in place of the
+  edited script's argparse flags; `settings/` holds each legacy dream's
+  settings JSON and `negative-prompt.txt`, the legacy list, which always
+  applies and a take can only add to. It is pushed as the private
+  `superhighfives/lysterfield-deforum`, pinned by version in
+  `apps/pipeline/src/models.ts`.
+- **The step.** `steps/dream-deforum.ts`, not a method inside `dream.ts` as
+  the Approach had it. A take picks it with `method: 'deforum'` in
+  `take.json`, and `dream.ts`, `dream-samples`, `dream-clip` and the full
+  `dream` command hand over to it. It builds the init video from
+  `2-portrait/upscaled` and the mask video from `4-matte/frames`, one frame
+  per dream frame, then runs the model in chains of 48 dream frames
+  (`CHUNK_DREAM_FRAMES`), each continuing from the last. A sample is a
+  12-frame warm-up ending on the sample frame. `assertLandscapePrompt`
+  refuses prompts that name a person rather than patching them with a
+  suffix, which in Stable Diffusion tends to summon what it names.
+- **Admin.** Samples, the clip and the full song start from `/admin`
+  (`frame-preview-approval-tool.md`).
+
+Deviations, with reasons:
+
+- **Frame timing.** The Approach and the last open question had the 60fps
+  init with the legacy frame skip. What shipped uses every 2nd frame of the
+  24fps job (`DEFORUM_NTH_FRAME`), 12 dream frames a second, close to the
+  legacy 10. The code doesn't record why 60fps was dropped.
+- **GPU tier.** The first runs were on an A100 (~21s a frame). The model was
+  rebuilt with xformers and moved to an L40S (commits `c559298`, `baec3b2`,
+  2026-10-15), about 8s a frame, so a 48-frame run is about 6 minutes
+  rather than the 17 noted above. The cost and time figures in Context are
+  the A100's and are out of date.
+- **Our own GPU.** Since 2026-10-14 (commit `9906185`) a run can go to the
+  model's image on the 4090 PC over Tailscale instead (`DEFORUM_URL`,
+  `gpu-server.ts`, `models/deforum/build-gpu-pc.sh`): free, about 10s a
+  render, no cold start. `--on replicate` sends it to Replicate anyway.
+- **Style reference.** Added later (2026-10-15/16, `ip_adapter.py`): a
+  take can carry a style image's look through IP-Adapter, by default
+  without its content. That work is tracked in `in-progress/dreams.md`.
+- **Unsettled.** The Watercolour colour question above wasn't recorded as
+  answered. Why back views come through as a person moved to `dreams.md`,
+  where the person check and repairs (`dream-check.ts`, `dream-repair.ts`)
+  handle it after the fact rather than at the model.
+

@@ -1,8 +1,8 @@
 ---
 title: "Polaroids: an endless gallery in the app, submissions made on the 4090"
-status: In progress
+status: In Progress
 created: 2026-10-10
-updated: 2026-10-21
+updated: 2026-10-27
 ---
 
 # Polaroids: an endless gallery in the app, submissions made on the 4090
