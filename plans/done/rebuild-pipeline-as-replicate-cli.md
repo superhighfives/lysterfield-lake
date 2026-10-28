@@ -2,7 +2,7 @@
 title: Rebuild the pipeline as a single Replicate-driven CLI in a unified lysterfield repo
 status: Complete
 created: 2026-08-16
-updated: 2026-10-25
+updated: 2026-10-27
 ---
 
 # Rebuild the pipeline as a single Replicate-driven CLI in a unified lysterfield repo
@@ -523,3 +523,72 @@ a follow-up phase, same as before.
   scene outside the normal per-song set?) — low priority, only worth
   chasing if something in the final video doesn't reproduce cleanly during
   Phase 5.
+
+## Overview
+
+This was the umbrella plan for the rebuild, and each phase had its own spec
+(`done/phase-*.md`). What shipped: one repo, now `lysterfield-lake`, with
+Bun workspaces for the client (`apps/client`) and a Node/TypeScript
+pipeline CLI (`apps/pipeline`) that replaces the eight bash scripts, the
+local Cog servers and the hand-run PC steps. Each AI step calls Replicate
+(or, for some, our own GPU), skips frames whose output exists, and writes
+into a numbered job folder; `compose` makes the videos the client plays.
+The full song (`.jobs/full-video`) reuses the legacy run's panels where
+they hold up. Both old repos were archived on 2026-10-23. Phase 4f,
+regenerating and publishing the dreams, moved to `in-progress/dreams.md`.
+
+## Architecture
+
+- **CLI.** `apps/pipeline/src/cli.ts` runs one step per command against a
+  job (`--job <dir>`): `init`, `words`, `matte`, `portrait`, `upscale`,
+  `background-plate`, `background-stabilize`, `background-video`, `depth`,
+  `outline`, the dream commands, `compose` and `compose-split`. There is
+  no single `generate` command as sketched in the Approach; steps are run
+  one at a time, or queued from the dev-only `/admin` page.
+- **Shared pieces.** `replicate.ts` (create, poll, and resumable runs that
+  save the prediction id first), `job.ts` (the job layout, frame loops,
+  skip-if-exists), `models.ts` (every model pinned to a version, since the
+  unpinned form 404s), `compose.ts`, and `client-manifest.ts`.
+- **Custom models** in `models/`: `diffusionclip` (panel 2), `lineart`
+  (panel 6), `deforum` (panel 7), `person-check` and `face-check` (local
+  checks on dream frames), and `polaroid` (a visitor's panels 2, 4, 5 and 6).
+
+Deviations from the Approach, with reasons (each phase plan has the detail):
+
+- **Panel 2.** DiffusionCLIP went to nano-banana-2 and flux-kontext-dev
+  because the public listing's cold boots were unreliable, then came back,
+  self-hosted as `superhighfives/diffusionclip`, because neither
+  replacement matched its look.
+- **Panel 3.** `allenhooo/lama` instead of ProPainter (its wrapper rejected
+  Replicate file URLs), then `flux-fill-pro` (LaMa hallucinated), with the
+  flicker work in `panel-3-background-flicker-mitigation.md`. The full song
+  uses Bria video erase (`background-video.ts`, `port-bria-background-step.md`).
+- **Panel 6.** ArtLine was packaged as a CPU Cog model, then replaced by
+  cleaned coarse line art (`models/lineart/`, `phase-4g-outline-coarse-lineart.md`).
+- **Panel 7.** Phase 2 picked Kling 3.0 Omni, one call per scene. Live
+  tests showed it couldn't track the footage the way Deforum's hybrid
+  composite did, so it was replaced on 2026-09-25 by per-frame
+  flux-kontext-dev at a reduced step fps, and then by our own rebuild of
+  the legacy Deforum setup (`own-deforum-dream-model.md`). The Context's
+  "one Replicate call per scene" cost assumption no longer holds.
+- **Frame rate.** Jobs default to 24fps, not 60, among other cost cuts
+  (commit `3d79189`).
+- **Our own GPU.** Deforum and the polaroid model can run on the 4090 PC
+  (`DEFORUM_URL`, `POLAROID_URL` in `.env`, never in code), alongside
+  Replicate.
+- **A hosted layer.** The "thin Cloudflare layer" so far is the app itself
+  as a Cloudflare Worker (`apps/client/worker/`), which also serves the
+  polaroid API. The pipeline still runs locally.
+
+Superseded since:
+
+- **No 7-panel video.** Compose writes a shared 6-panel main video and one
+  dream video per take, and the 7-panel video was dropped on 2026-10-25
+  (PR #62), previews included. The "fixed 7-panel order" in Phase 4 now
+  means panels 1-6 in the main video and panel 7 on its own
+  (`split-dream-video-client.md`).
+- **No `apps/client/dreams/`.** The plan had the CLI write into it. Since
+  PR #60 the videos stay in the job, dev reads them from the bucket like
+  production, and `apps/client/scripts/upload-dreams.sh` uploads them.
+  Only each dream's chooser assets (`public/assets/<id>/`) are committed.
+

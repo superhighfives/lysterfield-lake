@@ -1,8 +1,8 @@
 ---
 title: Polaroid loops end to end in /admin
-status: Done
+status: Complete
 created: 2026-10-18
-updated: 2026-10-21
+updated: 2026-10-27
 ---
 
 # Polaroid loops end to end in /admin
@@ -166,3 +166,59 @@ address as `POLAROID_URL` in `apps/pipeline/.env` (never in code). Both containe
 - **The atlas trims 3 frames and crossfades 12**, as the prototype does.
 - **No automatic checks yet** (the leak detector failed on `park-party`); the person looks at the result.
   Automated checks belong to the hosted plan.
+
+## Overview
+
+Shipped 2026-10-18 (the prototype in PR #37, the flow on top of it in the
+commits that follow). A visitor's clip goes from `/admin/record` to a
+looping 3D polaroid in `/admin/polaroid` in one flow: a polaroid job with
+`"kind": "polaroid"`, moderated before anything is spent, its panels made
+by one model, panel 3 by Bria, then a 5-panel atlas and a flattened loop to
+download. A fresh recording (`park-party-2`) went through end to end on
+Replicate in about 10 minutes for $2.13. Two tasks moved to
+`in-progress/polaroids.md`: Bria's first real run on a polaroid job, and
+the PC as a standing service.
+
+## Architecture
+
+- **Pipeline.** `init --crop` makes the job. `steps/polaroid-run.ts` runs
+  `models/polaroid` for panels 2, 4, 5 and 6 (20 inversion steps by
+  default), with prediction ids saved as they start so a dropped
+  connection resumes rather than pays twice. `steps/polaroid-panels.ts`
+  unpacks the output and runs the existing matte, depth and outline
+  post-processing. `steps/background-video.ts` makes panel 3. `steps/polaroid.ts`
+  (`POLAROID_PANELS`) stacks panels 2-6 into `polaroid/atlas.mp4` and cuts
+  `polaroid/loop.mp4`.
+- **Admin.** `vite-plugin-admin.ts` adds the polaroid actions to the queue,
+  with the take fixed as `polaroid` so a job's stages run in order, and a
+  per-job detail read from the files on disk. `views/admin-polaroid.tsx`
+  is the list, the job view with stages, costs and tasks, and the 3D
+  viewer (`materials/polaroid-loop-material.tsx`). `views/admin-record.tsx`
+  hands straight over to it.
+- **Moderation.** `job.json`'s `review`: `submitted` → `approved` →
+  `shown`, or `rejected`. Paid stages refuse anything not approved, and
+  delete refuses song jobs.
+
+Deviations, with reasons:
+
+- **One PR, not two.** The prototype landed as one PR (#37), after
+  `polaroid-swap` (#36), rather than split into pipeline and admin halves.
+- **No separate `polaroid-video` step.** The flattened loop comes out of
+  the `polaroid` step, cut from the atlas, with the outline baked in.
+- **The loop cut.** The Choices section says the atlas trims 3 frames and
+  crossfades 12. What shipped trims 3, then searches for where the clip's
+  two ends look most alike and crossfades 6 there (`polaroid/loop.json`),
+  because a fixed cut ghosted (commit `7a3ae21`).
+- **The viewer.** The photo became a stencilled window into a
+  rounded-rectangle tub, lined by the background, with the person wrapped
+  round its walls, so the person sits inside the polaroid rather than over
+  it.
+- **Replicate first, then the PC.** The plan shipped Replicate-only
+  (decided 2026-10-18). On 2026-10-21 (commit `f7f9dc9`) the 4090 PC became
+  the default (`POLAROID_URL`, `models/polaroid/start-polaroid.sh` on port
+  5001), with `/admin/polaroid` getting the dreams page's 4090/Replicate
+  switch. Bria stays on Replicate. CLAUDE.md now gives about 17 minutes a
+  loop on the PC, free, or about $1.90 on Replicate.
+- **No automatic checks.** The leak detector failed on `park-party`, so a
+  person looks at each result.
+

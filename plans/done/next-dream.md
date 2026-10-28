@@ -1,8 +1,8 @@
 ---
 title: Make and publish an eleventh dream
-status: In Progress
+status: Complete
 created: 2026-10-21
-updated: 2026-10-25
+updated: 2026-10-27
 ---
 
 # Make and publish an eleventh dream
@@ -18,7 +18,7 @@ This is the "try the whole loop on one new take" task in
 plan is the run itself, plus the publishing steps that changed when the next
 app got its own bucket and automatic deploys.
 
-## Outcome so far (2026-10-25)
+## Outcome so far (2026-10-25, kept as written then)
 
 The whole loop ran once: `sharp-edges` (the take of that name) went from
 samples to the next app, first in the chooser, on 2026-10-22, with 219
@@ -122,16 +122,58 @@ First run (`sharp-edges`):
 
 Redo:
 
-- [ ] Pull `sharp-edges` from the chooser while it shows faces: kept live
-      for now (user, 2026-10-25)
-- [ ] The new face check (`in-progress/dreams.md`), then decide: repair
-      `sharp-edges` or make a new take
-- [ ] Check, repair, and one full watch of panel 7 before anything ships
-- [ ] Compose, split, upload, PR (user merges), play it
+- [x] Pull `sharp-edges` from the chooser while it shows faces: kept live
+      (user, 2026-10-25)
+- [x] The new face check (`in-progress/dreams.md`), then decide: repair
+      `sharp-edges` or make a new take. Both: Sharp Edges repaired where it
+      matters, and Oil Slick as the clean new dream
+- [x] Check, repair, and one full watch of panel 7 before anything ships
+- [x] Compose, split, upload, PR (user merges), play it
 
 ## Open questions
 
-- Which of the five? Or a new prompt or style image, starting from samples
-  (~$0.50)?
-- Where in the chooser should it sit? `dreams.json` order is the stack's
-  order, and `generate` appends new folders in directory order.
+- Which of the five? Sharp Edges first, then `oil-painting-lake` (Oil
+  Slick).
+- Where in the chooser should it sit? First: the newest dream goes on top
+  of the stack. (`generate` reads `public/assets/` now and puts a new
+  dream first; `compose` appends, so the entry is moved by hand.)
+
+## Overview
+
+The loop ran twice. Sharp Edges (`sharp-edges`) shipped first, on
+2026-10-22, and then failed review: a painted woman's face in about half
+its frames, which the person check had passed. That led to the face check
+(`in-progress/dreams.md`). Sharp Edges stayed live: the user accepted some
+faces through the song, and the two clear faces in its chooser loop were
+re-rendered away (PR #68). Then `oil-painting-lake`, renamed `oil-slick`,
+went through the whole loop with both checks and shipped on 2026-10-27 as
+Oil Slick, "Wire and folded paper in sepia", first in the chooser (PR #70).
+It meets the goal: 9 of its 2,578 frames flagged, all single frames, none
+a clear face.
+
+## Architecture
+
+The steps are the Approach above, with these differences from the plan:
+
+- **Compose does the split.** Since PR #62 there is no 7-panel video:
+  `compose` compiles the panels, writes the chooser's `hero.jpg` and
+  `loop.mov`, and makes the take's `split/dream*` itself (`compose-split`
+  is only for rebuilding several takes or main). About 10 to 13 minutes a
+  dream. A preview of the whole song plays from the job before upload
+  (`?preview=<job>/<take>/song`).
+- **Upload reads the job.** `apps/client/scripts/upload-dreams.sh <id>`
+  sends `7-dreams/<id>/split/` and needs wrangler 4 (`bun install` if it
+  says "Unknown argument: remote"). Uploads count as a production deploy, so
+  the user runs them; each PR says to upload before merging, since merging
+  deploys.
+- **The take's folder is the dream's id.** The upload finds a dream's videos
+  by id, so the take was renamed from `oil-painting-lake` to `oil-slick`
+  before composing rather than published with `compose --id`.
+- **Where the faces came from.** Sharp Edges' style image (`13.png`) is a
+  portrait. Style images must never contain a face (`in-progress/dreams.md`,
+  Style reference). Its loop was fixed with `dream-repair --style
+  sharp-edges-0001.png`. A redo with that frame as the style (`torn-ink`)
+  came out clean but was rejected as the wrong look.
+- **Oil Slick came from an existing take** whose clip was already approved,
+  not from new samples; only its full song was generated (on Replicate,
+  about $20 by this plan's estimate).

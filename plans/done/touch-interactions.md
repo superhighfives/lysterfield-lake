@@ -1,8 +1,8 @@
 ---
 title: Work out the pointer effects for mobile and touch
-status: Done
+status: Complete
 created: 2026-10-16
-updated: 2026-10-21
+updated: 2026-10-27
 ---
 
 # Work out the pointer effects for mobile and touch
@@ -59,7 +59,27 @@ To work out, rather than settled:
 - [x] Touch drag feedback
 - [ ] Android, and frame rate on a mid-range phone (not done)
 
-## What shipped (PR #44, 2026-10-21)
+## Open questions
+
+- Should touch get the wake at all, or is it a desktop-only flourish?
+  Settled by PR #41: the wake runs on the welcome and choose screens and is
+  off once a dream plays, the same on every device. Touch keeps it.
+- Does tilt already make the scene feel alive enough on mobile? Not
+  recorded as settled; the shipped tilt drives the scene, the avatar and
+  the water, and the wake got no tilt drift.
+
+## Overview
+
+The pointer effects built on `polaroid-swap` were tried on an iPhone by the
+artist on 2026-10-20 and fixed in PR #44 (merged 2026-10-21, "Mobile:
+touch-friendly player, steadier tilt, and phone layout"). Touch now gets the
+same cursor ring as desktop while a finger is down, a steadier tilt, an
+avatar and water ripple tuned for phones, more forgiving swipes, and a phone
+layout. Android and frame rate on a mid-range phone were not tried.
+
+## Architecture
+
+What shipped, in PR #44:
 
 - **Cursor on touch:** the same ring as on desktop, shown while a finger's
   down, with its labels and the drag's preview above the finger. No busy
@@ -82,7 +102,21 @@ To work out, rather than settled:
 - **Welcome title:** keyed out in its shader in dark mode (iOS ignores the
   SVG filter on a canvas) and no wider than the screen.
 
-## Open questions
+Where it lives: the cursor in `components/cursor.tsx`; tilt in
+`utils/index.ts` (the orientation maths) and `utils/device.ts` (the
+permission request, and on Android trusting the sensor only once it
+reports, over HTTPS); the avatar in `materials/video-material.tsx`; the
+water in `components/water-video.tsx` and `utils/water-sim.ts`; swipes in
+`utils/swap-gesture.ts` and `components/carousels/stack.tsx`; layout in
+`components/playhead.tsx`, `views/footer.tsx` and `index.css`.
 
-- Should touch get the wake at all, or is it a desktop-only flourish?
-- Does tilt already make the scene feel alive enough on mobile?
+Deviations from the rough approach:
+
+- The wake wasn't given a touch scheme of its own (taps, tilt drift). PR #41
+  turned it off once a dream plays, on every device, which made the
+  question mostly moot.
+- Drag feedback stayed with the cursor ring rather than moving to the
+  polaroid's edge or the control pill: the labels and preview sit above
+  the finger instead of under it.
+- The MSAA and performance check on mid-range phones wasn't done, so
+  whether the wake holds up there is unknown.

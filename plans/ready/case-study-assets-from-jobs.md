@@ -2,7 +2,7 @@
 title: Add .jobs visuals to the charliegleason.com case study
 status: Ready
 created: 2026-10-23
-updated: 2026-10-25
+updated: 2026-10-27
 ---
 
 # Add .jobs visuals to the charliegleason.com case study
@@ -18,15 +18,27 @@ describe but the article can only talk about.
 Nothing here calls a model. Every asset comes from outputs that already
 exist, so it costs nothing.
 
-## Blocked (2026-10-25)
+## Before starting (2026-10-27)
 
-Sharp Edges fails the no-people rule: it shows a painted face in about half
-its frames, and so do parts of Charcoal and Ink Flight (`in-progress/dreams.md`,
-"The check misses painted faces"). The article opens with Sharp Edges
-(`video-sharp-edges.mp4`), shows it in the dreams grid, and says the person
-check "catches 97%" of the frames to replace. Several assets below are
-Sharp Edges frames too. Hold this until the face check is fixed and Sharp
-Edges is repaired or pulled. Then revisit those lines and assets.
+This was blocked on Sharp Edges showing faces (`in-progress/dreams.md`,
+"The check misses painted faces"). That's settled: a face check now runs
+beside the person check, all eleven dreams were reviewed and fixed, and
+Sharp Edges stays with its chooser loop clear and some faces left through
+the song (the user's call). A twelfth dream, Oil Slick, shipped on
+2026-10-27. Some of the article's lines are now out of date, so update
+them alongside the assets:
+
+- "The person check … catches 97%" describes the probe alone. There are now
+  two checks, and the probe missed painted faces: the story of the face
+  check (and of `13.png`, the portrait style image) belongs in "Counting the
+  waifus".
+- "A few of the original ten still have the odd figure sneaking through.
+  Repairing them properly is next on the list." Done: all were reviewed and
+  repaired (Charcoal's bust kept on purpose).
+- The dreams grid and its alt text name eleven dreams; Oil Slick makes
+  twelve.
+- Sharp Edges' five samples (below) show faces in places. Check any frame
+  used against `check.json`, or use Oil Slick's instead.
 
 ## Context
 
@@ -68,7 +80,7 @@ name. Check that each exists before using it.
 | Panel 3, the ghost arms at 1:24 and their fix | `spikes/full-video-panel3/review/panel3-bria-1m24-fix.mp4` and `out-c021.orig.mp4` | `done/phase-4e-full-video-source-prep.md` |
 | Outline, ArtLine vs coarse line art | `spikes/outline-bakeoff/`, `spikes/legacy-artline-outline/` | `done/phase-4g-outline-coarse-lineart.md` |
 | Depth on the walk-away (1:59-2:08), before and after fit-to-subject | `full-video/5-depth/frames` against the legacy depth frames | `done/depth-walk-away-gaps.md` |
-| Sharp Edges' five samples, clip and `take.json` | `full-video/7-dreams/sharp-edges/` | `in-progress/next-dream.md` |
+| Sharp Edges' five samples, clip and `take.json` | `full-video/7-dreams/sharp-edges/` | `done/next-dream.md` |
 
 The five sample frames are job frames 1 (the wide intro), 2025 (fast arms),
 2901 (the walk-away), 4033 (the shouting close-up) and 4501 (after the cut).
@@ -137,6 +149,8 @@ caption, and leave the prose alone unless a number turns out to be wrong.
 
 - Should the repair before-and-after be a drag slider? The site has no
   slider component, so that would mean building one.
-- If the original ten dreams are repaired before this happens, the article's
-  line "a few of the original ten still have the odd figure sneaking through"
-  needs updating, and their before-and-after belongs here too.
+- The original ten have been repaired (2026-10-26). A before-and-after from
+  one of them could go beside frame 1735's: the originals of held frames are
+  in each dream's `replaced/` folder (re-rendered frames keep none).
+- Should the article still open with Sharp Edges, or with Oil Slick, the
+  newest dream and the one with no faces?

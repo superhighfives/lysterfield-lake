@@ -2,7 +2,7 @@
 title: Cheap pre-production preview/approval loop for dream art direction
 status: Complete
 created: 2026-09-30
-updated: 2026-10-12
+updated: 2026-10-27
 ---
 
 # Cheap pre-production preview/approval loop for dream art direction
@@ -155,3 +155,50 @@ hosting it anywhere but local dev, and reviewing panels 1-6.
 
 None blocking. To settle during the first task: the exact sample frames and
 clip range for `full-video`.
+
+## Architecture
+
+- **Gate.** `take.json`'s `status` (`proposed` → `samples-approved` →
+  `clip-approved` → `generated`, or `rejected`) is checked in the pipeline
+  CLI (`apps/pipeline/src/cli.ts`): `dream-samples` needs `proposed`,
+  `dream-clip` needs `samples-approved`, and the full `dream` run needs
+  `clip-approved` unless `--force true`. Takes from before the loop have no
+  status and aren't gated. The admin server checks again before spawning.
+- **Pipeline steps.** `steps/dream-directions.ts` (Claude on Replicate, one
+  stitched image, Zod-validated JSON), `dream-samples` and `dream-clip`
+  (`cli.ts`), and `composePreview` in `compose.ts`. The sample frames and
+  clip range live in the job's `job.json` (`samples`, `clip`).
+- **Admin.** `apps/client/vite-plugin-admin.ts` is a Vite plugin with
+  `apply: 'serve'` that adds the `/__admin` endpoints and spawns the CLI.
+  `src/main.tsx` lazily imports `views/admin.tsx` behind
+  `import.meta.env.DEV`, so neither reaches a build.
+
+Deviations:
+
+- **Deforum, not flux-kontext.** The redesign of 2026-10-11 (commit
+  `686aa6b`, alongside `own-deforum-dream-model.md`) made the page one flow
+  for Deforum takes. The directions and flux-kontext forms left the page;
+  their commands remain on the CLI.
+- **A Deforum clip is its own chain.** Each Deforum frame depends on the
+  ones before it, so a clip from the middle of the song isn't what the full
+  run makes there. Its frames go in `7-dreams/<take>/preview/dream/frames`,
+  apart from the full song's, and the full run pays for them again. The
+  plan's "the full run skips the clip's keyframes" holds only for
+  flux-kontext takes.
+- **The page grew past v1.** Later work added the person check and review
+  of flagged frames, repairs, a task queue, retry and stop
+  (`git log -- apps/client/vite-plugin-admin.ts`, from 2026-10-12). Those
+  are recorded in `in-progress/dreams.md`, not here.
+
+Superseded since:
+
+- **Previews play split.** The 7-panel video was dropped on 2026-10-25
+  (PR #62). A test clip is no longer a short 7-panel composite with audio:
+  `composePreview` makes a dream video of the clip, padded to the song's
+  length by holding its first and last frames, and the player plays it
+  against the shared main video from where the clip starts
+  (`?preview=<job>/<take>&t=`). `clip-preview` remakes one from the clip's
+  frames without rendering anything.
+- **No local dreams folder.** `apps/client/dreams/` is gone; dev plays the
+  published dreams from the bucket (PR #60). Previews still come from the
+  job through the dev endpoints.
