@@ -29,7 +29,24 @@ The video is seven panels of the same footage, each one a different take on it:
 
 The app plays panels 1 to 6 as one shared video with the song, and each dream as a small video of its own beside it. In the browser, [three.js](https://threejs.org/) cuts the panels apart and puts them back together as a 3D scene. You steer it with the mouse, or by tilting your phone. You can switch dreams mid-song from the stack of cards, and the music keeps playing.
 
-There are eleven dreams so far, from "Watercolour" to "Sharp Edges".
+There are twelve dreams so far. Each one, at the same opening moment of the song:
+
+| | Dream | Look |
+| --- | --- | --- |
+| <img src="apps/client/public/assets/oil-slick/hero.jpg" width="160" alt=""> | **Oil Slick** | Wire and folded paper in sepia |
+| <img src="apps/client/public/assets/sharp-edges/hero.jpg" width="160" alt=""> | **Sharp Edges** | Torn ink landscape in pink and ochre |
+| <img src="apps/client/public/assets/watercolour/hero.jpg" width="160" alt=""> | **Watercolour** | A watercolor painting |
+| <img src="apps/client/public/assets/paper-planes/hero.jpg" width="160" alt=""> | **Paper Planes** | A pencil illustration of summer |
+| <img src="apps/client/public/assets/clouds-of-air/hero.jpg" width="160" alt=""> | **Clouds of Air** | Breathtaking vibrant poster style |
+| <img src="apps/client/public/assets/dirty-palette/hero.jpg" width="160" alt=""> | **Dirty Palette** | A lake at dawn with sunlight through trees |
+| <img src="apps/client/public/assets/horizon-storm/hero.jpg" width="160" alt=""> | **Horizon Storm** | Landscape painting with paint dripping |
+| <img src="apps/client/public/assets/lush-and-light/hero.jpg" width="160" alt=""> | **Lush and Light** | Vibrant detailed landscape |
+| <img src="apps/client/public/assets/ghiblis-dream/hero.jpg" width="160" alt=""> | **Ghibli's Dream** | Ghibli-aesthetic landscape picture |
+| <img src="apps/client/public/assets/mood-lighting/hero.jpg" width="160" alt=""> | **Mood Lighting** | Palette knives and brush strokes |
+| <img src="apps/client/public/assets/ink-flight/hero.jpg" width="160" alt=""> | **Ink Flight** | Alcohol and tea ink style |
+| <img src="apps/client/public/assets/charcoal/hero.jpg" width="160" alt=""> | **Charcoal** | Black and white gouache |
+
+The newest is first, as it is in the app's chooser.
 
 ## What's in here
 
