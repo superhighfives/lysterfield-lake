@@ -37,12 +37,15 @@ Pushed to the website's PR #28 (`lysterfield-relaunch`, which also has
   beside panel 2 at 1:24, and footage against the outline at the fast arms.
 - **`Compare`** (the site's diagonal slider) gained `video` and `start`.
 
-Not possible from this Mac: the spike outputs named in the table below
-(`spikes/person-check`, `reroll-test`, `style-grid`, `full-video-panel3`,
-`outline-bakeoff`, `legacy-artline-outline`) aren't here; `.jobs/spikes/`
-only has `face-audit` (and its `sharp-edges-loop-fix/`) and
-`pc-polaroid`. So no jetty reroll, style grid, 1:24 ghost-arms original
-or ArtLine comparison, unless they turn up on another machine.
+The spike outputs named in the table below aren't in `.jobs/spikes/` on
+this Mac (that only has `face-audit`, with its `sharp-edges-loop-fix/`,
+and `pc-polaroid`). They're on the external drive:
+`/Volumes/HDD/lysterfield-lake-pipeline/jobs-archive/spikes/`. From there:
+the jetty reroll strip (`reroll-test/walk-away`), the style comparison
+(`style-grid/all-0.6` against `up-1.2`), and ArtLine (`legacy-artline-
+outline/frames/2025.jpg`) against the new outline as a slider. The 1:24
+ghost-arms original can't be made: the c021 variants were deleted after
+the fix (`done/phase-4e-full-video-source-prep.md`).
 
 ## Before starting (2026-10-27)
 
@@ -160,14 +163,14 @@ caption, and leave the prose alone unless a number turns out to be wrong.
 
 - [x] Check that each source above exists, and note the real paths: most
       spike outputs are missing (see Progress)
-- [x] Frame 1735 before and after in "Counting the waifus" (a slider). The
-      reroll strip: its "before" is gone
+- [x] Frame 1735 before and after in "Counting the waifus" (a slider),
+      plus the reroll strip (from the HDD)
 - [x] A new `/admin` screenshot with real takes (Oil Slick's card)
 - [x] Samples beside the footage: Oil Slick's, not Sharp Edges'
-- [ ] The style grid: its spike output is missing
-- [x] Bria's background clip. The 1:24 fix: the original chunk is missing
-- [ ] ArtLine vs coarse line art: ArtLine's frames are missing; footage vs
-      outline instead
+- [x] The style grid: look and content against look only (from the HDD)
+- [x] Bria's background clip. The 1:24 fix can't be shown: the original
+      chunk was deleted
+- [x] ArtLine vs coarse line art, as a slider at the fast arms (from the HDD)
 - [x] Depth on the walk-away, before and after (a video slider)
 - [x] `astro build` in `apps/web` (the site has no `astro check` set up),
       and a look in light and dark, at desktop and phone widths
