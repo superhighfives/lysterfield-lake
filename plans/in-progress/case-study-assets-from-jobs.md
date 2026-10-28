@@ -1,8 +1,8 @@
 ---
 title: Add .jobs visuals to the charliegleason.com case study
-status: Ready
+status: In Progress
 created: 2026-10-23
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 # Add .jobs visuals to the charliegleason.com case study
@@ -17,6 +17,35 @@ describe but the article can only talk about.
 
 Nothing here calls a model. Every asset comes from outputs that already
 exist, so it costs nothing.
+
+## Progress (2026-10-28)
+
+Pushed to the website's PR #28 (`lysterfield-relaunch`, which also has
+`main` merged in), not yet merged:
+
+- **Opener:** Paper Planes (the user's pick over Sharp Edges and Oil
+  Slick). Oil Slick is mentioned as the second new dream.
+- **Dreams grid:** video and still remade at the walk-away (1:58) as a
+  4x4: portrait, background, depth, outline, then all twelve dreams.
+- **Counting the waifus:** the face-check story, frame 1735 and Sharp
+  Edges' frame 141 as `Compare` sliders, and the face-audit sheet.
+- **Making a dream now:** the five sample moments (footage over Oil Slick's
+  samples) and Oil Slick's card from `/admin` (`image-admin-take.webp`;
+  the old `image-admin.webp` stays in "Digging up 2023").
+- **Avatar / Background / Outline:** walk-away depth as a video slider (the
+  2023 depth flickers to black for about half of it), Bria's background
+  beside panel 2 at 1:24, and footage against the outline at the fast arms.
+- **`Compare`** (the site's diagonal slider) gained `video` and `start`.
+
+The spike outputs named in the table below aren't in `.jobs/spikes/` on
+this Mac (that only has `face-audit`, with its `sharp-edges-loop-fix/`,
+and `pc-polaroid`). They're on the external drive:
+`/Volumes/HDD/lysterfield-lake-pipeline/jobs-archive/spikes/`. From there:
+the jetty reroll strip (`reroll-test/walk-away`), the style comparison
+(`style-grid/all-0.6` against `up-1.2`), and ArtLine (`legacy-artline-
+outline/frames/2025.jpg`) against the new outline as a slider. The 1:24
+ghost-arms original can't be made: the c021 variants were deleted after
+the fix (`done/phase-4e-full-video-source-prep.md`).
 
 ## Before starting (2026-10-27)
 
@@ -132,25 +161,27 @@ caption, and leave the prose alone unless a number turns out to be wrong.
 
 ## Tasks
 
-- [ ] Check that each source above exists, and note the real paths.
-- [ ] Frame 1735 before and after, plus the reroll strip, in "Counting the
-  waifus".
-- [ ] A new `/admin` screenshot with real takes.
-- [ ] Sharp Edges samples beside panel 2.
-- [ ] The style grid.
-- [ ] Bria's background clip, and the 1:24 fix.
-- [ ] ArtLine vs coarse line art.
-- [ ] Depth on the walk-away, before and after.
-- [ ] `pnpm astro check` in `apps/web`, and a look at the page in light and
-  dark, at desktop and phone widths.
+- [x] Check that each source above exists, and note the real paths: most
+      spike outputs are missing (see Progress)
+- [x] Frame 1735 before and after in "Counting the waifus" (a slider),
+      plus the reroll strip (from the HDD)
+- [x] A new `/admin` screenshot with real takes (Oil Slick's card)
+- [x] Samples beside the footage: Oil Slick's, not Sharp Edges'
+- [x] The style grid: look and content against look only (from the HDD)
+- [x] Bria's background clip. The 1:24 fix can't be shown: the original
+      chunk was deleted
+- [x] ArtLine vs coarse line art, as a slider at the fast arms (from the HDD)
+- [x] Depth on the walk-away, before and after (a video slider)
+- [x] `astro build` in `apps/web` (the site has no `astro check` set up),
+      and a look in light and dark, at desktop and phone widths
+- [ ] PR #28 merged (user)
 - [ ] Optionally, polaroids, after asking Charlie.
 
 ## Open questions
 
-- Should the repair before-and-after be a drag slider? The site has no
-  slider component, so that would mean building one.
 - The original ten have been repaired (2026-10-26). A before-and-after from
   one of them could go beside frame 1735's: the originals of held frames are
   in each dream's `replaced/` folder (re-rendered frames keep none).
-- Should the article still open with Sharp Edges, or with Oil Slick, the
-  newest dream and the one with no faces?
+- Should the article still open with Sharp Edges, or with Oil Slick?
+  Neither: Paper Planes (user, 2026-10-28).
+- Drag slider? Yes (user): the site already had one, `Compare.astro`.
