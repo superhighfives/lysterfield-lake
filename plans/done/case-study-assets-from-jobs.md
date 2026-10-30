@@ -1,11 +1,52 @@
 ---
 title: Add .jobs visuals to the charliegleason.com case study
-status: In Progress
+status: Complete
 created: 2026-10-23
-updated: 2026-10-28
+updated: 2026-10-29
 ---
 
 # Add .jobs visuals to the charliegleason.com case study
+
+## Overview
+
+Shipped in charliegleason.com PR #28 (merged 2026-10-29), which rewrote the
+Lysterfield Lake case study for the relaunch. The article now shows the
+rebuild with the project's own outputs: new recordings of the player,
+chooser and dream switching; the face-check story, with frame 1735 as a
+drag slider, the face-audit sheet and a style-image before-and-after; the
+staged way a dream is made now, from samples to an `/admin` card; and
+before-and-afters for depth, Bria's background and ArtLine's outline. All
+twelve dreams appear, Paper Planes opens it, and a "Pick up the source"
+section ends it.
+
+## Architecture
+
+The assets live in the website repo under
+`apps/web/public/assets/case-studies/lysterfield-lake/`, built from
+`.jobs/full-video` and the HDD spikes with ffmpeg and cwebp (stills at
+quality 72-78, videos as H.264 with a webp poster). The site gained a few
+pieces along the way: `Compare.astro` takes two videos (`video`), a
+starting line (`start`) and a black seam; `Code.astro` makes full-bleed
+code blocks with the code on the text column; `CaseStudyLayout` can show a
+`banner-dark.webp` in dark mode; and the background grid and
+`scrollbar-gutter: stable` keep every page the same width.
+
+Deviations from the plan, all in the last round of review:
+
+- **Walk-away strip:** the HDD reroll test (Lush and Light, ending at a
+  boat) was swapped for eight frames of the published Sharp Edges across
+  the whole walk-away (2862-3082). The boat went from the prose too.
+- **Face-audit sheet:** the 27 faces the face check finds in its 60 tiles
+  are circled in yellow, found by running `models/face-check` on each tile.
+- **Style-image example:** frame 141 left a faceless figure, and only 141
+  and 143 were ever re-rendered with the swapped style. Frame 1229 was
+  re-rendered for the article with `sharp-edges-0001.png` as the style, on
+  Replicate (about $0.01), in a throwaway copy of the take so the published
+  dream didn't change; her face became a tower on a hill. The before and
+  after are in `.jobs/spikes/face-audit/sharp-edges-style-1229/`. The
+  published 1229 was already clean from the 2026-10-26 bulk repair, which
+  got there with new seeds under the portrait style.
+- **What's next** was cut, so the polaroids aren't mentioned.
 
 ## Goal
 
@@ -174,14 +215,15 @@ caption, and leave the prose alone unless a number turns out to be wrong.
 - [x] Depth on the walk-away, before and after (a video slider)
 - [x] `astro build` in `apps/web` (the site has no `astro check` set up),
       and a look in light and dark, at desktop and phone widths
-- [ ] PR #28 merged (user)
-- [ ] Optionally, polaroids, after asking Charlie.
+- [x] PR #28 merged (user, 2026-10-29)
+- [x] Polaroids: left out. The "What's next" section that mentioned them was cut
+      (user, 2026-10-29)
 
 ## Open questions
 
 - The original ten have been repaired (2026-10-26). A before-and-after from
-  one of them could go beside frame 1735's: the originals of held frames are
-  in each dream's `replaced/` folder (re-rendered frames keep none).
+  one of them could go beside frame 1735's. Not needed: Sharp Edges' frame
+  1229 covers it (see Architecture).
 - Should the article still open with Sharp Edges, or with Oil Slick?
   Neither: Paper Planes (user, 2026-10-28).
 - Drag slider? Yes (user): the site already had one, `Compare.astro`.
