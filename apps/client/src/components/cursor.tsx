@@ -400,7 +400,9 @@ function Cursor() {
           />
           <span
             className="absolute left-1/2 -translate-x-1/2 font-mono text-[10px] uppercase tracking-widest bg-white/80 dark:bg-stone-900/80 rounded-full px-2"
-            style={{ top: touch ? -size / 2 - 24 : size / 2 + 12 }}
+            // The row is 14px tall and centred on the ring, so its top is 7px above the centre: these keep the
+            // label 14px clear of the ring's edge, under it (or over it on touch, clear of the finger).
+            style={{ top: touch ? -size / 2 - 30 : size / 2 + 21 }}
           >
             {waiting ? 'Loading…' : 'drag'}
           </span>
