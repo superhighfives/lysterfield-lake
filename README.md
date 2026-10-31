@@ -107,3 +107,14 @@ bun run --cwd apps/pipeline cli matte --job .jobs/my-video
 ```
 
 Merging to `main` deploys the app (`.github/workflows/deploy.yml`).
+
+### What needs an agent
+
+Out of the box you can run the app against the published videos, and run any one pipeline step with a Replicate token. Taking a video of your own all the way through is a different job. It's more than a dozen steps in a set order, each checked before the next, plus pieces no command sets up for you:
+
+- A public R2 bucket for Bria's inputs (`R2_*` in `apps/pipeline/.env`), for the background panel.
+- A lyrics panel. This song's was hand-lettered in After Effects; `words` only extracts it.
+- A bucket of your own to serve the composed videos from, in place of `dreams.lysterfieldlake.com`.
+- Swapping this song out of the app: its audio, lyrics, title and dreams.
+
+That's the part to hand to a coding agent like [Claude Code](https://claude.com/claude-code). Point it at the repo and ask it to take your video through the pipeline. [`CLAUDE.md`](CLAUDE.md) has the rules it works to, including never calling a paid model without first checking the output doesn't already exist, and `plans/` records why each step works the way it does.
