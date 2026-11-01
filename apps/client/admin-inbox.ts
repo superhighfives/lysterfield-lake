@@ -39,24 +39,42 @@ export type Step = { kind: 'start'; id: string; claimedAt: number } | { kind: 'f
 
 /** How much of a failed task's log goes into the submission's `error` (the Worker keeps 4000 characters). */
 const ERROR_LOG = 3000
+/**
+ * How long a task may have succeeded while its submission is still `making` before that's reported: the task marks
+ * it made as its last step, so a tick that read the list just before that lands sees both for a moment.
+ */
+export const SETTLE_MS = 60_000
 
 /**
  * What the runner does next, given the submissions being made and the tasks it started for them:
  * - a claim with no task of its own yet (just claimed, or claimed again after a failure): start one;
- * - one whose task failed or was stopped: report it, with the end of the task's log;
+ * - one whose task failed or was stopped: report it, with the end of the task's log. A task retried from the task
+ *   list is followed to its retry, which is what's running for it now;
+ * - one whose task can't be found, or succeeded without the submission being marked made: report it too, so a
+ *   person decides whether to try again rather than the runner starting another (CLAUDE.md: no automatic retries);
  * - a claim whose submission is no longer being made (made, or moved on in the inbox): forget it;
  * - nothing being made and the switch on: claim the next.
- * A task that succeeded has already marked its submission made, so it's no longer `making`.
  */
-export function nextSteps(making: Making[], state: RunnerState, task: (id: string) => (Task & { log: string }) | undefined): Step[] {
+export function nextSteps(making: Making[], state: RunnerState, task: (id: string) => (Task & { log: string }) | undefined, now = Date.now()): Step[] {
   const steps: Step[] = []
   for (const row of making) {
     const claim = state.claims[row.id]
-    const current = claim?.claimedAt === row.updated_at ? task(claim.task) : undefined
-    if (!current) steps.push({ kind: 'start', id: row.id, claimedAt: row.updated_at })
-    else if (current.status === 'failed' || current.status === 'cancelled') {
-      const tail = current.log.trim().slice(-ERROR_LOG)
+    if (claim?.claimedAt !== row.updated_at) {
+      steps.push({ kind: 'start', id: row.id, claimedAt: row.updated_at })
+      continue
+    }
+    let current = task(claim.task)
+    // A task is retried at most once (admin-queue.ts), but a retry can be retried in turn: follow the chain, capped.
+    for (let hops = 0; current?.retriedBy && hops < 20; hops++) current = task(current.retriedBy)
+    if (!current) {
+      steps.push({ kind: 'fail', id: row.id, error: "Its task can't be found (cleared from the queue, or deleted), so it may not have finished. Try again to make it." })
+      continue
+    }
+    const tail = current.log.trim().slice(-ERROR_LOG)
+    if (current.status === 'failed' || current.status === 'cancelled') {
       steps.push({ kind: 'fail', id: row.id, error: current.status === 'cancelled' ? `Stopped from the admin.\n\n${tail}` : tail || 'polaroid-make failed' })
+    } else if (current.status === 'succeeded' && now - (current.ended ?? now) > SETTLE_MS) {
+      steps.push({ kind: 'fail', id: row.id, error: `polaroid-make finished, but the submission was never marked made.\n\n${tail}` })
     }
   }
   for (const id of Object.keys(state.claims)) if (!making.some((row) => row.id === id)) steps.push({ kind: 'forget', id })
