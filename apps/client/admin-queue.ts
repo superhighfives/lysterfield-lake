@@ -48,11 +48,13 @@ const CAPACITY: Record<Lane, number> = { replicate: 3, pc: 1, local: 1, quick: I
 const LANES: Record<string, Lane> = {
   directions: 'replicate', samples: 'replicate', clip: 'replicate', full: 'replicate', rerender: 'replicate', check: 'local', hold: 'quick', restore: 'local',
   'polaroid-panels': 'replicate', 'polaroid-background': 'replicate', 'polaroid-atlas': 'local',
+  // A visitor's whole polaroid (the inbox's runner): its GPU work is the panels, so it takes the 4090's turn when run there.
+  'polaroid-make': 'replicate',
 }
 /** Replicate-lane actions that never go to our own GPU, whatever the page says: Bria only runs on Replicate. */
 const REPLICATE_ONLY = new Set(['polaroid-background'])
 /** Which server address puts an action on our own GPU: the polaroid model has its own container there. */
-const gpuVariable = (action: string) => (action === 'polaroid-panels' ? 'POLAROID_URL' : 'DEFORUM_URL')
+const gpuVariable = (action: string) => (action === 'polaroid-panels' || action === 'polaroid-make' ? 'POLAROID_URL' : 'DEFORUM_URL')
 /** Finished tasks kept on disk; older ones are swept when the queue loads. */
 const KEEP_FINISHED = 100
 

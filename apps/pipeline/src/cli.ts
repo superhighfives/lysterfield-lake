@@ -21,6 +21,7 @@ import { init } from './steps/init.ts'
 import { matte } from './steps/matte.ts'
 import { outline } from './steps/outline.ts'
 import { polaroid } from './steps/polaroid.ts'
+import { polaroidMake } from './steps/polaroid-make.ts'
 import { polaroidPanels } from './steps/polaroid-panels.ts'
 import { polaroidRun } from './steps/polaroid-run.ts'
 import { portrait } from './steps/portrait.ts'
@@ -82,6 +83,8 @@ function outputFlag(defaultRelativePath: string): string {
 }
 
 const concurrency = Number(flags.concurrency ?? 4)
+/** Steps whose GPU work is the polaroid model's (POLAROID_URL), not Deforum's (DEFORUM_URL). */
+const POLAROID_MODEL_STEPS = ['polaroid-run', 'polaroid-make']
 // --on replicate: run on Replicate even when our own GPU server is set up (DEFORUM_URL, or POLAROID_URL
 // for polaroids; gpu-server.ts).
 if (flags.on === 'replicate') {
@@ -89,9 +92,9 @@ if (flags.on === 'replicate') {
   delete process.env.POLAROID_URL
 } else if (flags.on && flags.on !== 'pc') throw new Error('--on must be pc or replicate')
 // --on pc asks for the free GPU: never fall back to billing Replicate because its address is missing.
-else if (flags.on === 'pc' && step === 'polaroid-run' && !polaroidServerUrl())
+else if (flags.on === 'pc' && POLAROID_MODEL_STEPS.includes(step) && !polaroidServerUrl())
   throw new Error('--on pc needs POLAROID_URL set in apps/pipeline/.env')
-else if (flags.on === 'pc' && step !== 'polaroid-run' && !gpuServerUrl())
+else if (flags.on === 'pc' && !POLAROID_MODEL_STEPS.includes(step) && !gpuServerUrl())
   throw new Error('--on pc needs DEFORUM_URL set in apps/pipeline/.env')
 // --retry true: a person asked to run a failed or cancelled Replicate prediction again. Never set by default.
 if (flags.retry === 'true') retryFailedPredictions()
@@ -246,6 +249,14 @@ switch (step) {
       trim: flags.trim ? Number(flags.trim) : undefined,
       blend: flags.blend ? Number(flags.blend) : undefined,
     })
+    console.log(JSON.stringify(result, null, 2))
+    break
+  }
+
+  case 'polaroid-make': {
+    // A visitor's claimed submission, from its clip to made (plans/in-progress/polaroids.md, step 3): what
+    // /admin/polaroid's "run the queue" starts for each one. --jobs is where its job goes (.jobs by default).
+    const result = await polaroidMake(flags.jobs ?? '.jobs', requireFlag('id'), { concurrency })
     console.log(JSON.stringify(result, null, 2))
     break
   }
@@ -490,7 +501,7 @@ switch (step) {
 
   default:
     console.error(
-      `Usage: bun run src/cli.ts <init|words|matte|portrait|upscale|background-plate|background-stabilize|background-video|depth|outline|dream-directions|dream-take|dream-samples|dream-clip|clip-preview|dream-check|dream-repair|take-status|dream|compose|compose-split> --job <dir> [options]`
+      `Usage: bun run src/cli.ts <init|polaroid-run|polaroid|polaroid-make|words|matte|portrait|upscale|background-plate|background-stabilize|background-video|depth|outline|dream-directions|dream-take|dream-samples|dream-clip|clip-preview|dream-check|dream-repair|take-status|dream|compose|compose-split> --job <dir> [options]`
     )
     process.exit(1)
 }

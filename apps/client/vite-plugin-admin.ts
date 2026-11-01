@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import type { Plugin } from 'vite'
+import { createInbox, parseMaking } from './admin-inbox.ts'
 import { createQueue } from './admin-queue.ts'
 
 /**
@@ -115,7 +116,7 @@ function deletePolaroid(job: string) {
  */
 function polaroidDetail(job: string, withCost: boolean, on?: string) {
   const dir = jobDir(job)
-  const config = readJson(path.join(dir, 'job.json')) as { fps: number; review?: PolaroidReview }
+  const config = readJson(path.join(dir, 'job.json')) as { fps: number; review?: PolaroidReview; submission?: string }
   const frames = countFrames(path.join(dir, '0-source/frames'))
   const panels = Math.min(...['2-portrait/upscaled', '4-matte/frames', '5-depth/frames', '6-outline/frames'].map((d) => countFrames(path.join(dir, d))))
   const background = countFrames(path.join(dir, '3-background/frames'))
@@ -130,7 +131,7 @@ function polaroidDetail(job: string, withCost: boolean, on?: string) {
     const estimate = (key: string) => plan.match(new RegExp(`"${key}": "(\\$[\\d.]+)"`))?.[1] ?? '?'
     cost = { panels: stages.panels.done ? '$0.00' : estimate('estimatedCost'), background: stages.background.done ? '$0.00' : estimate('backgroundCost') }
   }
-  return { name: job, frames, fps: config.fps, review: config.review ?? 'submitted', stages, cost }
+  return { name: job, frames, fps: config.fps, review: config.review ?? 'submitted', submission: config.submission, stages, cost }
 }
 
 /** Where a take's frames, check.json and review.json live: the take folder for the full song, preview/dream for its 15s clip. */
@@ -438,6 +439,68 @@ async function createRecordingJob(body: Record<string, unknown>): Promise<{ job:
 let queue: ReturnType<typeof createQueue> | undefined
 const tasks = () => (queue ??= createQueue({ dir: path.join(JOBS_DIR, '_queue'), cwd: PIPELINE_DIR, env: pipelineEnv }))
 
+/** The local job a visitor's submission is made in: the pipeline's `submissionJobName` (the client doesn't import the pipeline). */
+const submissionJob = (id: string) => `visitor-${id}`
+const INBOX_STATE = path.join(JOBS_DIR, '_queue', 'inbox.json')
+/** Visitors' submissions and the runner that makes them (admin-inbox.ts). Made on first use, or at start-up if the runner has state to pick up. */
+let inboxRunner: ReturnType<typeof createInbox> | undefined
+const inbox = () => (inboxRunner ??= createInbox({ dir: path.join(JOBS_DIR, '_queue'), env: pipelineEnv, tasks, jobName: submissionJob }))
+
+function submissionId(value: string | undefined): string {
+  if (!value || !/^[0-9a-f]{24}$/.test(value)) throw new Error('bad submission id')
+  return value
+}
+
+/**
+ * The inbox: every submission past uploading, newest first, each with its local job's stages once it has one,
+ * and the runner's switch. Unconfigured (no POLAROIDS_API in the pipeline's .env), just says so.
+ */
+async function inboxList() {
+  if (!inbox().configured()) return { configured: false }
+  const rows = await inbox().workerJson('polaroids')
+  if (!Array.isArray(rows)) throw new Error("The inbox's list wasn't a list")
+  const runner = inbox().runner()
+  const submissions = rows.flatMap((row: unknown) => {
+    const { id } = parseMaking(row)
+    if (typeof row !== 'object' || row === null || ('status' in row && row.status === 'uploading')) return []
+    const job = submissionJob(id)
+    const local = existsSync(path.join(JOBS_DIR, job, 'job.json')) ? polaroidDetail(job, false) : undefined
+    return [{ ...row, job: local ? job : undefined, stages: local?.stages, task: runner.claims[id]?.task }]
+  })
+  return { configured: true, runner, submissions }
+}
+
+/** A submission's clip, downloaded once to the recordings and kept for making it, so the inbox can play it with seeking. */
+async function inboxClip(req: IncomingMessage, res: ServerResponse, id: string) {
+  const row = await inbox().workerJson(`polaroids/${id}`)
+  const type = typeof row === 'object' && row !== null && 'clip_type' in row && typeof row.clip_type === 'string' ? row.clip_type : null
+  // As the pipeline's clipExtension names it, so polaroid-make finds the same file.
+  const ext = type?.startsWith('video/mp4') ? 'mp4' : type?.startsWith('video/quicktime') ? 'mov' : 'webm'
+  mkdirSync(RECORDINGS_DIR, { recursive: true })
+  const file = path.join(RECORDINGS_DIR, `${submissionJob(id)}.${ext}`)
+  if (!existsSync(file)) writeFileSync(file, new Uint8Array(await (await inbox().worker(`polaroids/${id}/clip`)).arrayBuffer()))
+  serveRange(req, res, file)
+}
+
+/** A moderation decision in D1, mirrored onto the local job (if it has one) when its own review allows the same move. */
+async function inboxReview(id: string, decision: string) {
+  const row = await inbox().workerJson(`polaroids/${id}/review`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ decision }) })
+  const job = submissionJob(id)
+  const move = REVIEW_MOVES[decision]
+  if (move && existsSync(path.join(JOBS_DIR, job, 'job.json')) && move.from.includes(reviewOf(job))) setPolaroidReview(job, decision)
+  return row
+}
+
+/** Deletes a submission everywhere: its row, clip and files in the Worker, and its local job and recording. Not while it's being made. */
+async function inboxDelete(id: string) {
+  const job = submissionJob(id)
+  if (tasks().activeFor(job, 'polaroid').some((t) => t.status === 'running')) throw new Error("It's being made; stop it first")
+  await inbox().worker(`polaroids/${id}`, { method: 'DELETE' })
+  inbox().forget(id)
+  if (existsSync(path.join(JOBS_DIR, job, 'job.json'))) deletePolaroid(job)
+  else if (existsSync(RECORDINGS_DIR)) for (const f of readdirSync(RECORDINGS_DIR).filter((f) => path.parse(f).name === job)) rmSync(path.join(RECORDINGS_DIR, f))
+}
+
 async function readBody(req: IncomingMessage, limit = MAX_COLOUR_UPLOAD): Promise<Record<string, unknown>> {
   let data = ''
   for await (const chunk of req) {
@@ -459,6 +522,11 @@ function serveFile(req: IncomingMessage, res: ServerResponse, job: string, rel: 
   const dir = jobDir(job)
   const file = path.resolve(dir, rel)
   if (!file.startsWith(dir + path.sep) || !existsSync(file) || !statSync(file).isFile()) return send(res, 404, { error: 'not found' })
+  serveRange(req, res, file)
+}
+
+/** A file, read-only, in the byte ranges the browser asks for. */
+function serveRange(req: IncomingMessage, res: ServerResponse, file: string) {
   res.setHeader('Content-Type', CONTENT_TYPES[path.extname(file)] ?? 'application/octet-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Accept-Ranges', 'bytes')
@@ -487,7 +555,11 @@ export default function adminPlugin(): Plugin {
       server.httpServer?.on('close', () => {
         queue?.close()
         queue = undefined
+        inboxRunner?.close()
+        inboxRunner = undefined
       })
+      // A runner left on, or still waiting on one it started, carries on without the page being opened.
+      if (existsSync(INBOX_STATE)) inbox()
       server.middlewares.use('/__admin', async (req, res) => {
         try {
           const url = new URL(req.url ?? '/', 'http://localhost')
@@ -535,6 +607,22 @@ export default function adminPlugin(): Plugin {
           if (parts[1] === 'polaroids' && parts[2] && parts[3] === 'review' && req.method === 'POST') return send(res, 200, setPolaroidReview(parts[2], String((await readBody(req)).decision)))
           if (parts[1] === 'polaroids' && parts[2] && parts[3] === 'delete' && req.method === 'POST') {
             deletePolaroid(parts[2])
+            return send(res, 200, {})
+          }
+          // Visitors' submissions (admin-inbox.ts): the list, a clip to play, decisions, delete, the "ready" email again, and the runner's switch.
+          if (parts[1] === 'inbox' && parts.length === 2 && req.method === 'GET') return send(res, 200, await inboxList())
+          if (parts[1] === 'inbox' && parts[2] === 'runner' && req.method === 'POST') {
+            const { on, runOn } = await readBody(req)
+            if (on !== undefined && typeof on !== 'boolean') throw new Error('on must be true or false')
+            if (runOn !== undefined && runOn !== 'pc' && runOn !== 'replicate') throw new Error('runOn must be pc or replicate')
+            inbox().set({ ...(on !== undefined && { on }), ...((runOn === 'pc' || runOn === 'replicate') && { runOn }) })
+            return send(res, 200, inbox().runner())
+          }
+          if (parts[1] === 'inbox' && parts[2] && parts[3] === 'clip' && req.method === 'GET') return await inboxClip(req, res, submissionId(parts[2]))
+          if (parts[1] === 'inbox' && parts[2] && parts[3] === 'review' && req.method === 'POST') return send(res, 200, await inboxReview(submissionId(parts[2]), String((await readBody(req)).decision)))
+          if (parts[1] === 'inbox' && parts[2] && parts[3] === 'email' && req.method === 'POST') return send(res, 200, await inbox().workerJson(`polaroids/${submissionId(parts[2])}/email`, { method: 'POST' }))
+          if (parts[1] === 'inbox' && parts[2] && parts[3] === 'delete' && req.method === 'POST') {
+            await inboxDelete(submissionId(parts[2]))
             return send(res, 200, {})
           }
           if (parts[1] === 'recordings' && req.method === 'POST') return send(res, 200, await createRecordingJob(await readBody(req, MAX_RECORDING_UPLOAD)))

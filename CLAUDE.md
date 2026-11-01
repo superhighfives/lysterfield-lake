@@ -94,6 +94,10 @@ above doesn't apply to it, and changing one doesn't change the other.
 - Moderation lives in `job.json`'s `review`: `submitted` → `approved` (to make) → `shown` (to show), or
   `rejected`. The admin refuses to run any polaroid stage unless it's `approved`, so a visitor's clip
   costs nothing until a person has looked at it. Delete only works on polaroid jobs, never a song's.
+- A visitor's submission is a row in the app Worker's D1 (`apps/client/worker`), and its status there is the
+  truth: `/admin/polaroid`'s inbox moderates it, and its "run the queue" runner (`apps/client/admin-inbox.ts`)
+  makes each one it claims with `polaroid-make` in `.jobs/visitor-<id>`, whose `review` only mirrors D1's.
+  The runner never retries by itself: a failure waits for "Try again" in the inbox.
 - Panels 2, 4, 5 and 6 come from one model, `models/polaroid`, run on the 4090 PC by default (free, about
   17 minutes a loop; the `polaroid` container, `POLAROID_URL`, `models/polaroid/README.md`) or on the
   `lysterfield-polaroid` Replicate deployment (`--on replicate`, about $1.90 a loop) when the artist
