@@ -577,6 +577,13 @@ export default function adminPlugin(): Plugin {
             res.setHeader('Content-Type', CONTENT_TYPES[path.extname(file).toLowerCase()] ?? 'image/jpeg')
             return createReadStream(file).pipe(res)
           }
+          // A visitor's finished polaroid, as the public bucket serves it (`<id>/<name>`), from its job on this machine:
+          // the public pages' VITE_APP_POLAROIDS_URL in dev, where the polaroids are wrangler dev's (.env.development).
+          if (parts[0] === 'visitor' && parts[1] && parts[2] && !parts[3]) {
+            const name = parts[2]
+            if (!['atlas.mp4', 'loop.mp4', 'still.jpg'].includes(name)) return send(res, 404, { error: 'not found' })
+            return serveFile(req, res, submissionJob(submissionId(parts[1])), `polaroid/${name}`)
+          }
           if (parts[0] !== 'api') return send(res, 404, { error: 'not found' })
           if (parts[1] === 'deforum' && req.method === 'GET') {
             return send(res, 200, {

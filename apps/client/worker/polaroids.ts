@@ -130,8 +130,14 @@ export async function gallery(db: D1Database, before: number | null, limit: numb
   }
 }
 
-/** What the visitor's private link shows: never their email or a failure's log. */
-export const publicView = (row: Row) => ({ id: row.id, status: row.status, createdAt: row.created_at, shownAt: row.shown_at })
+/**
+ * What the visitor's private link shows: never their email or a failure's log. While it's queued, `ahead` is how
+ * many approved ones the queue makes first (it claims the longest-approved).
+ */
+export async function publicView(db: D1Database, row: Row) {
+  const ahead = row.status === 'approved' ? await db.prepare("SELECT count(*) AS n FROM polaroids WHERE status = 'approved' AND approved_at < ?").bind(row.approved_at).first<number>('n') : null
+  return { id: row.id, status: row.status, createdAt: row.created_at, shownAt: row.shown_at, ahead }
+}
 
 /** What the admin sees: everything but the email itself. */
 export const adminView = (row: Row) => {
@@ -250,7 +256,7 @@ export async function sweepAbandoned(env: Env) {
 
 /** "Your polaroid is ready", with its private link. A failure is logged, not thrown: the polaroid is made either way. */
 async function sendReady(env: Env, to: string, id: string): Promise<boolean> {
-  const link = `${env.APP_URL}/?polaroid=${id}`
+  const link = `${env.APP_URL}/p/${id}`
   try {
     await env.EMAIL.send({
       to,
