@@ -179,7 +179,7 @@ lysterfieldlake.com onboarded to Email Service
 (`wrangler email sending enable`, which adds DNS records): until then a
 "ready" email fails quietly and the polaroid is made anyway.
 
-### 3. The queue in `/admin/polaroid` (built, being checked end to end)
+### 3. The queue in `/admin/polaroid` (built and checked end to end)
 
 An inbox listing the D1 queue: approve or reject each submitted clip
 (playing it), and a "run the queue" switch. While it's on, the Mac claims
@@ -218,6 +218,11 @@ delete live there too.
   "Try again" (`requeue`), show, hide, reopen, stop, resend the email, and delete (the Worker's row, clip
   and files, and the local job). The admin token stays in `apps/pipeline/.env`: the page only talks to
   the dev server, which calls the Worker. Visitors' jobs are left out of the "Recorded here" list below.
+- **Checked end to end (2026-11-01)** against `wrangler dev` (local D1 and R2) with `park-party-2`'s clip
+  submitted through the public API: approve in the inbox, "run the queue" on the 4090, claimed and made
+  in 19.8 minutes (18.8 for the same clip queued by hand), files up, `done`, then shown. Along the way the
+  task was killed mid-run (the dev server's process tree stopped), and the runner marked it `failed`
+  with its log; "Try again" requeued it and the next claim started a fresh task.
 
 ### 4. The gallery, the link and submitting
 
@@ -365,7 +370,7 @@ deleted straight after along with the bucket.
       the routes (a bearer token for the admin, not Access)
 - [ ] Onboard lysterfieldlake.com to Email Service (user's go-ahead: DNS)
 - [ ] The CI token needs Workers Scripts, D1 and R2: Edit (was Pages)
-- [ ] 3. The inbox and "run the queue" in `/admin/polaroid`
+- [x] 3. The inbox and "run the queue" in `/admin/polaroid`, checked end to end against `wrangler dev`
 - [ ] 4. The gallery, the link under the stack, and submitting, behind
       `VITE_APP_POLAROIDS`
 - [ ] Gallery performance on a phone: how many playing loops it holds
