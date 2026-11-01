@@ -193,7 +193,13 @@ export default function Gallery() {
                 key={cell.key}
                 data-polaroid={cell.id}
                 role="button"
-                tabIndex={-1}
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setOpen(cell.id)
+                  }
+                }}
                 aria-label="Open this polaroid"
                 className="absolute bg-white p-[5%] pb-[17%] shadow-lg shadow-stone-900/20 transition-shadow hover:shadow-xl"
                 style={{ left: cell.x + pitch * 0.08, top: cell.y + pitch * 0.04, width: pitch * 0.84, transform: `rotate(${cell.turn}deg)` }}

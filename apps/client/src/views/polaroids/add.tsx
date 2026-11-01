@@ -41,7 +41,7 @@ export default function AddPolaroid() {
                 const id = await submit(take, email, token)
                 location.assign(`/p/${id}`)
               } catch (err) {
-                setError((err as Error).message)
+                setError(err instanceof Error ? err.message : 'Something went wrong.')
                 setSending(false)
                 setToken(null)
                 setCheck((n) => n + 1)
