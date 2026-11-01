@@ -37,6 +37,11 @@ describe('nextSteps', () => {
     expect(nextSteps([{ id: A, updated_at: 9 }], old, () => task('t1', 'failed'))).toEqual([{ kind: 'start', id: A, claimedAt: 9 }])
   })
 
+  test("forgets a claim once its submission isn't being made, and then claims the next", () => {
+    const done = state({ claims: { [A]: { claimedAt: 5, task: 't1' } } })
+    expect(nextSteps([], done, () => task('t1', 'succeeded'))).toEqual([{ kind: 'forget', id: A }, { kind: 'claim' }])
+  })
+
   test('a claim whose task was swept from the queue starts again', () => {
     expect(nextSteps([{ id: B, updated_at: 5 }], state({ claims: { [B]: { claimedAt: 5, task: 'gone' } } }), none)).toEqual([{ kind: 'start', id: B, claimedAt: 5 }])
   })

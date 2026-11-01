@@ -35,7 +35,7 @@ export interface Making {
   updated_at: number
 }
 
-export type Step = { kind: 'start'; id: string; claimedAt: number } | { kind: 'fail'; id: string; error: string } | { kind: 'claim' }
+export type Step = { kind: 'start'; id: string; claimedAt: number } | { kind: 'fail'; id: string; error: string } | { kind: 'forget'; id: string } | { kind: 'claim' }
 
 /** How much of a failed task's log goes into the submission's `error` (the Worker keeps 4000 characters). */
 const ERROR_LOG = 3000
@@ -44,6 +44,7 @@ const ERROR_LOG = 3000
  * What the runner does next, given the submissions being made and the tasks it started for them:
  * - a claim with no task of its own yet (just claimed, or claimed again after a failure): start one;
  * - one whose task failed or was stopped: report it, with the end of the task's log;
+ * - a claim whose submission is no longer being made (made, or moved on in the inbox): forget it;
  * - nothing being made and the switch on: claim the next.
  * A task that succeeded has already marked its submission made, so it's no longer `making`.
  */
@@ -58,6 +59,7 @@ export function nextSteps(making: Making[], state: RunnerState, task: (id: strin
       steps.push({ kind: 'fail', id: row.id, error: current.status === 'cancelled' ? `Stopped from the admin.\n\n${tail}` : tail || 'polaroid-make failed' })
     }
   }
+  for (const id of Object.keys(state.claims)) if (!making.some((row) => row.id === id)) steps.push({ kind: 'forget', id })
   if (state.on && making.length === 0) steps.push({ kind: 'claim' })
   return steps
 }
@@ -144,6 +146,7 @@ export function createInbox(opts: {
       if (!Array.isArray(rows)) throw new Error("The inbox's list of submissions being made wasn't a list")
       for (const step of nextSteps(rows.map(parseMaking), state, (id) => opts.tasks().get(id))) {
         if (step.kind === 'start') start(step.id, step.claimedAt)
+        if (step.kind === 'forget') forget(step.id)
         if (step.kind === 'fail') {
           await worker(`polaroids/${step.id}/failed`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ error: step.error }) })
           forget(step.id)
