@@ -21,6 +21,10 @@ export interface JobConfig {
   fps: number
   /** A visitor's polaroid loop (plans/done/polaroid-admin-flow.md) rather than a song's footage. Unset: a song. */
   kind?: 'polaroid'
+  /** A polaroid's moderation (CLAUDE.md, Polaroid jobs): written by /admin's vite-plugin-admin.ts, and `polaroid-make`. */
+  review?: 'submitted' | 'approved' | 'shown' | 'rejected'
+  /** The visitor's submission (the Worker's D1 id) a polaroid job was made from; unset for one recorded in /admin/record. */
+  submission?: string
   /**
    * What `init` was given, so the job can be rebuilt from its own footage:
    * `path` is the job's local copy of the original (relative to the job

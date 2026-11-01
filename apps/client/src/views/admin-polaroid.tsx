@@ -230,9 +230,27 @@ type PolaroidJob = {
   frames: number
   fps: number
   review: Review
+  /** The visitor's submission it was made from (the inbox); unset for one recorded here. */
+  submission?: string
   stages: { panels: Stage; background: Stage; atlas: Stage }
   cost?: { panels: string; background: string }
 }
+
+/** A visitor's submission, as the inbox has it from the Worker's D1, with its local job once it's being made. */
+type Submission = {
+  id: string
+  status: 'submitted' | 'approved' | 'making' | 'made' | 'shown' | 'rejected' | 'failed'
+  hasEmail: boolean
+  error: string | null
+  created_at: number
+  approved_at: number | null
+  job?: string
+  stages?: PolaroidJob['stages']
+  /** The runner's task making it. */
+  task?: string
+}
+type Runner = { on: boolean; runOn: RunOn; error?: string }
+type InboxList = { configured: false } | { configured: true; runner: Runner; submissions: Submission[] }
 
 const STAGES = [
   {
@@ -332,12 +350,217 @@ function standing(job: PolaroidJob) {
 
 const GROUPS = ['To review', 'Ready to show', 'Being made', 'Shown', 'Rejected']
 
+/** The inbox's groups, in the order they need a person: each submission status and what it's called. */
+const INBOX_GROUPS: { status: Submission['status']; title: string }[] = [
+  { status: 'submitted', title: 'To review' },
+  { status: 'failed', title: 'Failed' },
+  { status: 'made', title: 'Ready to show' },
+  { status: 'making', title: 'Being made' },
+  { status: 'approved', title: 'Queued' },
+  { status: 'shown', title: 'Shown' },
+  { status: 'rejected', title: 'Rejected' },
+]
+
+const ago = (ms: number) => {
+  const minutes = Math.round((Date.now() - ms) / 60000)
+  if (minutes < 60) return `${minutes}m ago`
+  if (minutes < 60 * 48) return `${Math.round(minutes / 60)}h ago`
+  return `${Math.round(minutes / 60 / 24)}d ago`
+}
+
+/**
+ * Visitors' submissions (plans/in-progress/polaroids.md, step 3), from the Worker's D1 through the dev server, which
+ * holds the admin token: approve or reject each clip, and "run the queue" to make the approved ones on this
+ * machine, one at a time, oldest first. Nothing is made until it's approved, and nothing is retried by itself.
+ */
+function Inbox() {
+  const [inbox, setInbox] = useState<InboxList | null>(null)
+  const [error, setError] = useState('')
+  const { gpu } = useRunOnChoice('admin-polaroid-run-on', 'polaroid')
+  const reload = useCallback(() => api<InboxList>('/__admin/api/inbox').then(setInbox, (e: Error) => setError(e.message)), [])
+  useEffect(() => {
+    reload()
+    const timer = setInterval(reload, 5000)
+    return () => clearInterval(timer)
+  }, [reload])
+
+  const act = async (url: string, body: unknown = {}) => {
+    setError('')
+    try {
+      await api(url, body)
+    } catch (e) {
+      setError((e as Error).message)
+    }
+
+    await reload()
+  }
+
+  const decide = (id: string, decision: string) => act(`/__admin/api/inbox/${id}/review`, { decision })
+
+  if (!inbox) return error ? <p className="mb-8 rounded bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-200">{error}</p> : null
+  if (!inbox.configured) {
+    return <p className="mb-8 text-sm text-stone-600 dark:text-stone-400">{"Visitors' submissions show here once POLAROIDS_API and POLAROIDS_ADMIN_TOKEN are set in apps/pipeline/.env."}</p>
+  }
+
+  const { runner, submissions } = inbox
+  const runOn = gpu?.configured ? runner.runOn : 'replicate'
+  const each = runOn === 'pc' ? 'about $0.25 each (the background on Replicate; the panels are free on the 4090)' : 'about $2.15 each on Replicate (the panels and the background)'
+  const queued = submissions.filter((s) => s.status === 'approved').length
+
+  return (
+    <section className="mb-10">
+      <header className="mb-4 flex flex-wrap items-center gap-3">
+        <h2 className="font-serif text-3xl">Visitors</h2>
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <RunOnSwitch value={runOn} gpu={gpu} onChange={(value) => act('/__admin/api/inbox/runner', { runOn: value })} label="Make visitors' polaroids on" />
+          {runner.on ? (
+            <button type="button" onClick={() => act('/__admin/api/inbox/runner', { on: false })} className={SECONDARY}>
+              Stop the queue
+            </button>
+          ) : (
+            <ConfirmButton
+              label="Run the queue"
+              title="Run the queue?"
+              body={`Makes the approved polaroids on this machine one at a time, oldest first, while this dev server runs: ${each}. ${queued} waiting now. Stopping it finishes the one in progress.`}
+              confirm="Run the queue"
+              onConfirm={() => act('/__admin/api/inbox/runner', { on: true })}
+            />
+          )}
+        </div>
+        <p className="w-full text-sm text-stone-600 dark:text-stone-400">
+          {runner.on ? `The queue is running: ${queued} waiting.` : `The queue is stopped${queued > 0 ? `, with ${queued} waiting` : ''}.`}
+        </p>
+      </header>
+      {(error || runner.error) && <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-200">{error || runner.error}</p>}
+      {submissions.length === 0 && <p className="text-sm text-stone-600 dark:text-stone-400">No submissions yet.</p>}
+      {INBOX_GROUPS.map(({ status, title }) => {
+        const inGroup = submissions.filter((s) => s.status === status)
+        if (inGroup.length === 0) return null
+        return (
+          <div key={status} className="mb-6">
+            <h3 className="mb-3 font-serif text-xl">
+              {title} <span className="text-base text-stone-500">{inGroup.length}</span>
+            </h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+              {inGroup.map((s) => (
+                <SubmissionCard key={s.id} submission={s} onDecide={(decision) => decide(s.id, decision)} onAct={(url) => act(url)} />
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
+function SubmissionCard({ submission: s, onDecide, onAct }: { submission: Submission; onDecide: (decision: string) => void; onAct: (url: string) => void }) {
+  const made = s.status === 'made' || s.status === 'shown'
+  const done = s.stages ? STAGES.filter((stage) => s.stages?.[stage.key].done).length : 0
+  return (
+    <div className={`overflow-hidden rounded-lg border border-stone-300 bg-white dark:border-stone-700 dark:bg-stone-900 ${s.status === 'rejected' ? 'opacity-60' : ''}`}>
+      {made && s.job ? (
+        <video src={jobFile(s.job, 'polaroid/loop.mp4')} muted loop autoPlay playsInline className="aspect-square w-full bg-black object-cover" />
+      ) : s.status === 'submitted' || s.status === 'rejected' || s.status === 'approved' || s.status === 'failed' ? (
+        // The whole clip as the visitor sent it, not their crop: what's outside the square matters too.
+        <video src={`/__admin/api/inbox/${s.id}/clip`} controls muted loop playsInline preload="metadata" className="aspect-square w-full bg-black object-contain" />
+      ) : s.job ? (
+        <img src={jobFile(s.job, '0-source/frames/0001.jpg')} alt="" className="aspect-square w-full object-cover" />
+      ) : (
+        <div className="aspect-square w-full bg-stone-200 dark:bg-stone-800" />
+      )}
+      <div className="space-y-2 p-3 text-sm">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="truncate font-mono text-xs text-stone-500">{s.id}</span>
+          <span className="shrink-0 text-stone-500">{ago(s.created_at)}</span>
+        </div>
+        {s.status === 'making' && <div className="text-amber-700 dark:text-amber-400">{s.stages ? `${done} of ${STAGES.length} steps made` : 'Starting…'}</div>}
+        {s.status === 'failed' && s.error && <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded bg-red-50 p-2 text-xs text-red-800 dark:bg-red-950/50 dark:text-red-200">{s.error.slice(-800)}</pre>}
+        {s.hasEmail && made && <div className="text-amber-700 dark:text-amber-400">{`Its "ready" email hasn't gone.`}</div>}
+        <div className="flex flex-wrap gap-2">
+          {s.status === 'submitted' && (
+            <>
+              <button type="button" onClick={() => onDecide('approve')} className={BUTTON}>
+                Approve
+              </button>
+              <button type="button" onClick={() => onDecide('reject')} className={SECONDARY}>
+                Reject
+              </button>
+            </>
+          )}
+          {s.status === 'approved' && (
+            <button type="button" onClick={() => onDecide('reject')} className={SECONDARY}>
+              Reject
+            </button>
+          )}
+          {s.status === 'making' && s.task && (
+            <button type="button" onClick={() => onAct(`/__admin/api/tasks/${s.task}/cancel`)} className={SECONDARY}>
+              Stop
+            </button>
+          )}
+          {s.status === 'failed' && (
+            <>
+              <button type="button" onClick={() => onDecide('requeue')} className={BUTTON}>
+                Try again
+              </button>
+              <button type="button" onClick={() => onDecide('reject')} className={SECONDARY}>
+                Reject
+              </button>
+            </>
+          )}
+          {s.status === 'made' && (
+            <>
+              <button type="button" onClick={() => onDecide('show')} className={BUTTON}>
+                Show it
+              </button>
+              <button type="button" onClick={() => onDecide('reject')} className={SECONDARY}>
+                Reject
+              </button>
+            </>
+          )}
+          {s.status === 'shown' && (
+            <button type="button" onClick={() => onDecide('hide')} className={SECONDARY}>
+              Hide
+            </button>
+          )}
+          {s.status === 'rejected' && (
+            <button type="button" onClick={() => onDecide('reopen')} className={SECONDARY}>
+              Reopen
+            </button>
+          )}
+          {s.hasEmail && made && (
+            <button type="button" onClick={() => onAct(`/__admin/api/inbox/${s.id}/email`)} className={SECONDARY}>
+              Send the email again
+            </button>
+          )}
+          {s.job && (
+            <a href={`/admin/polaroid?job=${encodeURIComponent(s.job)}`} className={SECONDARY}>
+              Its job
+            </a>
+          )}
+          {s.status !== 'making' && (
+            <ConfirmButton
+              label="Delete"
+              title="Delete this submission?"
+              body="This deletes the visitor's clip and everything made from it, here and in the app: the frames, every panel, the polaroid and its loop. Its private link stops working. It can't be undone."
+              confirm="Delete it"
+              className={DANGER}
+              onConfirm={() => onAct(`/__admin/api/inbox/${s.id}/delete`)}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function PolaroidList() {
   const [jobs, setJobs] = useState<PolaroidJob[] | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {
     api<PolaroidJob[]>('/__admin/api/polaroids').then(setJobs, (e: Error) => setError(e.message))
   }, [])
+  // Visitors' jobs are in the inbox, where their status (in D1) is.
+  const recorded = jobs?.filter((job) => !job.submission)
   return (
     <Page>
       <header className="mb-6 flex flex-wrap items-baseline gap-x-4 gap-y-1">
@@ -347,16 +570,18 @@ function PolaroidList() {
           Record a new one
         </a>
       </header>
+      <Inbox />
+      <h2 className="mb-4 font-serif text-3xl">Recorded here</h2>
       {error && <p className="mb-6 rounded bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-200">{error}</p>}
-      {jobs?.length === 0 && <p className="text-sm text-stone-600 dark:text-stone-400">No polaroids yet. Record one to start.</p>}
+      {recorded?.length === 0 && <p className="text-sm text-stone-600 dark:text-stone-400">No polaroids yet. Record one to start.</p>}
       {GROUPS.map((group) => {
-        const inGroup = jobs?.filter((job) => standing(job).group === group) ?? []
+        const inGroup = recorded?.filter((job) => standing(job).group === group) ?? []
         if (inGroup.length === 0) return null
         return (
           <section key={group} className="mb-8">
-            <h2 className="mb-3 font-serif text-2xl">
+            <h3 className="mb-3 font-serif text-xl">
               {group} <span className="text-base text-stone-500">{inGroup.length}</span>
-            </h2>
+            </h3>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
               {inGroup.map((job) => (
                 <a key={job.name} href={`/admin/polaroid?job=${encodeURIComponent(job.name)}`} className={`group overflow-hidden rounded-lg border border-stone-300 bg-white dark:border-stone-700 dark:bg-stone-900 ${job.review === 'rejected' ? 'opacity-60' : ''}`}>

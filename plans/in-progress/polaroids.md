@@ -2,7 +2,7 @@
 title: "Polaroids: an endless gallery in the app, submissions made on the 4090"
 status: In Progress
 created: 2026-10-10
-updated: 2026-10-27
+updated: 2026-11-01
 ---
 
 # Polaroids: an endless gallery in the app, submissions made on the 4090
@@ -179,7 +179,7 @@ lysterfieldlake.com onboarded to Email Service
 (`wrangler email sending enable`, which adds DNS records): until then a
 "ready" email fails quietly and the polaroid is made anyway.
 
-### 3. The queue in `/admin/polaroid`
+### 3. The queue in `/admin/polaroid` (built and checked end to end)
 
 An inbox listing the D1 queue: approve or reject each submitted clip
 (playing it), and a "run the queue" switch. While it's on, the Mac claims
@@ -197,6 +197,32 @@ Switching it off finishes the one in progress, then stops. Skip-if-exists
 at every step, and no automatic retries (CLAUDE.md): a failure marks the
 submission `failed` with its log, to retry from the inbox. Show, reject and
 delete live there too.
+
+**As built (2026-11-01):**
+
+- **One task per submission, `polaroid-make --id <id>`** (`apps/pipeline/src/steps/polaroid-make.ts`):
+  the clip from the Worker, `init --crop`, `polaroid-run`, `background-video`, `polaroid`, a
+  `still.jpg` (the loop's first frame, for the gallery), the three files up, then `done`. It only makes a
+  submission that's `making`, so the claim is the approval gate. Its job is `.jobs/visitor-<id>`, with
+  `submission` and `review: approved` in `job.json`, so a retry finds what the last attempt made and
+  `/admin/polaroid?job=` still shows its stages. On the `pc` lane when the panels run on the 4090, so it
+  takes turns with dreams there.
+- **The runner** (`apps/client/admin-inbox.ts`) lives in the dev server, like the task queue: every 15s it
+  reads the submissions that are `making`, starts a task for a fresh claim, reports a task that failed or
+  was stopped (`failed`, with the end of its log), and, with the switch on and nothing being made, claims
+  the next. The switch, where it runs (4090 or Replicate) and which task belongs to which claim are in
+  `.jobs/_queue/inbox.json`, so a restart carries on; a claim is told apart from a later one of the same
+  submission by its `updated_at`.
+- **The inbox** is the top of `/admin/polaroid`: submissions by status, the visitor's whole clip to
+  review (cached in `_recordings/visitor-<id>.<ext>`, which `polaroid-make` then uses), approve, reject,
+  "Try again" (`requeue`), show, hide, reopen, stop, resend the email, and delete (the Worker's row, clip
+  and files, and the local job). The admin token stays in `apps/pipeline/.env`: the page only talks to
+  the dev server, which calls the Worker. Visitors' jobs are left out of the "Recorded here" list below.
+- **Checked end to end (2026-11-01)** against `wrangler dev` (local D1 and R2) with `park-party-2`'s clip
+  submitted through the public API: approve in the inbox, "run the queue" on the 4090, claimed and made
+  in 19.8 minutes (18.8 for the same clip queued by hand), files up, `done`, then shown. Along the way the
+  task was killed mid-run (the dev server's process tree stopped), and the runner marked it `failed`
+  with its log; "Try again" requeued it and the next claim started a fresh task.
 
 ### 4. The gallery, the link and submitting
 
@@ -344,7 +370,7 @@ deleted straight after along with the bucket.
       the routes (a bearer token for the admin, not Access)
 - [ ] Onboard lysterfieldlake.com to Email Service (user's go-ahead: DNS)
 - [ ] The CI token needs Workers Scripts, D1 and R2: Edit (was Pages)
-- [ ] 3. The inbox and "run the queue" in `/admin/polaroid`
+- [x] 3. The inbox and "run the queue" in `/admin/polaroid`, checked end to end against `wrangler dev`
 - [ ] 4. The gallery, the link under the stack, and submitting, behind
       `VITE_APP_POLAROIDS`
 - [ ] Gallery performance on a phone: how many playing loops it holds
