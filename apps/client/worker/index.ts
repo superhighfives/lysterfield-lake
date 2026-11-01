@@ -87,8 +87,8 @@ async function route(request: Request, env: Env): Promise<Response> {
       const row = await create(env.DB, crop, email)
       return json({ id: row.id, upload: `/api/polaroids/${row.id}/clip` }, 201)
     }
-    if (id && parts[2] === 'clip' && method === 'PUT') return json(publicView(await receiveClip(env, id, request)))
-    if (id && !parts[2] && method === 'GET') return json(publicView(await get(env.DB, id)))
+    if (id && parts[2] === 'clip' && method === 'PUT') return json(await publicView(env.DB, await receiveClip(env, id, request)))
+    if (id && !parts[2] && method === 'GET') return json(await publicView(env.DB, await get(env.DB, id)))
   }
 
   if (parts[0] === 'admin') {

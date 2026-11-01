@@ -224,7 +224,7 @@ delete live there too.
   task was killed mid-run (the dev server's process tree stopped), and the runner marked it `failed`
   with its log; "Try again" requeued it and the next claim started a fresh task.
 
-### 4. The gallery, the link and submitting
+### 4. The gallery, the link and submitting (built, behind the flag)
 
 - **The link:** under the chooser's stack, a quiet "Add your own", only
   when `VITE_APP_POLAROIDS` is set.
@@ -236,6 +236,28 @@ delete live there too.
 - **"Add yours":** the `/admin/record` recorder, made public: camera or
   upload, square crop, 5 seconds, consent. Then a private link, `/p/<id>`,
   that says where it is in the queue until it's made.
+
+**As built (2026-11-01), all behind `VITE_APP_POLAROIDS` (on in `.env.development`, off in production):**
+
+- **Pages of their own** (`src/main.tsx`): `/polaroids` (`views/polaroids/gallery.tsx`), `/polaroids/add`
+  (`add.tsx`) and `/p/<id>` (`link.tsx`), never loading the song. `public/_redirects` sends those paths to
+  the app. Files come from `VITE_APP_POLAROIDS_URL` (the public bucket; in dev, the dev server serves each
+  visitor's job, since `wrangler dev`'s bucket isn't public). In dev the API is `wrangler dev`, proxied
+  (`WORKER_PORT`, 8787 by default).
+- **The gallery:** a grid that wraps in every direction (`grid.ts`), dragged with a fling, scrolled, or
+  moved with the arrow keys. Cards are stills in a polaroid frame, each tilted a little; the three nearest
+  the centre play `loop.mp4`. Tapping one opens it in 3D (`components/loop-polaroid.tsx`, shared with
+  `/admin/polaroid`). No music yet (Open questions).
+- **"Add yours":** the recorder (`components/recorder.tsx`, shared with `/admin/record`), an optional
+  email, a consent box and Turnstile (`VITE_APP_TURNSTILE_SITE_KEY`; Cloudflare's always-pass test key in
+  dev). It posts the row, puts the clip, and goes to the private link.
+- **The private link** says where it is (waiting to be looked at; queued, with how many are ahead, which
+  the Worker now returns as `ahead`; being made; made; shown; or not being made), looks again every 20s,
+  and shows the polaroid in 3D with the loop to download once it's made. The "ready" email links here
+  (it was `/?polaroid=<id>`).
+- **The link under the stack:** "Add your own", to `/polaroids`, an `Html` element in the stack's group
+  (`views/choose.tsx`) that fades with it. Its height under the stack (`ADD_YOURS_BELOW`) wants checking by
+  eye.
 
 ## Measurements
 
@@ -381,7 +403,10 @@ deleted straight after along with the bucket.
 
 - **Legal and privacy:** terms and consent wording, minors, and what
   "delete" removes (atlas, still, caches).
-- **Which stretch of the song** loops under the gallery.
+- **Which stretch of the song** loops under the gallery. Not built yet: the gallery is silent.
+- **The consent wording** on "Add yours" (`CONSENT` in `views/polaroids/add.tsx`) is a placeholder.
+- **Turnstile's site key** for production: a widget to make in Cloudflare, its key in `.env.production`
+  and its secret as the Worker's `TURNSTILE_SECRET`.
 - **Cloudflare's email sending:** the Worker binding from Email Routing
   only sends to verified addresses; sending to any visitor needs
   Cloudflare's newer Email Service. Check it's available on the account

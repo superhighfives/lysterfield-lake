@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
 import { MathUtils, Mesh, MeshBasicMaterial, Vector3 } from 'three'
 import {
+  Html,
   useIntersect,
   useScroll,
   useTexture,
@@ -25,6 +26,11 @@ useTexture.preload('/images/welcome.png')
 useTexture.preload('/images/action-scroll.png')
 useTexture.preload('/images/choose.png')
 dreams.forEach((dream) => useTexture.preload(`/assets/${dream.id}/hero.jpg`))
+
+// Visitors' polaroids (plans/in-progress/polaroids.md): a quiet "Add your own" under the stack, to the gallery.
+const POLAROIDS = import.meta.env.VITE_APP_POLAROIDS === 'true'
+// How far under the stack's middle the link sits, in the stack group's own units (before its scale).
+const ADD_YOURS_BELOW = 4.2
 
 // The welcome/choose/scroll-hint artwork is black ink on transparent —
 // inverted to white ink in dark mode so it still reads against the page.
@@ -149,6 +155,7 @@ function Choose(props: ThreeElements['group']) {
   const whichVisibilityRef = useRef(1)
   const polaroidVisibilityRef = useRef(0)
   const welcomeMaterial = useRef<MeshBasicMaterial>(null)
+  const addYours = useRef<HTMLAnchorElement>(null)
   const whichMaterial = useRef<MeshBasicMaterial>(null)
 
   const [{ opacity: actionScrollOpacity }, actionScrollApi] = useSpring(
@@ -218,6 +225,12 @@ function Choose(props: ThreeElements['group']) {
         )
       : MathUtils.lerp(polaroidVisibilityRef.current, 0, 0.1)
     polaroidVisibilityRef.current = nextPolaroidVisibility
+    // The link fades with the stack, and can't be clicked while it's (nearly) gone.
+    if (addYours.current) {
+      addYours.current.style.opacity = String(nextPolaroidVisibility)
+      addYours.current.style.pointerEvents = nextPolaroidVisibility > 0.5 ? 'auto' : 'none'
+    }
+
     polaroidApi.start({
       position: [
         0,
@@ -326,6 +339,18 @@ function Choose(props: ThreeElements['group']) {
           onSelect={setDream}
           presence={polaroidVisibilityRef}
         />
+        {POLAROIDS && (
+          <Html position={[0, -ADD_YOURS_BELOW, 0]} center zIndexRange={[5, 0]}>
+            <a
+              ref={addYours}
+              href="/polaroids"
+              style={{ opacity: 0, pointerEvents: 'none' }}
+              className="whitespace-nowrap rounded-full px-3 py-1 font-serif text-base italic text-stone-600 transition-colors hover:bg-yellow-200 hover:text-yellow-900 dark:text-stone-400 dark:hover:bg-yellow-400/20 dark:hover:text-yellow-300"
+            >
+              Add your own
+            </a>
+          </Html>
+        )}
       </animated.group>
     </group>
   )
