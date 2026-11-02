@@ -4,6 +4,7 @@
 # and the refusals along the way. Local only: it uses .dev.vars' ADMIN_TOKEN
 # and Turnstile's always-pass test secret, and fake media. Needs
 # POLAROIDS_PUBLIC=true in .dev.vars: the public routes are off by default.
+# Not while /admin/polaroid's "run the queue" is on against the same Worker: its claim could be picked up.
 #
 #   bunx wrangler d1 migrations apply lysterfield-polaroids --local
 #   bunx wrangler dev --port 8799 &
@@ -35,6 +36,7 @@ expect "it's in the inbox" "\"id\":\"$id\"" "${A[@]}" "$B/admin/polaroids?status
 expect "nothing to claim before approval" 'null' -XPOST "${A[@]}" $B/admin/queue/claim
 expect "can't show what isn't made" "Can't show" -XPOST "${A[@]}" $B/admin/polaroids/$id/review -d '{"decision":"show"}'
 expect "approve" '"status":"approved"' -XPOST "${A[@]}" $B/admin/polaroids/$id/review -d '{"decision":"approve"}'
+expect "the private link says where it is in the queue" '"ahead":' $B/polaroids/$id
 expect "claim" '"status":"making"' -XPOST "${A[@]}" $B/admin/queue/claim
 expect "not done without its files" 'Upload atlas.mp4 and loop.mp4' -XPOST "${A[@]}" $B/admin/polaroids/$id/done
 expect "only its own file names" "A polaroid's files" -XPUT "${A[@]}" $B/admin/polaroids/$id/files/x.exe --data-binary @"$fake"
