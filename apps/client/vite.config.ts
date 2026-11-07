@@ -15,7 +15,8 @@ export default defineConfig(() => {
     plugins,
     server: {
       https: external,
-      // The polaroid API is the Worker's (worker/): run `wrangler dev` alongside, on WORKER_PORT (8787 by default).
+      // The polaroid API is the Worker's (worker/): run `bun run worker` alongside (`wrangler dev`, port 8787; set
+      // WORKER_PORT here if it's elsewhere). Without it, /polaroids and /p/<id> get a 500.
       proxy: { '/api': `http://localhost:${process.env.WORKER_PORT ?? 8787}` },
     },
   }

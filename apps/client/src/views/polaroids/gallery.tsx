@@ -201,8 +201,10 @@ export default function Gallery() {
                   }
                 }}
                 aria-label="Open this polaroid"
-                className="absolute bg-white p-[5%] pb-[17%] shadow-lg shadow-stone-900/20 transition-shadow hover:shadow-xl"
-                style={{ left: cell.x + pitch * 0.08, top: cell.y + pitch * 0.04, width: pitch * 0.84, transform: `rotate(${cell.turn}deg)` }}
+                className="absolute bg-white shadow-lg shadow-stone-900/20 transition-shadow hover:shadow-xl"
+                // The polaroid's border in pixels, from the card's own width: a percentage would be of the plane's,
+                // which has none, so it came out as no border at all.
+                style={{ left: cell.x + pitch * 0.08, top: cell.y + pitch * 0.04, width: pitch * 0.84, padding: `${pitch * 0.042}px ${pitch * 0.042}px ${pitch * 0.143}px`, transform: `rotate(${cell.turn}deg)` }}
               >
                 {playing.includes(cell.key) ? (
                   <video src={polaroidFile(cell.id, 'loop.mp4')} poster={polaroidFile(cell.id, 'still.jpg')} autoPlay muted loop playsInline className="pointer-events-none aspect-square w-full bg-stone-200 object-cover" />
