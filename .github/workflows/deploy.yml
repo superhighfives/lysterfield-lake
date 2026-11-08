@@ -2,7 +2,7 @@ name: Deploy
 
 # Deploys the client to the lysterfield-lake Worker
 # (lysterfieldlake.com, and its workers.dev URL: the built site as static
-# assets, and the polaroid API, apps/client/wrangler.jsonc) when main changes,
+# assets, apps/client/wrangler.jsonc) when main changes,
 # as `bun run --cwd apps/client deploy` does by hand. Its videos aren't
 # part of the build: they're in the lysterfield-lake-dreams R2 bucket,
 # served from dreams.lysterfieldlake.com (apps/client/.env.production).
@@ -12,11 +12,7 @@ name: Deploy
 # exists on a machine with the videos.
 #
 # Needs two repo secrets: CLOUDFLARE_API_TOKEN (a token with Workers Scripts:
-# Edit on the account, plus D1: Edit and Workers R2 Storage: Edit for the
-# Worker's bindings) and CLOUDFLARE_ACCOUNT_ID. D1 migrations
-# (apps/client/migrations) aren't applied here: run
-# `wrangler d1 migrations apply lysterfield-polaroids --remote` by hand
-# before merging one.
+# Edit on the account) and CLOUDFLARE_ACCOUNT_ID.
 
 on:
   push:
