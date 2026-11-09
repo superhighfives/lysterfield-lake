@@ -5,7 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeClientAssets } from './client-manifest.ts'
 import { compose, composePreview, composeSplit } from './compose.ts'
-import { gpuServerUrl } from './gpu-server.ts'
+import { gpuServerUrl, polaroidServerUrl } from './gpu-server.ts'
 import { loadJob, videoPath, type Job } from './job.ts'
 import { retryFailedPredictions } from './replicate.ts'
 import { backgroundPlate } from './steps/background-plate.ts'
@@ -20,6 +20,10 @@ import { dreamDirections } from './steps/dream-directions.ts'
 import { init } from './steps/init.ts'
 import { matte } from './steps/matte.ts'
 import { outline } from './steps/outline.ts'
+import { polaroid } from './steps/polaroid.ts'
+import { polaroidMake } from './steps/polaroid-make.ts'
+import { polaroidPanels } from './steps/polaroid-panels.ts'
+import { polaroidRun } from './steps/polaroid-run.ts'
 import { portrait } from './steps/portrait.ts'
 import { upscale } from './steps/upscale.ts'
 import { words } from './steps/words.ts'
@@ -79,12 +83,18 @@ function outputFlag(defaultRelativePath: string): string {
 }
 
 const concurrency = Number(flags.concurrency ?? 4)
-// --on replicate: run on Replicate even when our own GPU server is set up (DEFORUM_URL; gpu-server.ts).
+/** Steps whose GPU work is the polaroid model's (POLAROID_URL), not Deforum's (DEFORUM_URL). */
+const POLAROID_MODEL_STEPS = ['polaroid-run', 'polaroid-make']
+// --on replicate: run on Replicate even when our own GPU server is set up (DEFORUM_URL, or POLAROID_URL
+// for polaroids; gpu-server.ts).
 if (flags.on === 'replicate') {
   delete process.env.DEFORUM_URL
+  delete process.env.POLAROID_URL
 } else if (flags.on && flags.on !== 'pc') throw new Error('--on must be pc or replicate')
 // --on pc asks for the free GPU: never fall back to billing Replicate because its address is missing.
-else if (flags.on === 'pc' && !gpuServerUrl())
+else if (flags.on === 'pc' && POLAROID_MODEL_STEPS.includes(step) && !polaroidServerUrl())
+  throw new Error('--on pc needs POLAROID_URL set in apps/pipeline/.env')
+else if (flags.on === 'pc' && !POLAROID_MODEL_STEPS.includes(step) && !gpuServerUrl())
   throw new Error('--on pc needs DEFORUM_URL set in apps/pipeline/.env')
 // --retry true: a person asked to run a failed or cancelled Replicate prediction again. Never set by default.
 if (flags.retry === 'true') retryFailedPredictions()
@@ -103,6 +113,7 @@ switch (step) {
       length: flags.length ? Number(flags.length) : undefined,
       // --crop x,y,zoom: the square's centre (fractions of the frame) and zoom; see job.ts's Crop.
       crop: flags.crop ? parseCrop(flags.crop) : undefined,
+      kind: flags.kind === 'polaroid' ? 'polaroid' : undefined,
     })
     console.log(JSON.stringify(result, null, 2))
     break
@@ -203,6 +214,49 @@ switch (step) {
       frameDirFlag(job, '4-matte/frames', 'alpha'),
       concurrency
     )
+    console.log(JSON.stringify(result, null, 2))
+    break
+  }
+
+  case 'polaroid-run': {
+    // Panels 2, 4, 5 and 6 of a polaroid job: on the 4090 when POLAROID_URL is set (the whole clip in one
+    // prediction, free), else on the lysterfield-polaroid Replicate deployment, split into frame ranges run
+    // at once. --on replicate sends it there anyway. --plan true: what would run, and its cost, without
+    // running anything.
+    const job = await loadJob(requireFlag('job'))
+    const result = await polaroidRun(job, {
+      ranges: flags.ranges ? Number(flags.ranges) : undefined,
+      inversionSteps: flags['inversion-steps'] ? Number(flags['inversion-steps']) : undefined,
+      planOnly: flags.plan === 'true',
+      concurrency,
+    })
+    console.log(JSON.stringify(result, null, 2))
+    if (result.failed.length > 0) process.exitCode = 1
+    break
+  }
+
+  case 'polaroid-panels': {
+    // Panels 2, 4, 5 and 6 from a models/polaroid output tar, post-processed as the per-model steps do. No Replicate calls.
+    const job = await loadJob(requireFlag('job'))
+    console.log(JSON.stringify(await polaroidPanels(job, requireFlag('tar'), concurrency), null, 2))
+    break
+  }
+
+  case 'polaroid': {
+    // The polaroid's looping 5-panel atlas (plans/in-progress/polaroids.md). ffmpeg only.
+    const job = await loadJob(requireFlag('job'))
+    const result = await polaroid(job, {
+      trim: flags.trim ? Number(flags.trim) : undefined,
+      blend: flags.blend ? Number(flags.blend) : undefined,
+    })
+    console.log(JSON.stringify(result, null, 2))
+    break
+  }
+
+  case 'polaroid-make': {
+    // A visitor's claimed submission, from its clip to made (plans/in-progress/polaroids.md, step 3): what
+    // /admin/polaroid's "run the queue" starts for each one. --jobs is where its job goes (.jobs by default).
+    const result = await polaroidMake(flags.jobs ?? '.jobs', requireFlag('id'), { concurrency })
     console.log(JSON.stringify(result, null, 2))
     break
   }
@@ -447,7 +501,7 @@ switch (step) {
 
   default:
     console.error(
-      `Usage: bun run src/cli.ts <init|words|matte|portrait|upscale|background-plate|background-stabilize|background-video|depth|outline|dream-directions|dream-take|dream-samples|dream-clip|clip-preview|dream-check|dream-repair|take-status|dream|compose|compose-split> --job <dir> [options]`
+      `Usage: bun run src/cli.ts <init|polaroid-run|polaroid|polaroid-make|words|matte|portrait|upscale|background-plate|background-stabilize|background-video|depth|outline|dream-directions|dream-take|dream-samples|dream-clip|clip-preview|dream-check|dream-repair|take-status|dream|compose|compose-split> --job <dir> [options]`
     )
     process.exit(1)
 }

@@ -7,7 +7,7 @@ const execFileAsync = promisify(execFile)
 
 /** Everything persisted in `<dir>/job.json`: the job's settings plus a record of how it was made. */
 /**
- * A square crop of the source, picked by hand instead of `init`'s default centred one:
+ * A square crop of the source, picked by hand (e.g. in /admin/record) instead of `init`'s default centred one:
  * its centre as a fraction of the source's width and height, and a zoom, where 1 is the largest square that fits.
  */
 export interface Crop {
@@ -19,6 +19,12 @@ export interface Crop {
 export interface JobConfig {
   /** Frame rate used throughout this job — matches the source video's extraction rate. */
   fps: number
+  /** A visitor's polaroid loop (plans/done/polaroid-admin-flow.md) rather than a song's footage. Unset: a song. */
+  kind?: 'polaroid'
+  /** A polaroid's moderation (CLAUDE.md, Polaroid jobs): written by /admin's vite-plugin-admin.ts, and `polaroid-make`. */
+  review?: 'submitted' | 'approved' | 'shown' | 'rejected'
+  /** The visitor's submission (the Worker's D1 id) a polaroid job was made from; unset for one recorded in /admin/record. */
+  submission?: string
   /**
    * What `init` was given, so the job can be rebuilt from its own footage:
    * `path` is the job's local copy of the original (relative to the job

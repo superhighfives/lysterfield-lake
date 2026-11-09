@@ -17,6 +17,7 @@ import { startAudio } from '../utils/audio'
 import WaterVideo, { DIVE_MS, useWater } from '../components/water-video'
 import Cursor from '../components/cursor'
 import { useDebugShortcut } from '../utils/use-debug-shortcut'
+import { addYoursLink, POLAROIDS } from '../utils/add-yours'
 
 // The scene, the loading pile and the player, in their own chunk: loaded
 // once the start button's pressed, so the title isn't held up by them
@@ -195,6 +196,19 @@ function Root() {
             <Suspense fallback={<LoadingShell />}>
               <Experience video={video} dpr={dpr} isBuffering={isBuffering} />
             </Suspense>
+            {/* Under the chooser's stack, faded with it by the scene (utils/add-yours.ts). */}
+            {POLAROIDS ? (
+              <a
+                ref={(el) => {
+                  addYoursLink.current = el
+                }}
+                href="/polaroids"
+                style={{ opacity: 0, pointerEvents: 'none' }}
+                className="fixed z-10 left-1/2 -translate-x-1/2 bottom-[max(1.5rem,8vh,env(safe-area-inset-bottom))] whitespace-nowrap rounded-full px-3 py-1 font-serif text-base italic text-stone-600 transition-colors hover:bg-yellow-200 hover:text-yellow-900 dark:text-stone-400 dark:hover:bg-yellow-400/20 dark:hover:text-yellow-300"
+              >
+                Add your own
+              </a>
+            ) : null}
           </Viewport>
         ) : hasLoaded ? (
           <div className="relative h-screen grid place-content-center space-y-2 text-center p-4">

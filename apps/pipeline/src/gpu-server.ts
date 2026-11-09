@@ -18,6 +18,15 @@ export function gpuServerUrl(): string | undefined {
 }
 
 /**
+ * The polaroid model (models/polaroid) on the same PC, its own container on
+ * its own port: `POLAROID_URL` in apps/pipeline/.env, the same rules as
+ * `DEFORUM_URL`. Unset, polaroids run on the Replicate deployment.
+ */
+export function polaroidServerUrl(): string | undefined {
+  return process.env.POLAROID_URL?.replace(/\/+$/, '') || undefined
+}
+
+/**
  * The fields we read from Cog's prediction reply; anything else is ignored.
  * Every key optional: a successful reply has no `detail` or `error`, a refused one no `output`.
  * (In zod 4 a bare `z.unknown()` key is required, which rejected every successful run.)

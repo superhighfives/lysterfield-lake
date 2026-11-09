@@ -11,6 +11,7 @@ import {
 import { animated, useSpring, config } from '@react-spring/three'
 import { useStore } from '../store'
 import Stack, { stackHold } from '../components/carousels/stack'
+import { addYoursLink } from '../utils/add-yours'
 import dreams from '../dreams.json'
 
 // Warms suspend-react's cache (the mechanism behind every useTexture call in
@@ -218,6 +219,12 @@ function Choose(props: ThreeElements['group']) {
         )
       : MathUtils.lerp(polaroidVisibilityRef.current, 0, 0.1)
     polaroidVisibilityRef.current = nextPolaroidVisibility
+    // The link fades with the stack, and can't be clicked while it's (nearly) gone.
+    const addYours = addYoursLink.current
+    if (addYours) {
+      addYours.style.opacity = String(nextPolaroidVisibility)
+      addYours.style.pointerEvents = nextPolaroidVisibility > 0.5 ? 'auto' : 'none'
+    }
 
     polaroidApi.start({
       position: [
