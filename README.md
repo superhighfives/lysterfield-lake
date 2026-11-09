@@ -78,6 +78,7 @@ A development-only `/admin` page in the app drives all of this: brainstorm a dre
 
 ## Coming soon
 
+- **Polaroids.** An "Add your own" link under the dream stack opens an endless grid of looping 3D polaroids, one per visitor. You record a 5-second clip, it waits in a queue until a person approves it, and then the pipeline turns it into a polaroid of you, made from panels 2 to 6. You get an email with a private link when it's ready. It works end to end in `/admin` today, behind the `VITE_APP_POLAROIDS` flag.
 - **More dreams.** The person check and repair loop make a new dream much cheaper to check, so the next one is on its way.
 - **Cleaner dreams.** Repairing the frames in the ten original dreams where a person leaks through, and trying video models like Wan VACE that hold together better from frame to frame than Deforum.
 - **Steadier mattes and depth.** The matte sometimes glitches for a second or two, and depth can flutter in the corners. Newer models may fix both.

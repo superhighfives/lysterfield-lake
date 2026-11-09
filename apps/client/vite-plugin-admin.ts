@@ -1,8 +1,11 @@
-import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { execFile, execFileSync } from 'node:child_process'
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import type { Plugin } from 'vite'
+import { createInbox, parseMaking } from './admin-inbox.ts'
 import { createQueue } from './admin-queue.ts'
 
 /**
@@ -17,6 +20,9 @@ const PIPELINE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const JOBS_DIR = path.join(PIPELINE_DIR, '.jobs')
 const COLOURS_DIR = path.join(PIPELINE_DIR, 'resources', 'colours')
 const MAX_COLOUR_UPLOAD = 20 * 1024 * 1024
+/** Webcam clips from /admin/record (plans/in-progress/polaroids.md), kept apart from the jobs made from them. */
+const RECORDINGS_DIR = path.join(JOBS_DIR, '_recordings')
+const MAX_RECORDING_UPLOAD = 150 * 1024 * 1024
 const DEFORUM_PRESETS = path.resolve(PIPELINE_DIR, '..', '..', 'models', 'deforum', 'settings', 'presets.json')
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -52,12 +58,80 @@ function readJson(file: string): unknown {
   return JSON.parse(readFileSync(file, 'utf8'))
 }
 
-/** The song's jobs. A job.json with a `kind` (an old visitor polaroid's) is something else, and left out. */
-function listJobs() {
+function listJobs(kind?: 'polaroid') {
   return readdirSync(JOBS_DIR, { withFileTypes: true })
     .filter((d) => d.isDirectory() && d.name !== 'spikes' && existsSync(path.join(JOBS_DIR, d.name, 'job.json')))
     .map((d) => d.name)
-    .filter((name) => !(readJson(path.join(JOBS_DIR, name, 'job.json')) as { kind?: string }).kind)
+    .filter((name) => (readJson(path.join(JOBS_DIR, name, 'job.json')) as { kind?: string }).kind === kind)
+}
+
+const countFrames = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((f) => /\.(png|jpg)$/.test(f)).length : 0)
+
+/**
+ * Moderation, in job.json's `review`: a new recording is `submitted`; `approved` lets it be made (the paid
+ * stages refuse anything else); once made, `shown` approves it for showing; `rejected` stops it anywhere.
+ */
+type PolaroidReview = 'submitted' | 'approved' | 'shown' | 'rejected'
+const REVIEW_MOVES: Record<string, { from: PolaroidReview[]; to: PolaroidReview; needsMade?: boolean }> = {
+  approve: { from: ['submitted'], to: 'approved' },
+  show: { from: ['approved'], to: 'shown', needsMade: true },
+  hide: { from: ['shown'], to: 'approved' },
+  reject: { from: ['submitted', 'approved', 'shown'], to: 'rejected' },
+  reopen: { from: ['rejected'], to: 'submitted' },
+}
+
+function reviewOf(job: string): PolaroidReview {
+  return (readJson(path.join(jobDir(job), 'job.json')) as { review?: PolaroidReview }).review ?? 'submitted'
+}
+
+function setPolaroidReview(job: string, decision: string) {
+  const move = REVIEW_MOVES[decision]
+  if (!move) throw new Error(`Unknown decision "${decision}"`)
+  const current = reviewOf(job)
+  if (!move.from.includes(current)) throw new Error(`Can't ${decision} a polaroid that's ${current}`)
+  if (move.needsMade && !polaroidDetail(job, false).stages.atlas.done) throw new Error('Make it before approving it to show')
+  // Rejecting stops anything still waiting to run; a run already started has to be stopped from the task list.
+  if (move.to === 'rejected') for (const task of tasks().activeFor(job, 'polaroid')) if (task.status === 'queued') tasks().cancel(task.id)
+  const file = path.join(jobDir(job), 'job.json')
+  writeFileSync(file, `${JSON.stringify({ ...(readJson(file) as object), review: move.to }, null, 2)}\n`)
+  return { review: move.to }
+}
+
+/** Deletes a polaroid outright: its job folder (every panel, the atlas, the loop) and its original recording. */
+function deletePolaroid(job: string) {
+  const dir = jobDir(job)
+  if ((readJson(path.join(dir, 'job.json')) as { kind?: string }).kind !== 'polaroid') throw new Error(`"${job}" isn't a polaroid`)
+  const active = tasks().activeFor(job, 'polaroid')
+  if (active.some((t) => t.status === 'running')) throw new Error('Something is running for it; stop it first')
+  for (const task of active) tasks().cancel(task.id)
+  rmSync(dir, { recursive: true, force: true })
+  if (existsSync(RECORDINGS_DIR)) for (const f of readdirSync(RECORDINGS_DIR).filter((f) => path.parse(f).name === job)) rmSync(path.join(RECORDINGS_DIR, f))
+}
+
+/**
+ * A polaroid job's stages (plans/done/polaroid-admin-flow.md), each read from the files on disk: panels 2, 4, 5
+ * and 6 from the polaroid model, panel 3 from Bria, then the atlas and the flattened loop. `withCost` adds
+ * what the paid stages would cost to run now, from `polaroid-run --plan` (which knows what's already done), with
+ * the panels priced where `on` says they'll run.
+ */
+function polaroidDetail(job: string, withCost: boolean, on?: string) {
+  const dir = jobDir(job)
+  const config = readJson(path.join(dir, 'job.json')) as { fps: number; review?: PolaroidReview; submission?: string }
+  const frames = countFrames(path.join(dir, '0-source/frames'))
+  const panels = Math.min(...['2-portrait/upscaled', '4-matte/frames', '5-depth/frames', '6-outline/frames'].map((d) => countFrames(path.join(dir, d))))
+  const background = countFrames(path.join(dir, '3-background/frames'))
+  const stages = {
+    panels: { done: frames > 0 && panels >= frames, frames: panels },
+    background: { done: frames > 0 && background >= frames, frames: background },
+    atlas: { done: existsSync(path.join(dir, 'polaroid', 'atlas.mp4')) && existsSync(path.join(dir, 'polaroid', 'loop.mp4')) },
+  }
+  let cost: { panels: string; background: string } | undefined
+  if (withCost) {
+    const plan = execFileSync('bun', ['run', 'src/cli.ts', 'polaroid-run', '--job', `.jobs/${job}`, '--plan', 'true', ...runOn({ on })], { cwd: PIPELINE_DIR, env: pipelineEnv(), encoding: 'utf8' })
+    const estimate = (key: string) => plan.match(new RegExp(`"${key}": "(\\$[\\d.]+)"`))?.[1] ?? '?'
+    cost = { panels: stages.panels.done ? '$0.00' : estimate('estimatedCost'), background: stages.background.done ? '$0.00' : estimate('backgroundCost') }
+  }
+  return { name: job, frames, fps: config.fps, review: config.review ?? 'submitted', submission: config.submission, stages, cost }
 }
 
 /** Where a take's frames, check.json and review.json live: the take folder for the full song, preview/dream for its 15s clip. */
@@ -217,16 +291,16 @@ function jobDetail(job: string) {
 }
 
 /**
- * Where a GPU job runs: our own GPU (the 4090 PC, DEFORUM_URL in the pipeline's .env) or Replicate.
+ * Where a GPU job runs: our own GPU (the 4090 PC, DEFORUM_URL or POLAROID_URL in the pipeline's .env) or Replicate.
  * Unsaid, the pipeline decides.
  */
 function runOn(body: Record<string, unknown>): string[] {
   return body.on === 'pc' || body.on === 'replicate' ? ['--on', body.on] : []
 }
 
-/** Our own GPU server (Deforum's), if it's set up: whether it's up (Cog's health check). */
-async function gpuStatus() {
-  const url = pipelineEnv().DEFORUM_URL?.replace(/\/+$/, '')
+/** One of our own GPU servers, if it's set up: whether it's up (Cog's health check). Deforum's, or the polaroid model's. */
+async function gpuStatus(variable: 'DEFORUM_URL' | 'POLAROID_URL') {
+  const url = pipelineEnv()[variable]?.replace(/\/+$/, '')
   if (!url) return { configured: false }
   try {
     const response = await fetch(`${url}/health-check`, { signal: AbortSignal.timeout(4000) })
@@ -301,6 +375,14 @@ function actionArgs(job: string, body: Record<string, unknown>): string[] {
         ...(body.status ? ['--status', String(body.status)] : []),
         ...(body.notes !== undefined ? ['--notes', String(body.notes)] : []),
       ]
+    // A polaroid's stages (plans/done/polaroid-admin-flow.md). Panels 2, 4, 5 and 6 run where the page says: the
+    // 4090 (POLAROID_URL, free) or Replicate. The background is Bria, always on Replicate.
+    case 'polaroid-panels':
+    case 'polaroid-background':
+    case 'polaroid-atlas':
+      // Nothing is made, and nothing spent, until a person has approved it.
+      if (reviewOf(job) !== 'approved') throw new Error(`Approve it to make before running anything (it's ${reviewOf(job)})`)
+      return body.action === 'polaroid-panels' ? ['polaroid-run', ...base, ...runOn(body)] : body.action === 'polaroid-background' ? ['background-video', ...base] : ['polaroid', ...base]
     default:
       throw new Error(`Unknown action "${String(body.action)}"`)
   }
@@ -322,9 +404,102 @@ function deleteTake(job: string, take: string) {
   rmSync(dir, { recursive: true })
 }
 
+/**
+ * Saves a webcam recording and makes a new job from it with the pipeline's own `init` (crop to a square, 1280px,
+ * frames at 24fps). `init` makes no Replicate calls, so it runs straight away rather than through the queue.
+ */
+async function createRecordingJob(body: Record<string, unknown>): Promise<{ job: string }> {
+  const { name, data, type, crop } = body
+  if (typeof name !== 'string' || !/^[a-z0-9][\w-]*$/.test(name) || name === 'spikes') throw new Error('name must be letters, numbers and dashes')
+  if (existsSync(path.join(JOBS_DIR, name))) throw new Error(`There's already a job called "${name}"`)
+  if (typeof data !== 'string' || !/^[A-Za-z0-9+/]+=*$/.test(data)) throw new Error('data must be base64')
+  if (data.length > MAX_RECORDING_UPLOAD * 1.4) throw new Error('recording is too large (max 150MB)')
+  // MediaRecorder writes mp4 or webm; a chosen file may also be a phone's .mov. ffmpeg reads all three.
+  const ext = typeof type !== 'string' ? 'webm' : type.startsWith('video/mp4') ? 'mp4' : type.startsWith('video/quicktime') ? 'mov' : 'webm'
+  // The square picked on the page: { x, y, zoom }, as init's --crop takes it. init checks the ranges.
+  const cropArgs: string[] = []
+  if (crop !== undefined) {
+    const { x, y, zoom } = (crop ?? {}) as Record<string, unknown>
+    if (![x, y, zoom].every((n) => typeof n === 'number' && Number.isFinite(n))) throw new Error('crop must be { x, y, zoom }')
+    cropArgs.push('--crop', `${x},${y},${zoom}`)
+  }
+  mkdirSync(RECORDINGS_DIR, { recursive: true })
+  // The real path: .jobs is a symlink in a worktree, and job.json records where the source came from.
+  const source = path.join(realpathSync(RECORDINGS_DIR), `${name}.${ext}`)
+  writeFileSync(source, Buffer.from(data, 'base64'))
+  try {
+    await promisify(execFile)('bun', ['run', 'src/cli.ts', 'init', '--job', path.join(JOBS_DIR, name), '--source', source, '--length', '5', '--kind', 'polaroid', ...cropArgs], { cwd: PIPELINE_DIR, env: pipelineEnv() })
+  } catch (error) {
+    throw new Error(`init failed: ${(error as { stderr?: string }).stderr?.trim() || (error as Error).message}`)
+  }
+  return { job: name }
+}
+
 /** Every pipeline command the page starts goes through the queue (admin-queue.ts). Made on first use, so nothing touches .jobs until the admin API is called. */
 let queue: ReturnType<typeof createQueue> | undefined
 const tasks = () => (queue ??= createQueue({ dir: path.join(JOBS_DIR, '_queue'), cwd: PIPELINE_DIR, env: pipelineEnv }))
+
+/** The local job a visitor's submission is made in: the pipeline's `submissionJobName` (the client doesn't import the pipeline). */
+const submissionJob = (id: string) => `visitor-${id}`
+const INBOX_STATE = path.join(JOBS_DIR, '_queue', 'inbox.json')
+/** Visitors' submissions and the runner that makes them (admin-inbox.ts). Made on first use, or at start-up if the runner has state to pick up. */
+let inboxRunner: ReturnType<typeof createInbox> | undefined
+const inbox = () => (inboxRunner ??= createInbox({ dir: path.join(JOBS_DIR, '_queue'), env: pipelineEnv, tasks, jobName: submissionJob }))
+
+function submissionId(value: string | undefined): string {
+  if (!value || !/^[0-9a-f]{24}$/.test(value)) throw new Error('bad submission id')
+  return value
+}
+
+/**
+ * The inbox: every submission past uploading, newest first, each with its local job's stages once it has one,
+ * and the runner's switch. Unconfigured (no POLAROIDS_API in the pipeline's .env), just says so.
+ */
+async function inboxList() {
+  if (!inbox().configured()) return { configured: false }
+  const rows = await inbox().workerJson('polaroids')
+  if (!Array.isArray(rows)) throw new Error("The inbox's list wasn't a list")
+  const runner = inbox().runner()
+  const submissions = rows.flatMap((row: unknown) => {
+    const { id } = parseMaking(row)
+    if (typeof row !== 'object' || row === null || ('status' in row && row.status === 'uploading')) return []
+    const job = submissionJob(id)
+    const local = existsSync(path.join(JOBS_DIR, job, 'job.json')) ? polaroidDetail(job, false) : undefined
+    return [{ ...row, job: local ? job : undefined, stages: local?.stages, task: runner.claims[id]?.task }]
+  })
+  return { configured: true, runner, submissions }
+}
+
+/** A submission's clip, downloaded once to the recordings and kept for making it, so the inbox can play it with seeking. */
+async function inboxClip(req: IncomingMessage, res: ServerResponse, id: string) {
+  const row = await inbox().workerJson(`polaroids/${id}`)
+  const type = typeof row === 'object' && row !== null && 'clip_type' in row && typeof row.clip_type === 'string' ? row.clip_type : null
+  // As the pipeline's clipExtension names it, so polaroid-make finds the same file.
+  const ext = type?.startsWith('video/mp4') ? 'mp4' : type?.startsWith('video/quicktime') ? 'mov' : 'webm'
+  mkdirSync(RECORDINGS_DIR, { recursive: true })
+  const file = path.join(RECORDINGS_DIR, `${submissionJob(id)}.${ext}`)
+  if (!existsSync(file)) writeFileSync(file, new Uint8Array(await (await inbox().worker(`polaroids/${id}/clip`)).arrayBuffer()))
+  serveRange(req, res, file)
+}
+
+/** A moderation decision in D1, mirrored onto the local job (if it has one) when its own review allows the same move. */
+async function inboxReview(id: string, decision: string) {
+  const row = await inbox().workerJson(`polaroids/${id}/review`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ decision }) })
+  const job = submissionJob(id)
+  const move = REVIEW_MOVES[decision]
+  if (move && existsSync(path.join(JOBS_DIR, job, 'job.json')) && move.from.includes(reviewOf(job))) setPolaroidReview(job, decision)
+  return row
+}
+
+/** Deletes a submission everywhere: its row, clip and files in the Worker, and its local job and recording. Not while it's being made. */
+async function inboxDelete(id: string) {
+  const job = submissionJob(id)
+  if (tasks().activeFor(job, 'polaroid').some((t) => t.status === 'running')) throw new Error("It's being made; stop it first")
+  await inbox().worker(`polaroids/${id}`, { method: 'DELETE' })
+  inbox().forget(id)
+  if (existsSync(path.join(JOBS_DIR, job, 'job.json'))) deletePolaroid(job)
+  else if (existsSync(RECORDINGS_DIR)) for (const f of readdirSync(RECORDINGS_DIR).filter((f) => path.parse(f).name === job)) rmSync(path.join(RECORDINGS_DIR, f))
+}
 
 async function readBody(req: IncomingMessage, limit = MAX_COLOUR_UPLOAD): Promise<Record<string, unknown>> {
   let data = ''
@@ -380,7 +555,11 @@ export default function adminPlugin(): Plugin {
       server.httpServer?.on('close', () => {
         queue?.close()
         queue = undefined
+        inboxRunner?.close()
+        inboxRunner = undefined
       })
+      // A runner left on, or still waiting on one it started, carries on without the page being opened.
+      if (existsSync(INBOX_STATE)) inbox()
       server.middlewares.use('/__admin', async (req, res) => {
         try {
           const url = new URL(req.url ?? '/', 'http://localhost')
@@ -398,6 +577,13 @@ export default function adminPlugin(): Plugin {
             res.setHeader('Content-Type', CONTENT_TYPES[path.extname(file).toLowerCase()] ?? 'image/jpeg')
             return createReadStream(file).pipe(res)
           }
+          // A visitor's finished polaroid, as the public bucket serves it (`<id>/<name>`), from its job on this machine:
+          // the public pages' VITE_APP_POLAROIDS_URL in dev, where the polaroids are wrangler dev's (.env.development).
+          if (parts[0] === 'visitor' && parts[1] && parts[2] && !parts[3]) {
+            const name = parts[2]
+            if (!['atlas.mp4', 'loop.mp4', 'still.jpg'].includes(name)) return send(res, 404, { error: 'not found' })
+            return serveFile(req, res, submissionJob(submissionId(parts[1])), `polaroid/${name}`)
+          }
           if (parts[0] !== 'api') return send(res, 404, { error: 'not found' })
           if (parts[1] === 'deforum' && req.method === 'GET') {
             return send(res, 200, {
@@ -405,7 +591,7 @@ export default function adminPlugin(): Plugin {
               colours: existsSync(COLOURS_DIR) ? readdirSync(COLOURS_DIR).filter((f) => /\.(png|jpe?g)$/i.test(f)).sort() : [],
             })
           }
-          if (parts[1] === 'gpu' && req.method === 'GET') return send(res, 200, await gpuStatus())
+          if (parts[1] === 'gpu' && req.method === 'GET') return send(res, 200, await gpuStatus(url.searchParams.get('for') === 'polaroid' ? 'POLAROID_URL' : 'DEFORUM_URL'))
           if (parts[1] === 'colours' && req.method === 'POST') {
             // A new colour reference: { name, data } with data as base64.
             const body = await readBody(req)
@@ -419,6 +605,34 @@ export default function adminPlugin(): Plugin {
             writeFileSync(file, Buffer.from(data, 'base64'))
             return send(res, 200, { name })
           }
+          // Polaroid jobs, newest first, and one job's stages with what the paid ones would cost, for /admin/polaroid.
+          if (parts[1] === 'polaroids' && parts.length === 2 && req.method === 'GET') {
+            const created = (j: string) => statSync(path.join(JOBS_DIR, j, 'job.json')).birthtimeMs
+            return send(res, 200, listJobs('polaroid').sort((a, b) => created(b) - created(a)).map((j) => polaroidDetail(j, false)))
+          }
+          if (parts[1] === 'polaroids' && parts[2] && !parts[3] && req.method === 'GET') return send(res, 200, polaroidDetail(parts[2], true, url.searchParams.get('on') ?? undefined))
+          if (parts[1] === 'polaroids' && parts[2] && parts[3] === 'review' && req.method === 'POST') return send(res, 200, setPolaroidReview(parts[2], String((await readBody(req)).decision)))
+          if (parts[1] === 'polaroids' && parts[2] && parts[3] === 'delete' && req.method === 'POST') {
+            deletePolaroid(parts[2])
+            return send(res, 200, {})
+          }
+          // Visitors' submissions (admin-inbox.ts): the list, a clip to play, decisions, delete, the "ready" email again, and the runner's switch.
+          if (parts[1] === 'inbox' && parts.length === 2 && req.method === 'GET') return send(res, 200, await inboxList())
+          if (parts[1] === 'inbox' && parts[2] === 'runner' && req.method === 'POST') {
+            const { on, runOn } = await readBody(req)
+            if (on !== undefined && typeof on !== 'boolean') throw new Error('on must be true or false')
+            if (runOn !== undefined && runOn !== 'pc' && runOn !== 'replicate') throw new Error('runOn must be pc or replicate')
+            inbox().set({ ...(on !== undefined && { on }), ...((runOn === 'pc' || runOn === 'replicate') && { runOn }) })
+            return send(res, 200, inbox().runner())
+          }
+          if (parts[1] === 'inbox' && parts[2] && parts[3] === 'clip' && req.method === 'GET') return await inboxClip(req, res, submissionId(parts[2]))
+          if (parts[1] === 'inbox' && parts[2] && parts[3] === 'review' && req.method === 'POST') return send(res, 200, await inboxReview(submissionId(parts[2]), String((await readBody(req)).decision)))
+          if (parts[1] === 'inbox' && parts[2] && parts[3] === 'email' && req.method === 'POST') return send(res, 200, await inbox().workerJson(`polaroids/${submissionId(parts[2])}/email`, { method: 'POST' }))
+          if (parts[1] === 'inbox' && parts[2] && parts[3] === 'delete' && req.method === 'POST') {
+            await inboxDelete(submissionId(parts[2]))
+            return send(res, 200, {})
+          }
+          if (parts[1] === 'recordings' && req.method === 'POST') return send(res, 200, await createRecordingJob(await readBody(req, MAX_RECORDING_UPLOAD)))
           if (parts[1] === 'jobs' && parts.length === 2) return send(res, 200, listJobs())
           if (parts[1] === 'jobs' && parts.length === 3 && req.method === 'GET') return send(res, 200, jobDetail(parts[2]))
           if (parts[1] === 'jobs' && parts[3] === 'checks' && parts[4] && req.method === 'GET') {
