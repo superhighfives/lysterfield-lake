@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite",
     "dev-external": "vite --host",
-    "worker": "wrangler dev --port 8787",
     "build": "vite build",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0 --fix",
     "preview": "vite preview",

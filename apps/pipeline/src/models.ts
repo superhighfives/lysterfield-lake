@@ -110,10 +110,4 @@ export const MODELS = {
    * (gpu-server.ts). See plans/done/own-deforum-dream-model.md.
    */
   deforum: 'superhighfives/lysterfield-deforum:c874cd192ac419fb736be755ad148ff7b512bc8ae0d7a4d7b1c5cb9fa91e1f1e',
-  /**
-   * A polaroid's panels 2, 4, 5 and 6 in one prediction (models/polaroid, private). Run through its
-   * deployment (L40S, 0-4 instances) rather than a pinned version, so a split job's ranges run on separate
-   * instances at once; the deployment's settings on Replicate pick the version.
-   */
-  polaroidDeployment: 'deployment:superhighfives/lysterfield-polaroid',
 } as const satisfies Record<string, `${string}/${string}` | `${string}/${string}:${string}` | `deployment:${string}/${string}`>

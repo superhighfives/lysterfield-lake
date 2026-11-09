@@ -5,7 +5,7 @@ import { api } from './admin-api.ts'
 // Tailscale; plans/in-progress/dreams.md, Our own GPU) or Replicate. The PC
 // is free and about twice as fast but does one job at a time; Replicate
 // costs money and boots a machine per run, but runs several at once. Dreams
-// use the PC's Deforum server, polaroids its polaroid model server.
+// use the PC's Deforum server.
 
 export type RunOn = 'pc' | 'replicate'
 export type GpuStatus = { configured: boolean; status?: string }
@@ -15,10 +15,10 @@ export const useRunOn = () => useContext(RunOnContext)
 
 /**
  * The page's choice of where to run, remembered on this machine under `key`, and the status of the server it
- * would use (`/__admin/api/gpu`, `?for=polaroid` for the polaroid model). The PC when it's set up, unless
+ * would use (`/__admin/api/gpu`). The PC when it's set up, unless
  * chosen otherwise; without it set up, everything runs on Replicate whatever was chosen.
  */
-export function useRunOnChoice(key: string, server?: 'polaroid') {
+export function useRunOnChoice(key: string) {
   const [gpu, setGpu] = useState<GpuStatus | null>(null)
   const [runOn, setRunOn] = useState<RunOn>(() => {
     try {
@@ -37,11 +37,11 @@ export function useRunOnChoice(key: string, server?: 'polaroid') {
   }
 
   useEffect(() => {
-    const load = () => api<GpuStatus>(`/__admin/api/gpu${server ? `?for=${server}` : ''}`).then(setGpu, () => setGpu(null))
+    const load = () => api<GpuStatus>('/__admin/api/gpu').then(setGpu, () => setGpu(null))
     load()
     const timer = setInterval(load, 15000)
     return () => clearInterval(timer)
-  }, [server])
+  }, [])
   return { gpu, runOn: (gpu?.configured ? runOn : 'replicate') as RunOn, choose }
 }
 
@@ -55,7 +55,7 @@ const STATUS: Record<string, { label: string; dot: string }> = {
   offline: { label: 'offline', dot: 'bg-red-500' },
 }
 
-/** The "Run on" switch in the page header. Hidden when its GPU server isn't set up (DEFORUM_URL or POLAROID_URL in the pipeline's .env). */
+/** The "Run on" switch in the page header. Hidden when its GPU server isn't set up (DEFORUM_URL in the pipeline's .env). */
 export function RunOnSwitch({ value, gpu, onChange, label = 'Run Deforum jobs on' }: { value: RunOn; gpu: GpuStatus | null; onChange: (value: RunOn) => void; label?: string }) {
   if (!gpu?.configured) return null
   const state = STATUS[gpu.status ?? ''] ?? { label: gpu.status ?? 'unknown', dot: 'bg-stone-400' }

@@ -2,7 +2,3 @@
 # A dream's own link (/dream/<id>) is the app, which reads the id from the
 # path (src/utils/use-history-sync.ts).
 /dream/* / 200
-# Visitors' polaroids (src/main.tsx): the gallery, adding one, and each one's private link.
-/polaroids / 200
-/polaroids/* / 200
-/p/* / 200

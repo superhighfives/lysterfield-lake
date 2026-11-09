@@ -6,5 +6,5 @@
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true
   },
-  "include": ["vite.config.ts", "vite-plugin-admin.ts", "vite-plugin-worker.ts"]
+  "include": ["vite.config.ts", "vite-plugin-admin.ts"]
 }

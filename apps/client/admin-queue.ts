@@ -47,14 +47,7 @@ export interface Task {
 const CAPACITY: Record<Lane, number> = { replicate: 3, pc: 1, local: 1, quick: Infinity, instant: Infinity }
 const LANES: Record<string, Lane> = {
   directions: 'replicate', samples: 'replicate', clip: 'replicate', full: 'replicate', rerender: 'replicate', check: 'local', hold: 'quick', restore: 'local',
-  'polaroid-panels': 'replicate', 'polaroid-background': 'replicate', 'polaroid-atlas': 'local',
-  // A visitor's whole polaroid (the inbox's runner): its GPU work is the panels, so it takes the 4090's turn when run there.
-  'polaroid-make': 'replicate',
 }
-/** Replicate-lane actions that never go to our own GPU, whatever the page says: Bria only runs on Replicate. */
-const REPLICATE_ONLY = new Set(['polaroid-background'])
-/** Which server address puts an action on our own GPU: the polaroid model has its own container there. */
-const gpuVariable = (action: string) => (action === 'polaroid-panels' || action === 'polaroid-make' ? 'POLAROID_URL' : 'DEFORUM_URL')
 /** Finished tasks kept on disk; older ones are swept when the queue loads. */
 const KEEP_FINISHED = 100
 
@@ -156,10 +149,9 @@ export function createQueue(opts: { dir: string; cwd: string; env: () => NodeJS.
         action,
         clip: body.clip === true,
         args,
-        // A Replicate job sent to our own GPU instead waits its turn on that one GPU, so polaroids and dream
-        // runs take turns there. Unsaid, the pipeline picks the GPU whenever its address is set (DEFORUM_URL,
-        // or POLAROID_URL for polaroids), so the lane does the same.
-        lane: LANES[action] === 'replicate' && !REPLICATE_ONLY.has(action) && (body.on ?? (opts.env()[gpuVariable(action)] ? 'pc' : 'replicate')) === 'pc' ? 'pc' : (LANES[action] ?? 'instant'),
+        // A Replicate job sent to our own GPU instead waits its turn on that one GPU. Unsaid, the pipeline picks
+        // the GPU whenever its address is set (DEFORUM_URL), so the lane does the same.
+        lane: LANES[action] === 'replicate' && (body.on ?? (opts.env().DEFORUM_URL ? 'pc' : 'replicate')) === 'pc' ? 'pc' : (LANES[action] ?? 'instant'),
         status: 'queued',
         created: Date.now(),
       }
